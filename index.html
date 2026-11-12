@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Study Suite</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233F37C9'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h9' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles/tokens.css?v=20261026a" />
+  <link rel="stylesheet" href="styles/base.css?v=20261026a" />
+  <link rel="stylesheet" href="styles/controls.css?v=20261026a" />
+  <link rel="stylesheet" href="styles/shell.css?v=20261026a" />
+  <link rel="stylesheet" href="styles/study.css?v=20261026a" />
+  <link rel="stylesheet" href="styles/math.css?v=20261026a" />
+  <link rel="stylesheet" href="styles/practice.css?v=20261026a" />
+  <!-- Storage + theme load first so a pinned theme applies before first paint -->
+  <script src="src/ui/storage.js?v=20261026a"></script>
+  <script src="src/ui/theme.js?v=20261026a"></script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="btn btn-ghost rail-toggle doc-only" id="railToggleBtn" type="button" aria-label="Outline" aria-controls="outlineRail" aria-expanded="true">
+      <span class="rail-toggle-bars" aria-hidden="true"></span>
+    </button>
+    <span class="brand">PDF Study Suite</span>
+    <div class="doc-info doc-only">
+      <span class="doc-title" id="docTitleText"></span>
+      <button class="doc-badge-btn" id="docWhyBtn" type="button" aria-expanded="false" aria-controls="docInfoPanel" title="How this document is being read">
+        <span class="badge" id="docTypeBadge">Textbook</span>
+      </button>
+      <span class="doc-pages" id="docPagesText"></span>
+      <div class="doc-panel hidden" id="docInfoPanel">
+        <p class="eyebrow" id="docKindText">Read as a textbook</p>
+        <p id="docReasonsText"></p>
+        <button class="btn btn-secondary btn-sm" id="toggleModeBtn" type="button">Treat as slides</button>
+        <button class="btn btn-ghost btn-sm narrow-only" type="button" data-export>Export study guide</button>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost btn-sm doc-only split-btn" id="splitViewToggleBtn" type="button" aria-pressed="false" title="Show the PDF page beside the study view">Split view</button>
+      <button class="btn btn-ghost btn-sm doc-only export-btn" id="exportMarkdownBtn" type="button" data-export title="Download a Markdown study guide for this selection">Export</button>
+      <button class="btn btn-ghost btn-sm" id="themeToggleBtn" type="button" title="Switch between system, light and dark"><span><span class="btn-label-wide">Theme: </span><span id="themeLabel">Auto</span></span></button>
+      <button class="btn btn-secondary btn-sm" id="openPdfBtn" type="button"><span>Open<span class="btn-label-wide"> PDF</span></span></button>
+    </div>
+  </header>
+
+  <!-- Empty state: one centered dropzone, one primary action -->
+  <section class="welcome" id="pdfDropzone" aria-label="Open a PDF">
+    <div class="dropzone">
+      <h1>Study from any PDF</h1>
+      <p class="dropzone-lead">Drop a slide deck or a textbook here to get a summary, flashcards and section quizzes. Everything runs offline and your file never leaves this device.</p>
+      <div class="dropzone-actions">
+        <button class="btn btn-primary" id="choosePdfBtn" type="button">Choose a PDF</button>
+      </div>
+      <div class="dropzone-more">
+        <p>No PDF handy? Try a sample:
+          <button class="btn-link" id="demoSlidesBtn" type="button">algorithms slides</button> or
+          <button class="btn-link" id="demoBookBtn" type="button">a calculus textbook</button>
+        </p>
+        <p class="hidden" id="larsonLine">Recent: <button class="btn-link" id="loadLarsonBtn" type="button">Larson Calculus</button></p>
+      </div>
+      <div id="heroProgress"></div>
+    </div>
+  </section>
+  <input type="file" id="pdfFileInput" accept="application/pdf,.pdf" class="hidden" />
+  <p class="status-line" id="uploadStatusText" role="status" aria-live="polite"></p>
+
+  <!-- Workspace: outline rail + study column (+ optional split-screen PDF reader) -->
+  <div id="workspaceArea" class="workspace hidden">
+    <aside class="rail" id="outlineRail" aria-labelledby="sidebarHeading">
+      <div class="rail-head"><h2 class="label" id="sidebarHeading">Contents</h2></div>
+      <div id="scopeTreeContainer"></div>
+    </aside>
+    <div class="rail-scrim" id="railScrim"></div>
+
+    <main class="main">
+      <div class="tabs" id="tabsBar" role="tablist" aria-label="Study views">
+        <button class="tab" role="tab" id="tab-summary" data-tab="summary" aria-selected="true" tabindex="0">Summary</button>
+        <button class="tab" role="tab" id="tab-flashcards" data-tab="flashcards" aria-selected="false" tabindex="-1">Flashcards <span class="tab-count" data-count="flashcards">0</span></button>
+        <button class="tab" role="tab" id="tab-quiz" data-tab="quiz" aria-selected="false" tabindex="-1">Quiz <span class="tab-count" data-count="quiz">0</span></button>
+        <button class="tab" role="tab" id="tab-test" data-tab="test" aria-selected="false" tabindex="-1">Practice test <span class="tab-count" data-count="test">0</span></button>
+        <button class="tab" role="tab" id="tab-reader" data-tab="reader" aria-selected="false" tabindex="-1">Reader</button>
+      </div>
+
+      <div id="studyAndReaderSplit" class="study-split" role="tabpanel" aria-labelledby="tab-summary">
+        <div id="activeStudyPanel" class="study-pane"></div>
+
+        <div id="pdfReaderPanel" class="reader-pane hidden">
+          <div class="reader-toolbar">
+            <div class="reader-group">
+              <button class="btn btn-secondary btn-sm" id="readerPrevBtn" type="button">Previous</button>
+              <label for="readerPageInput">Page</label>
+              <input type="number" id="readerPageInput" class="input input-num" min="1" value="1" />
+              <span id="readerTotalPages">/ 1</span>
+              <button class="btn btn-secondary btn-sm" id="readerNextBtn" type="button">Next</button>
+            </div>
+            <input type="range" id="readerPageScrubber" min="1" max="1" value="1" class="reader-scrub" aria-label="Page scrubber" />
+            <div class="reader-group">
+              <button class="btn btn-ghost btn-sm" id="readerZoomOutBtn" type="button" aria-label="Zoom out">−</button>
+              <span id="readerZoomLabel" aria-live="polite">100%</span>
+              <button class="btn btn-ghost btn-sm" id="readerZoomInBtn" type="button" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <div class="reader-canvas-wrap">
+            <canvas id="pdfCanvas"></canvas>
+            <div id="readerTextFallback" class="reader-text prose hidden"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Bundled Offline PDF.js Engine + Modular Non-AI Study Scripts -->
+  <script src="vendor/pdf.min.js?v=20261026a"></script>
+  <script src="src/pdf/math-glyphs.js?v=20261026a"></script>
+  <script src="src/pdf/math-tex.js?v=20261026a"></script>
+  <script src="src/pdf/font-decoder.js?v=20261026a"></script>
+  <script src="src/pdf/page-rules.js?v=20261026a"></script>
+  <script src="src/pdf/math-line.js?v=20261026a"></script>
+  <script src="src/pdf/formula-builder.js?v=20261026a"></script>
+  <script src="src/pdf/column-layout.js?v=20261026a"></script>
+  <script src="src/pdf/span-format.js?v=20261026a"></script>
+  <script src="src/pdf/line-builder.js?v=20261026a"></script>
+  <script src="src/pdf/page-kind.js?v=20261026a"></script>
+  <script src="src/pdf/pdf-loader.js?v=20261026a"></script>
+  <script src="src/pdf/classifier.js?v=20261026a"></script>
+  <script src="src/pdf/slide-lines.js?v=20261026a"></script>
+  <script src="src/pdf/slide-reveal.js?v=20261026a"></script>
+  <script src="src/pdf/slide-extractor.js?v=20261026a"></script>
+  <script src="src/pdf/scope-lines.js?v=20261026a"></script>
+  <script src="src/pdf/figure-filter.js?v=20261026a"></script>
+  <script src="src/pdf/block-headings.js?v=20261026a"></script>
+  <script src="src/pdf/didactic-blocks.js?v=20261026a"></script>
+  <script src="src/pdf/text-cleaner.js?v=20261026a"></script>
+  <script src="src/pdf/scope-builder.js?v=20261026a"></script>
+  <script src="src/pdf/book-hierarchy.js?v=20261026a"></script>
+  <script src="src/nlp/math-text.js?v=20261026a"></script>
+  <script src="src/nlp/stem-noise.js?v=20261026a"></script>
+  <script src="src/nlp/noise-filter.js?v=20261026a"></script>
+  <script src="src/nlp/tokenizer.js?v=20261026a"></script>
+  <script src="src/nlp/bold-terms.js?v=20261026a"></script>
+  <script src="src/nlp/definition-miner.js?v=20261026a"></script>
+  <script src="src/nlp/keywords.js?v=20261026a"></script>
+  <script src="src/nlp/key-terms.js?v=20261026a"></script>
+  <script src="src/nlp/graph-rank.js?v=20261026a"></script>
+  <script src="src/nlp/summarizer.js?v=20261026a"></script>
+  <script src="src/nlp/stem-cards.js?v=20261026a"></script>
+  <script src="src/nlp/slide-model.js?v=20261026a"></script>
+  <script src="src/nlp/slide-cards.js?v=20261026a"></script>
+  <script src="src/nlp/flashcard-engine.js?v=20261026a"></script>
+  <script src="src/nlp/phrase-shape.js?v=20261026a"></script>
+  <script src="src/nlp/quiz-gate.js?v=20261026a"></script>
+  <script src="src/nlp/quiz-options.js?v=20261026a"></script>
+  <script src="src/nlp/stem-distractors.js?v=20261026a"></script>
+  <script src="src/nlp/slide-quiz.js?v=20261026a"></script>
+  <script src="src/nlp/block-quiz.js?v=20261026a"></script>
+  <script src="src/nlp/stem-questions.js?v=20261026a"></script>
+  <script src="src/nlp/quiz-engine.js?v=20261026a"></script>
+  <script src="src/nlp/test-engine.js?v=20261026a"></script>
+  <script src="src/ui/math-renderer.js?v=20261026a"></script>
+  <script src="src/ui/rich-text.js?v=20261026a"></script>
+  <script src="src/ui/rich-blocks.js?v=20261026a"></script>
+  <script src="src/ui/study-views.js?v=20261026a"></script>
+  <script src="src/ui/summary-view.js?v=20261026a"></script>
+  <script src="src/ui/flashcard-faces.js?v=20261026a"></script>
+  <script src="src/ui/flashcard-view.js?v=20261026a"></script>
+  <script src="src/ui/quiz-card.js?v=20261026a"></script>
+  <script src="src/ui/test-report.js?v=20261026a"></script>
+  <script src="src/ui/test-view.js?v=20261026a"></script>
+  <script src="src/ui/quiz-view.js?v=20261026a"></script>
+  <script src="src/ui/demo-data.js?v=20261026a"></script>
+  <script src="src/ui/sidebar-tree.js?v=20261026a"></script>
+  <script src="src/ui/reader-controls.js?v=20261026a"></script>
+  <script src="src/ui/study-pipeline.js?v=20261026a"></script>
+  <script src="src/ui/main.js?v=20261026a"></script>
+  <script src="src/ui/events.js?v=20261026a"></script>
+  <script src="src/ui/keys.js?v=20261026a"></script>
+  <script src="src/ui/loading.js?v=20261026a"></script>
+  <script src="src/ui/tabs.js?v=20261026a"></script>
+  <script src="src/ui/shell.js?v=20261026a"></script>
+</body>
+</html>

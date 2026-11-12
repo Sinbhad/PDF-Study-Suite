@@ -1,0 +1,87 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R 10 0 R 12 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Length 743 >>
+stream
+BT /F2 25 Tf 1 0 0 1 56 468 Tm (Divide-and-Conquer Sorting and Recurrences) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 402 Tm (- Merge Sort: Divide-and-conquer sort that merges sorted halves in $O\(n \\log n\)$ worst-case time.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 354 Tm (- Recurrence for Merge Sort: $T\(n\) = 2T\(n/2\) + O\(n\)$) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 306 Tm (- Heapsort: In-place comparison sort using a binary max-heap in $O\(n \\log n\)$ time and $O\(1\)$ space.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 258 Tm (- Quicksort: Partition-based sort running in $O\(n \\log n\)$ expected time under random pivots.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 210 Tm (- Partition balance increases when randomized pivot selection decreases worst-case $O\(n^{2}\)$ splits.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 774 >>
+stream
+BT /F2 25 Tf 1 0 0 1 56 468 Tm (Binary Search, Asymptotic Bounds, and Pseudocode) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 402 Tm (- Binary Search: Halves a sorted search interval each iteration in $O\(\\log n\)$ worst-case time.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 354 Tm (- Big-O Bound: Function $f\(n\)$ is $O\(g\(n\)\)$ when $|f\(n\)| \\le c|g\(n\)|$ for all $n \\ge n_{0}$.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 306 Tm (- Big-Theta Bound: Tight asymptotic bound where $f\(n\)$ is bounded above and below by $g\(n\)$.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 258 Tm (- Loop Invariant: Subarray A[low..high] contains target whenever target exists in sorted array A.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 210 Tm (- Binary Search Step: Compute midpoint m = \(low + high\) // 2 and compare A[m] against key.) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 658 >>
+stream
+BT /F2 25 Tf 1 0 0 1 56 468 Tm (Graph Algorithms and Shortest-Path Complexity) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 402 Tm (- Breadth-First Search: Explores vertices level by level from a source in $O\(V + E\)$ time via a queue.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 354 Tm (- Depth-First Search: Recursively explores incident edges to classify tree, back, and cross edges.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 306 Tm (- Dijkstra Algorithm: Computes nonnegative single-source shortest paths in $O\(\(V + E\) \\log V\)$ time.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 258 Tm (- Topological Sort: Linear ordering of vertices in a directed acyclic graph respecting all edge directions.) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Length 691 >>
+stream
+BT /F2 25 Tf 1 0 0 1 56 468 Tm (Calculus Rules for Continuous Optimization) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 402 Tm (- Quotient Rule: $\\frac{d}{dx}\\left[\\frac{f\(x\)}{g\(x\)}\\right] = \\frac{g\(x\)f'\(x\) - f\(x\)g'\(x\)}{[g\(x\)]^{2}}$) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 354 Tm (- Chain Rule: Differentiates composite functions via $\\frac{d}{dx}[f\(g\(x\)\)] = f'\(g\(x\)\) \\cdot g'\(x\)$.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 306 Tm (- Fundamental Theorem: Evaluates definite integrals via $\\int_{a}^{b} f\(x\)\\,dx = F\(b\) - F\(a\)$.) Tj ET
+BT /F1 16 Tf 1 0 0 1 78 258 Tm (- Gradient Descent: Updates parameters via $x_{k+1} = x_{k} - \\alpha \\nabla f\(x_{k}\)$ along steepest descent.) Tj ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 11 0 R >>
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000135 00000 n 
+0000000205 00000 n 
+0000000280 00000 n 
+0000001074 00000 n 
+0000001210 00000 n 
+0000002035 00000 n 
+0000002171 00000 n 
+0000002880 00000 n 
+0000003017 00000 n 
+0000003760 00000 n 
+trailer
+<< /Size 13 /Root 1 0 R >>
+startxref
+3898
+%%EOF

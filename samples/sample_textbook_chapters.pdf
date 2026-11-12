@@ -1,0 +1,101 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R 10 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Length 2031 >>
+stream
+BT /F2 18 Tf 1 0 0 1 72 722 Tm (CHAPTER 1: Limits, Continuity, and Differentiation) Tj ET
+BT /F2 13 Tf 1 0 0 1 72 694 Tm (1.1 Limits and the Squeeze Theorem) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 674 Tm (A limit describes the value that a function $f\(x\)$ approaches as the input $x$ approaches $c$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 659 Tm (Continuity is defined as the property where $\\lim_{x \\to c} f\(x\) = f\(c\)$ holds at an interior point $c$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 644 Tm (Indeterminate Form: A limit ratio such as $\\frac{0}{0}$ whose limiting value requires algebraic simplification.) Tj ET
+BT /F2 11 Tf 1 0 0 1 86 620 Tm (THEOREM 1.1 The Squeeze Theorem) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 86 604 Tm (If $h\(x\) \\le f\(x\) \\le g\(x\)$ for all $x$ in an open interval containing $c$ except possibly at $c$ itself,) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 86 589 Tm (and if $\\lim_{x \\to c} h\(x\) = L = \\lim_{x \\to c} g\(x\)$, then $\\lim_{x \\to c} f\(x\) = L$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 565 Tm (Special trigonometric limit: $\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1$ underpins trigonometric differentiation.) Tj ET
+BT /F2 13 Tf 1 0 0 1 72 539 Tm (1.2 Differentiation, Chain Rule, and Quotient Rule) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 519 Tm (The derivative of a function $f$ at $x$ is given by $f'\(x\) = \\lim_{h \\to 0} \\frac{f\(x + h\) - f\(x\)}{h}$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 504 Tm (The Quotient Rule: $\\frac{d}{dx}\\left[\\frac{f\(x\)}{g\(x\)}\\right] = \\frac{g\(x\)f'\(x\) - f\(x\)g'\(x\)}{[g\(x\)]^{2}}$) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 489 Tm (The Chain Rule states that if $y = f\(u\)$ and $u = g\(x\)$ are differentiable, then $\\frac{dy}{dx} = f'\(g\(x\)\)g'\(x\)$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 474 Tm (The derivative of $\\tan x$ is $\\sec^{2} x$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 459 Tm (The derivative of $\\ln x$ is $\\frac{1}{x}$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 444 Tm (When the derivative $f'\(x\)$ is positive on an open interval, the function $f$ increases across that interval.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 1812 >>
+stream
+BT /F2 18 Tf 1 0 0 1 72 722 Tm (CHAPTER 2: Definite Integrals and Infinite Series) Tj ET
+BT /F2 13 Tf 1 0 0 1 72 694 Tm (2.1 Riemann Sums and the Fundamental Theorem of Calculus) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 674 Tm (Riemann Sum is defined as a finite approximation $\\sum_{i=1}^{n} f\(c_{i}\)\\,\\Delta x_{i}$ over a partition of $[a, b]$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 659 Tm (Antiderivative refers to a differentiable function $F$ satisfying $F'\(x\) = f\(x\)$ across an interval.) Tj ET
+BT /F2 11 Tf 1 0 0 1 86 635 Tm (THEOREM 2.1 The Fundamental Theorem of Calculus) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 86 619 Tm (If a function $f$ is continuous on the closed interval $[a, b]$ and $F$ is an antiderivative of $f$ on $[a, b]$,) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 86 604 Tm (then $\\int_{a}^{b} f\(x\)\\,dx = F\(b\) - F\(a\)$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 580 Tm (Integration by Parts Formula: $\\int u\\,dv = uv - \\int v\\,du$) Tj ET
+BT /F2 13 Tf 1 0 0 1 72 554 Tm (2.2 Convergence of Geometric and Taylor Series) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 534 Tm (Geometric Series: An infinite series $\\sum_{n=0}^{\\infty} ar^{n}$ with nonzero first term $a$ and common ratio $r$.) Tj ET
+BT /F2 11 Tf 1 0 0 1 86 510 Tm (THEOREM 2.2 Convergence of a Geometric Series) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 86 494 Tm (A geometric series with common ratio $r$ converges to the sum $\\frac{a}{1 - r}$ when $|r| < 1$,) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 86 479 Tm (and the geometric series diverges whenever $|r| \\ge 1$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 457 Tm (Taylor Series refers to the power series representation $\\sum_{n=0}^{\\infty} \\frac{f^{\(n\)}\(c\)}{n!}\(x - c\)^{n}$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 442 Tm (As the degree $n$ of a Taylor polynomial increases, the truncation remainder decreases near the center $c$.) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 1908 >>
+stream
+BT /F2 18 Tf 1 0 0 1 72 722 Tm (CHAPTER 3: Algorithms, Complexity, and Graph Theory) Tj ET
+BT /F2 13 Tf 1 0 0 1 72 694 Tm (3.1 Asymptotic Complexity, Recurrences, and Divide-and-Conquer) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 674 Tm (Asymptotic Complexity is defined as the growth rate of an algorithm running time $T\(n\)$ as input size $n \\to \\infty$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 659 Tm (Merge sort runs in $O\(n \\log n\)$ time in the worst case by recursively sorting two subarrays of size $n/2$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 644 Tm (The recurrence for merge sort is $T\(n\) = 2T\(n/2\) + O\(n\)$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 629 Tm (The running time of binary search is $O\(\\log n\)$.) Tj ET
+BT /F2 11 Tf 1 0 0 1 86 605 Tm (THEOREM 3.1 The Master Theorem) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 86 589 Tm (For a divide-and-conquer recurrence $T\(n\) = aT\(n/b\) + \\Theta\(n^{d}\)$ with constants $a \\ge 1$ and $b > 1$,) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 86 574 Tm (if $d = \\log_{b} a$ then the asymptotic solution satisfies $T\(n\) = \\Theta\(n^{d} \\log n\)$.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 552 Tm (Iterative binary search maintains midpoint $m = \\lfloor \(low + high\) / 2 \\rfloor$ and halves $[low, high]$.) Tj ET
+BT /F2 13 Tf 1 0 0 1 72 526 Tm (3.2 Graph Traversals and Shortest-Path Algorithms) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 506 Tm (Directed Acyclic Graph: A directed graph with no directed cycles that admits a linear topological ordering.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 491 Tm (Binary Heap refers to a complete binary tree satisfying the heap-order property at every internal node.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 476 Tm (Dijkstra's algorithm runs in $O\(\(V + E\) \\log V\)$ time on weighted graphs with nonnegative edge weights.) Tj ET
+BT /F1 10.5 Tf 1 0 0 1 72 461 Tm (When graph edge density increases toward $V^{2}$, adjacency-matrix lookup latency decreases relative to lists.) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000128 00000 n 
+0000000198 00000 n 
+0000000273 00000 n 
+0000002356 00000 n 
+0000002492 00000 n 
+0000004356 00000 n 
+0000004492 00000 n 
+0000006452 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+6589
+%%EOF

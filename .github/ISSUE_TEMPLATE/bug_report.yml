@@ -1,0 +1,56 @@
+name: Report a problem
+description: Something broke, looked wrong, or a PDF came out badly.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking a minute to report this. Please do not attach copyrighted textbooks or course material; a description or a small screenshot is enough.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what did you see instead?
+      placeholder: "I opened my lecture slides, clicked Quiz, and question 3 showed..."
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where in the app
+      options:
+        - Opening a PDF
+        - Summary
+        - Flashcards
+        - Quiz or practice test
+        - Reader or split view
+        - Outline (chapters, sections, slides)
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: document
+    attributes:
+      label: Kind of PDF
+      options:
+        - Lecture slides
+        - Textbook
+        - Something else
+        - Not related to a specific PDF
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: "Chrome on Windows 11, Safari on iPhone, ..."
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots help a lot. You can paste or drag images here.
+    validations:
+      required: false

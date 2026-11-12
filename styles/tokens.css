@@ -1,0 +1,91 @@
+/* Design tokens: "paper and ink". Light is the default and follows the system; the theme toggle
+   pins a choice with data-theme="light|dark" on <html>. System font stacks only (offline app): one humanist sans for UI and reading. */
+:root {
+  color-scheme: light;
+  /* Surfaces */
+  --bg: #F6F4EE;
+  --surface: #FFFFFF;
+  --surface-2: #EFECE3;
+  --hover: #E8E4D9;
+  --border: #E0DCCF;
+  --border-strong: #C9C4B4;
+  /* Ink (muted is one step darker than the nominal #77736A so it holds 4.5:1 on every surface) */
+  --text: #1B1A17;
+  --text-soft: #45423A;
+  --text-muted: #686459;
+  /* Primary */
+  --primary: #3F37C9;
+  --primary-hover: #322BA8;
+  --primary-soft: rgba(63, 55, 201, 0.09);
+  --on-primary: #FFFFFF;
+  /* Semantic */
+  --success: #1F7A4D;
+  --success-soft: rgba(31, 122, 77, 0.1);
+  --danger: #B42318;
+  --danger-soft: rgba(180, 35, 24, 0.08);
+  --warning: #B45309;
+  /* Category accents */
+  --theorem: #6D3FD1;
+  --definition: #0E7490;
+  --example: #B45309;
+  --guideline: #4D7C0F;
+  --shadow-1: 0 1px 2px rgba(27, 26, 23, 0.05), 0 10px 28px rgba(27, 26, 23, 0.08);
+  --scrim: rgba(27, 26, 23, 0.38);
+
+  /* Type */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-read: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Noto Sans", Roboto, Arial, sans-serif;
+  --font-head: "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Noto Sans", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --fs-xs: 0.75rem;    /* 12 */
+  --fs-sm: 0.8125rem;  /* 13 */
+  --fs-md: 0.9375rem;  /* 15 UI base */
+  --fs-lg: 1.0625rem;  /* 17 reading base */
+  --fs-xl: 1.25rem;    /* 20 */
+  --fs-2xl: 1.5rem;    /* 24 */
+  --fs-3xl: 2rem;      /* 32 */
+  --lh-ui: 1.45;
+  --lh-read: 1.65;
+  --track-label: 0.06em;
+
+  /* Spacing */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px; --sp-8: 64px;
+  /* Shape and motion */
+  --r-sm: 6px; --r-md: 10px; --r-pill: 999px;
+  --ease: 140ms ease;
+  /* Layout */
+  --topbar-h: 52px;
+  --tabs-h: 45px;
+  --rail-w: 300px;
+  --measure: 44rem; /* about 75 characters of reading text */
+  --ctl-h: 36px;
+  --ctl-h-sm: 32px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #131210; --surface: #1B1A17; --surface-2: #23221E; --hover: #2C2A25;
+    --border: #33312B; --border-strong: #4A473F;
+    --text: #EDEAE2; --text-soft: #CBC7BC; --text-muted: #9A968B;
+    --primary: #A9B1FF; --primary-hover: #C2C8FF; --primary-soft: rgba(169, 177, 255, 0.13); --on-primary: #15143A;
+    --success: #5BD197; --success-soft: rgba(91, 209, 151, 0.12);
+    --danger: #FF8A7A; --danger-soft: rgba(255, 138, 122, 0.12); --warning: #F0B25C;
+    --theorem: #BFA2FF; --definition: #67D4E8; --example: #F0B25C; --guideline: #A3D65C;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
+    --scrim: rgba(0, 0, 0, 0.55);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #131210; --surface: #1B1A17; --surface-2: #23221E; --hover: #2C2A25;
+  --border: #33312B; --border-strong: #4A473F;
+  --text: #EDEAE2; --text-soft: #CBC7BC; --text-muted: #9A968B;
+  --primary: #A9B1FF; --primary-hover: #C2C8FF; --primary-soft: rgba(169, 177, 255, 0.13); --on-primary: #15143A;
+  --success: #5BD197; --success-soft: rgba(91, 209, 151, 0.12);
+  --danger: #FF8A7A; --danger-soft: rgba(255, 138, 122, 0.12); --warning: #F0B25C;
+  --theorem: #BFA2FF; --definition: #67D4E8; --example: #F0B25C; --guideline: #A3D65C;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --scrim: rgba(0, 0, 0, 0.55);
+}

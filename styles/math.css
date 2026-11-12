@@ -1,0 +1,108 @@
+/* Textbook math + CS code typography (pairs with src/ui/math-renderer.js and rich-text.js) */
+:root {
+  --font-math: "Cambria Math", "Latin Modern Math", "STIX Two Math", "STIX Two Text", Cambria,
+    "Times New Roman", Times, serif;
+  --math-ink: var(--text);
+}
+
+.math { font-family: var(--font-math); color: var(--math-ink); font-style: normal; line-height: 1.2; white-space: nowrap; }
+/* Inline math wraps between atoms (long set notation) instead of overflowing its line */
+.math-inline { display: inline-flex; align-items: center; flex-wrap: wrap; row-gap: 0.15em; vertical-align: middle; font-size: 1.08em; padding: 0 1px; max-width: 100%; }
+/* Display math never overflows its block: it scrolls horizontally inside it */
+.math-display {
+  display: flex; align-items: center; justify-content: safe center; flex-wrap: nowrap;
+  font-size: 1.15em; margin: var(--sp-3) 0; padding: var(--sp-2) 0; overflow-x: auto; overflow-y: hidden; max-width: 100%;
+}
+.math > * , .math-num > *, .math-den > *, .math-radicand > *, .math-cell > * { flex: 0 0 auto; }
+.math-num, .math-den, .math-radicand, .math-cell, .math-over, .math-under { display: inline-flex; align-items: center; justify-content: center; }
+
+/* Variables italic, functions/numbers/text upright */
+.math-var { font-style: italic; font-family: var(--font-math); padding-right: 0.02em; }
+.math-fn, .math-digit, .math-text, .math-ord { font-style: normal; }
+.math-fn { padding: 0 0.12em; }
+.math-fn + .math-var, .math-fn + .math-digit, .math-sup + .math-var, .math-sub + .math-var, .math-supsub + .math-var { margin-left: 0.12em; }
+.math-text { padding: 0 0.25em; }
+.math-bold { font-weight: 700; font-style: normal; }
+.math-cal { font-family: "Segoe Script", "Brush Script MT", cursive; }
+.math-space { white-space: pre; }
+.math-punct { padding-right: 0.25em; }
+
+/* Binary operators and relations get thick spacing */
+.math-op { padding: 0 0.26em; font-style: normal; }
+.math-sup .math-op, .math-sub .math-op, .math-under .math-op, .math-over .math-op { padding: 0 0.08em; }
+
+/* Scripts */
+.math-sup, .math-sub { font-size: 0.72em; line-height: 1; display: inline-flex; align-items: center; }
+.math-sup { vertical-align: 0; align-self: flex-start; position: relative; top: -0.45em; }
+.math-sub { align-self: flex-end; position: relative; bottom: -0.3em; }
+/* In running text keep scripts close to their base */
+.math-inline > .math-sup, .math-inline > .math-sub { align-self: center; }
+.math-inline > .math-sup { top: -0.5em; }
+.math-inline > .math-sub { bottom: -0.35em; }
+.math-supsub { display: inline-flex; flex-direction: column; align-items: flex-start; font-size: 0.72em; line-height: 1.05; margin-left: 0.05em; }
+.math-supsub .math-sup, .math-supsub .math-sub { font-size: 1em; position: static; align-self: flex-start; }
+
+/* Stacked fractions: numerator / bar / denominator */
+.math-frac {
+  display: inline-flex; flex-direction: column; align-items: stretch; text-align: center;
+  vertical-align: middle; margin: 0 0.18em; font-size: 0.92em;
+}
+.math-display .math-frac { font-size: 1em; }
+.math-frac .math-frac { font-size: 0.9em; }
+.math-num { padding: 0 0.2em 0.1em; }
+.math-den { padding: 0.12em 0.2em 0; border-top: 0.08em solid currentColor; }
+.math-binom .math-den { border-top-color: transparent; }
+
+/* Radicals: sign + vinculum over the radicand */
+.math-sqrt { display: inline-flex; align-items: stretch; position: relative; margin: 0 0.1em; }
+.math-radical { font-size: 1.15em; line-height: 1; display: inline-flex; align-items: flex-end; margin-right: -0.04em; transform: scaleY(1.12); transform-origin: bottom; }
+.math-radicand { border-top: 0.08em solid currentColor; padding: 0.1em 0.12em 0 0.1em; margin-top: 0.08em; }
+.math-root-index { font-size: 0.55em; position: relative; top: -0.15em; margin-right: -0.45em; z-index: 1; align-self: flex-start; }
+
+/* Big operators and lim/max/min with stacked limits */
+.math-limits { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 0.15em; line-height: 1.05; }
+.math-over, .math-under { font-size: 0.68em; line-height: 1.1; }
+.math-bigop { font-size: 1.45em; line-height: 1; font-style: normal; }
+.math-int { font-size: 1.6em; font-style: italic; margin-right: 0.05em; }
+.math-inline .math-bigop { font-size: 1.2em; }
+.math-inline .math-int { font-size: 1.3em; }
+.math-limop { padding: 0; }
+.math-inline .math-limits .math-under { font-size: 0.62em; }
+
+/* Delimiters, cases, matrices */
+.math-fence { font-size: 1.25em; line-height: 1; padding: 0 0.05em; font-style: normal; display: inline-flex; align-items: center; }
+.math-env { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 0.15em; }
+.math-env > .math-fence { font-size: 2.2em; font-weight: 300; transform: scaleX(0.7); }
+.math-grid { display: inline-grid; grid-auto-flow: row; row-gap: 0.25em; padding: 0 0.15em; }
+.math-row { display: flex; gap: 1em; align-items: center; justify-content: space-between; }
+.math-cases-grid .math-row { justify-content: flex-start; }
+.math-cell { justify-content: flex-start; }
+
+/* Accents and overlines */
+.math-overline { border-top: 0.07em solid currentColor; padding-top: 0.05em; display: inline-flex; }
+.math-accent { position: relative; display: inline-flex; }
+.math-accent::before { content: attr(data-accent); position: absolute; top: -0.65em; left: 0; right: 0; text-align: center; font-size: 0.8em; font-style: normal; }
+.math-error { color: var(--danger); font-family: var(--font-mono); }
+
+/* CS code & pseudocode */
+.inline-code {
+  font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.05em 0.35em; white-space: pre-wrap;
+}
+.code-block {
+  font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.55; text-align: left;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3) var(--sp-4); margin: var(--sp-3) 0; overflow-x: auto; white-space: pre; tab-size: 4;
+}
+.code-block code { font-family: inherit; counter-reset: code-line; }
+.code-line { display: inline; }
+.code-kw { color: var(--theorem); font-weight: 700; }
+.code-comment { color: var(--text-muted); font-style: italic; }
+
+@media (max-width: 600px) {
+  .math-display { font-size: 1.05em; }
+}
+@media print {
+  .math, .code-block { color: #000; }
+}

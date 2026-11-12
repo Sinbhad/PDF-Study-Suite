@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Study Content Quality Checks</title>
+  <style>
+    body { font-family: Consolas, monospace; background: #fff; color: #111; padding: 16px; }
+    pre { white-space: pre-wrap; }
+    #quality-result { font-size: 1.4em; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Study Content Quality Checks</h1>
+  <pre id="quality-log">Running...</pre>
+  <div id="quality-result">RUNNING</div>
+
+  <script src="../src/pdf/math-glyphs.js"></script>
+  <script src="../src/pdf/math-tex.js"></script>
+  <script src="../src/pdf/font-decoder.js"></script>
+  <script src="../src/pdf/page-rules.js"></script>
+  <script src="../src/pdf/math-line.js"></script>
+  <script src="../src/pdf/formula-builder.js"></script>
+  <script src="../src/pdf/column-layout.js"></script>
+  <script src="../src/pdf/span-format.js"></script>
+  <script src="../src/pdf/line-builder.js"></script>
+  <script src="../src/pdf/page-kind.js"></script>
+  <script src="../src/pdf/pdf-loader.js"></script>
+  <script src="../src/pdf/classifier.js"></script>
+  <script src="../src/pdf/slide-lines.js"></script>
+  <script src="../src/pdf/slide-reveal.js"></script>
+  <script src="../src/pdf/slide-extractor.js"></script>
+  <script src="../src/pdf/scope-lines.js"></script>
+  <script src="../src/pdf/figure-filter.js"></script>
+  <script src="../src/pdf/block-headings.js"></script>
+  <script src="../src/pdf/didactic-blocks.js"></script>
+  <script src="../src/pdf/text-cleaner.js"></script>
+  <script src="../src/pdf/scope-builder.js"></script>
+  <script src="../src/pdf/book-hierarchy.js"></script>
+  <script src="../src/nlp/math-text.js"></script>
+  <script src="../src/nlp/stem-noise.js"></script>
+  <script src="../src/nlp/noise-filter.js"></script>
+  <script src="../src/nlp/tokenizer.js"></script>
+  <script src="../src/nlp/bold-terms.js"></script>
+  <script src="../src/nlp/definition-miner.js"></script>
+  <script src="../src/nlp/keywords.js"></script>
+  <script src="../src/nlp/key-terms.js"></script>
+  <script src="../src/nlp/graph-rank.js"></script>
+  <script src="../src/nlp/summarizer.js"></script>
+  <script src="../src/nlp/stem-cards.js"></script>
+  <script src="../src/nlp/slide-model.js"></script>
+  <script src="../src/nlp/slide-cards.js"></script>
+  <script src="../src/nlp/flashcard-engine.js"></script>
+  <script src="../src/nlp/phrase-shape.js"></script>
+  <script src="../src/nlp/quiz-gate.js"></script>
+  <script src="../src/nlp/quiz-options.js"></script>
+  <script src="../src/nlp/stem-distractors.js"></script>
+  <script src="../src/nlp/slide-quiz.js"></script>
+  <script src="../src/nlp/block-quiz.js"></script>
+  <script src="../src/nlp/stem-questions.js"></script>
+  <script src="../src/nlp/quiz-engine.js"></script>
+  <script src="../src/nlp/test-engine.js"></script>
+  <script src="option_fixtures.js"></script>
+  <script src="quality_fixtures.js"></script>
+  <script src="layout_fixtures.js"></script>
+  <script src="flashcard_fixtures.js"></script>
+  <script src="math_fixtures.js"></script>
+  <script src="structure_fixtures.js"></script>
+  <script src="stem_fixtures.js"></script>
+  <script>
+    (function () {
+      const log = document.getElementById('quality-log');
+      const result = document.getElementById('quality-result');
+      const chunks = [];
+      let allOk = true;
+      const suites = [
+        ['QUALITY', () => window.QualityFixtures.runQualityChecks(), window.QualityFixtures.formatResults],
+        ['LAYOUT', () => window.LayoutFixtures.runLayoutChecks(), window.LayoutFixtures.formatResults],
+        ['FLASHCARD', () => window.FlashcardFixtures.runFlashcardChecks(), window.FlashcardFixtures.formatResults],
+        ['MATH', () => window.MathFixtures.runMathChecks(), window.MathFixtures.formatResults],
+        ['STRUCTURE', () => window.StructureFixtures.runStructureChecks(), window.StructureFixtures.formatResults],
+      ];
+      for (const [label, run, fmt] of suites) {
+        try {
+          const rep = run();
+          chunks.push(fmt(rep));
+          if (!rep.passed) allOk = false;
+        } catch (err) {
+          chunks.push(`${label} ERROR: ${err && err.stack ? err.stack : err}`);
+          allOk = false;
+        }
+      }
+      if (Array.isArray(window.__stemResults)) {
+        chunks.push(window.__stemResults.join('\n'));
+        if (window.__stemResults.some((l) => l.startsWith('FAIL'))) allOk = false;
+      }
+      log.textContent = chunks.join('\n\n');
+      result.textContent = allOk ? 'PASS' : 'FAIL';
+    })();
+  </script>
+</body>
+</html>

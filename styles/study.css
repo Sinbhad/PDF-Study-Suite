@@ -1,0 +1,88 @@
+/* Study content: view header, sections, reading prose, didactic blocks, definitions, slide breakdown */
+.view-head { margin-bottom: var(--sp-5); }
+.view-title {
+  margin-top: var(--sp-2); font: 600 var(--fs-2xl)/1.25 var(--font-head); letter-spacing: -0.005em; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.view-title .math-inline { font-size: 1em; }
+.view-meta { margin-top: var(--sp-2); color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.view-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3) var(--sp-5); margin-bottom: var(--sp-4); }
+
+.sec { margin-top: var(--sp-7); }
+.view-head + .sec { margin-top: var(--sp-6); }
+.sec-title { display: flex; align-items: baseline; gap: var(--sp-2); padding-bottom: var(--sp-2); margin-bottom: var(--sp-4); color: var(--text-muted); border-bottom: 1px solid var(--border); }
+.sec-count { font-weight: 400; font-variant-numeric: tabular-nums; }
+
+/* Reading prose (17/1.65). Used for every body rendered by richBlocks.block */
+.prose { font: 400 var(--fs-lg)/var(--lh-read) var(--font-read); color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.prose > * + * { margin-top: var(--sp-3); }
+.prose ul, .prose ol { padding-left: 1.4em; }
+.prose li + li { margin-top: var(--sp-1); }
+.prose li::marker { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.prose ol.alpha { list-style-type: lower-alpha; }
+.prose strong { font-weight: 700; }
+.prose .data-table { font-family: var(--font-ui); }
+
+/* Didactic block: no box, a 3px rule in the category accent */
+.dblock { --accent: var(--definition); padding-left: var(--sp-4); border-left: 3px solid var(--accent); min-width: 0; }
+.dblock + .dblock { margin-top: var(--sp-6); }
+.dblock.cat-theorem { --accent: var(--theorem); }
+.dblock.cat-example { --accent: var(--example); }
+.dblock.cat-guideline { --accent: var(--guideline); }
+.dblock-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.dblock-head .badge { color: var(--accent); }
+.dblock-title { margin: var(--sp-1) 0 var(--sp-2); font: 600 var(--fs-xl)/1.3 var(--font-head); overflow-wrap: anywhere; }
+.dblock-title .math-inline { font-size: 1em; }
+.formula-row + .formula-row { margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--border); }
+.formula-label { font: 600 var(--fs-md)/1.3 var(--font-read); color: var(--text-soft); }
+
+/* Definition list: term bold, definition text */
+.deflist { font: 400 var(--fs-lg)/var(--lh-read) var(--font-read); overflow-wrap: anywhere; }
+.def { padding: var(--sp-3) 0; border-bottom: 1px solid var(--border); }
+.def:first-child { padding-top: 0; }
+.def:last-child { border-bottom: 0; padding-bottom: 0; }
+.def dt { font-weight: 700; }
+.def dd { color: var(--text-soft); }
+.def dd .page-jump { margin-left: var(--sp-2); }
+.sec .deflist + .dblock { margin-top: var(--sp-6); }
+
+.term-list { display: flex; flex-wrap: wrap; gap: var(--sp-2); list-style: none; }
+.term { padding: 3px var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text-soft); font-size: var(--fs-sm); max-width: 100%; overflow-wrap: anywhere; }
+
+/* Slide by slide */
+.slide { padding: var(--sp-4) 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.slide:first-child { padding-top: 0; }
+.slide:last-child { border-bottom: 0; }
+.slide-head { display: flex; align-items: baseline; gap: var(--sp-3); color: var(--text-muted); }
+.slide-head .page-jump { margin-left: auto; }
+.slide-title { margin: var(--sp-1) 0 0; font: 600 var(--fs-lg)/1.35 var(--font-read); overflow-wrap: anywhere; }
+.slide-title .math-inline { font-size: 1em; }
+.slide .prose, .slide .deflist, .slide .qa { margin-top: var(--sp-2); }
+.slide .prose, .slide .deflist { font-size: 1rem; line-height: 1.6; color: var(--text-soft); }
+.slide.is-section { padding-top: var(--sp-5); }
+.slide.is-section .slide-title { font-size: var(--fs-xl); }
+
+/* Question with click-to-reveal answer */
+.reveal > summary {
+  display: inline-flex; align-items: center; height: var(--ctl-h-sm); padding: 0 var(--sp-3); list-style: none;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm); font: 600 var(--fs-sm)/1 var(--font-ui); color: var(--text);
+}
+.reveal > summary::-webkit-details-marker { display: none; }
+.reveal > summary:hover { background: var(--hover); }
+.reveal[open] > summary { color: var(--text-muted); border-color: var(--border); }
+.reveal .when-open, .reveal[open] .when-closed { display: none; }
+.reveal[open] .when-open { display: inline; }
+.answer { margin-top: var(--sp-3); padding-left: var(--sp-4); border-left: 3px solid var(--success); }
+.answer > .label { display: block; margin-bottom: var(--sp-1); color: var(--success); }
+
+/* "Quiz this section" call to action */
+.cta { margin-top: var(--sp-7); padding-top: var(--sp-5); border-top: 1px solid var(--border-strong); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.cta-title { font: 600 var(--fs-xl)/1.3 var(--font-head); }
+.cta-sub { margin-top: var(--sp-1); color: var(--text-muted); font-size: var(--fs-sm); }
+.cta-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+@media (max-width: 600px) {
+  .view-title { font-size: var(--fs-xl); }
+  .dblock-title { font-size: var(--fs-lg); }
+  .sec { margin-top: var(--sp-6); }
+}
