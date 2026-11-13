@@ -44,23 +44,29 @@
     if (FUNC_RE.test(t)) return `\\${t === 'Pr' ? 'Pr' : t}`;
     if (/^(?:Θ|Ω|O)$/.test(t)) return SYM[t] || t;
     let out = '';
-    for (const word of t.split(/(\s+)/)) {
-      if (/^\s+$/.test(word)) {
-        out += ' ';
+    // Upright words inside a formula stay readable as one \text{...} run: "Change in y" -> \text{Change in}\,y
+    const prose = !opts.italic && t.split(' ').some((w) => /^[A-Za-z]{3,}[.,;:]?$/.test(w) && !FUNC_RE.test(w.replace(/[.,;:]$/, '')));
+    let run = [];
+    const flush = (more) => {
+      if (run.length) out += `\\text{${run.join(' ')}}${more ? '\\,' : ''}`;
+      run = [];
+    };
+    for (const word of t.split(' ')) {
+      const m = prose ? word.match(/^([A-Za-z]{2,})([.,;:]?)$/) : null;
+      if (m && !FUNC_RE.test(m[1])) {
+        run.push(m[1]);
+        if (m[2]) {
+          flush(false);
+          out += `${m[2]} `;
+        }
         continue;
       }
-      if (FUNC_RE.test(word)) {
-        out += `\\${word} `;
-        continue;
-      }
-      // Upright multi-letter words inside a formula ("Area", "for") stay readable as \text{...}
-      if (!opts.italic && /^[A-Za-z]{3,}[.,;:]?$/.test(word)) {
-        const m = word.match(/^([A-Za-z]+)([.,;:]?)$/);
-        out += `\\text{${m[1]}}${m[2]}`;
-        continue;
-      }
-      for (const ch of word) out += SYM[ch] !== undefined ? spaced(SYM[ch]) : ch;
+      flush(/^[A-Za-z0-9(\\]/.test(word));
+      if (FUNC_RE.test(word)) out += `\\${word} `;
+      else for (const ch of word) out += SYM[ch] !== undefined ? spaced(SYM[ch]) : ch;
+      out += ' ';
     }
+    flush(/\b(?:in|of|at|as|to|for|by|on|and|or)$/.test(run.join(' '))); // "Change in" + a variable span
     return out.replace(/\s+/g, ' ').trim();
   }
 

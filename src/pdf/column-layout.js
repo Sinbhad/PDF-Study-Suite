@@ -2,6 +2,7 @@
  * Per-page Column / Margin-Note Layout Detector (100% Offline, Non-AI)
  * Finds consistent vertical gutters in the x-positions of PDF.js text spans so two-column pages
  * are read left column first, then right, and narrow outer sidebars/margin notes leave the main flow.
+ * Grids of numbered items (exercise sets: 33 | 34 over 35 | 36) are read item by item instead.
  * Spans: { x0, x1, baselineY, fontSize, ... } as built by pdf-loader.js.
  */
 (function (root) {
@@ -124,12 +125,35 @@
     return { gutter, blocks: valid, score };
   }
 
-  function region(spans, column, isMargin) {
-    return { spans, column, isMargin };
-  }
+  const region = (spans, column, isMargin) => ({ spans, column, isMargin });
 
-  function widthOf(segs) {
-    return segs.length ? Math.max(...segs.map((s) => s.x1)) - Math.min(...segs.map((s) => s.x0)) : 0;
+  const widthOf = (segs) => (segs.length ? Math.max(...segs.map((s) => s.x1)) - Math.min(...segs.map((s) => s.x0)) : 0);
+
+  /**
+   * Numbered items printed as a grid ("33. ..  34. .." over "35. ..  36. .."): both sides open with an item
+   * number and the numbers interleave, so the page is read item by item (each with its own sub-parts),
+   * not left column then right. Returns blocks [{ side, spans }] in reading order, or null.
+   */
+  function gridItems(sides) {
+    const blocks = [];
+    const nums = [[], []];
+    for (let k = 0; k < 2; k++) {
+      let cur = null;
+      let carry = []; // a raised exponent row belongs to the row printed just below it
+      buildRows(sides[k]).forEach((row, i, rows) => {
+        const next = rows[i + 1];
+        if (next && row.fs < next.fs * 0.8 && next.y - row.y <= next.fs * 0.9) return carry.push(...row.spans);
+        const m = String(row.spans.concat(carry).sort((a, b) => a.x0 - b.x0)[0].text || '').trim().match(/^(\d{1,3})\.(?:\s|$)/);
+        if (m) nums[k].push(Number(m[1]));
+        if (m || !cur) blocks.push((cur = { side: k, y: row.y, fs: row.fs, spans: [] })); // rows above item 1: a heading tail
+        cur.spans.push(...carry, ...row.spans);
+        carry = [];
+      });
+    }
+    const [l, r] = nums;
+    const shared = new Set(l.concat(r)).size < l.length + r.length; // two separate lists (1-5 beside 1-4) stay columns
+    if (l.length < 2 || r.length < 2 || shared || Math.min(...r) > Math.max(...l) || Math.min(...l) > Math.max(...r)) return null;
+    return blocks.sort((a, b) => (Math.abs(a.y - b.y) <= Math.min(a.fs, b.fs) * 0.5 ? a.side - b.side : a.y - b.y));
   }
 
   /**
@@ -177,10 +201,7 @@
     const pick = (b, side) => b.rows.flatMap((r) => r.row.segs.filter((s) => sideOf(s, gutter) === side));
     const out = [];
     let flow = [];
-    const flush = () => {
-      if (flow.length) out.push(region(flow, columnBase, false));
-      flow = [];
-    };
+    const flush = () => { if (flow.length) out.push(region(flow, columnBase, false)); flow = []; };
     // Group all consecutive non-crossing rows so edge lines of a 2-column block stay split too
     const splitRuns = [];
     let curRun = null;
@@ -208,12 +229,15 @@
       if (emitted.has(b)) return;
       emitted.add(b);
       flush();
-      for (const side of ['L', 'R']) {
-        const sideSpans = pick(b, side).flatMap((s) => s.spans);
-        if (!sideSpans.length) continue;
-        const col = columnBase + (side === 'L' ? 0 : 1);
-        out.push(...splitRegions(sideSpans, depth + 1, col * 2));
+      const sides = ['L', 'R'].map((side) => pick(b, side).flatMap((s) => s.spans));
+      const grid = gridItems(sides);
+      if (grid) {
+        out.push(...grid.map((g) => region(g.spans, columnBase + g.side, false)));
+        return;
       }
+      sides.forEach((sideSpans, k) => {
+        if (sideSpans.length) out.push(...splitRegions(sideSpans, depth + 1, (columnBase + k) * 2));
+      });
     });
     flush();
     return out;

@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PDF Study Suite</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233F37C9'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h9' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="styles/tokens.css?v=20261026a" />
-  <link rel="stylesheet" href="styles/base.css?v=20261026a" />
-  <link rel="stylesheet" href="styles/controls.css?v=20261026a" />
-  <link rel="stylesheet" href="styles/shell.css?v=20261026a" />
-  <link rel="stylesheet" href="styles/study.css?v=20261026a" />
-  <link rel="stylesheet" href="styles/math.css?v=20261026a" />
-  <link rel="stylesheet" href="styles/practice.css?v=20261026a" />
+  <link rel="stylesheet" href="styles/tokens.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/base.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/controls.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/shell.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/study.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/math.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/practice.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/handwriting.css?v=20261113a" />
   <!-- Storage + theme load first so a pinned theme applies before first paint -->
-  <script src="src/ui/storage.js?v=20261026a"></script>
-  <script src="src/ui/theme.js?v=20261026a"></script>
+  <script src="src/ui/storage.js?v=20261113a"></script>
+  <script src="src/ui/theme.js?v=20261113a"></script>
 </head>
 <body>
   <header class="topbar">
@@ -81,6 +82,8 @@
         <button class="tab" role="tab" id="tab-reader" data-tab="reader" aria-selected="false" tabindex="-1">Reader</button>
       </div>
 
+      <div class="hw-notice hidden" id="hwNotice" role="status" aria-live="polite"></div>
+
       <div id="studyAndReaderSplit" class="study-split" role="tabpanel" aria-labelledby="tab-summary">
         <div id="activeStudyPanel" class="study-pane"></div>
 
@@ -110,72 +113,88 @@
   </div>
 
   <!-- Bundled Offline PDF.js Engine + Modular Non-AI Study Scripts -->
-  <script src="vendor/pdf.min.js?v=20261026a"></script>
-  <script src="src/pdf/math-glyphs.js?v=20261026a"></script>
-  <script src="src/pdf/math-tex.js?v=20261026a"></script>
-  <script src="src/pdf/font-decoder.js?v=20261026a"></script>
-  <script src="src/pdf/page-rules.js?v=20261026a"></script>
-  <script src="src/pdf/math-line.js?v=20261026a"></script>
-  <script src="src/pdf/formula-builder.js?v=20261026a"></script>
-  <script src="src/pdf/column-layout.js?v=20261026a"></script>
-  <script src="src/pdf/span-format.js?v=20261026a"></script>
-  <script src="src/pdf/line-builder.js?v=20261026a"></script>
-  <script src="src/pdf/page-kind.js?v=20261026a"></script>
-  <script src="src/pdf/pdf-loader.js?v=20261026a"></script>
-  <script src="src/pdf/classifier.js?v=20261026a"></script>
-  <script src="src/pdf/slide-lines.js?v=20261026a"></script>
-  <script src="src/pdf/slide-reveal.js?v=20261026a"></script>
-  <script src="src/pdf/slide-extractor.js?v=20261026a"></script>
-  <script src="src/pdf/scope-lines.js?v=20261026a"></script>
-  <script src="src/pdf/figure-filter.js?v=20261026a"></script>
-  <script src="src/pdf/block-headings.js?v=20261026a"></script>
-  <script src="src/pdf/didactic-blocks.js?v=20261026a"></script>
-  <script src="src/pdf/text-cleaner.js?v=20261026a"></script>
-  <script src="src/pdf/scope-builder.js?v=20261026a"></script>
-  <script src="src/pdf/book-hierarchy.js?v=20261026a"></script>
-  <script src="src/nlp/math-text.js?v=20261026a"></script>
-  <script src="src/nlp/stem-noise.js?v=20261026a"></script>
-  <script src="src/nlp/noise-filter.js?v=20261026a"></script>
-  <script src="src/nlp/tokenizer.js?v=20261026a"></script>
-  <script src="src/nlp/bold-terms.js?v=20261026a"></script>
-  <script src="src/nlp/definition-miner.js?v=20261026a"></script>
-  <script src="src/nlp/keywords.js?v=20261026a"></script>
-  <script src="src/nlp/key-terms.js?v=20261026a"></script>
-  <script src="src/nlp/graph-rank.js?v=20261026a"></script>
-  <script src="src/nlp/summarizer.js?v=20261026a"></script>
-  <script src="src/nlp/stem-cards.js?v=20261026a"></script>
-  <script src="src/nlp/slide-model.js?v=20261026a"></script>
-  <script src="src/nlp/slide-cards.js?v=20261026a"></script>
-  <script src="src/nlp/flashcard-engine.js?v=20261026a"></script>
-  <script src="src/nlp/phrase-shape.js?v=20261026a"></script>
-  <script src="src/nlp/quiz-gate.js?v=20261026a"></script>
-  <script src="src/nlp/quiz-options.js?v=20261026a"></script>
-  <script src="src/nlp/stem-distractors.js?v=20261026a"></script>
-  <script src="src/nlp/slide-quiz.js?v=20261026a"></script>
-  <script src="src/nlp/block-quiz.js?v=20261026a"></script>
-  <script src="src/nlp/stem-questions.js?v=20261026a"></script>
-  <script src="src/nlp/quiz-engine.js?v=20261026a"></script>
-  <script src="src/nlp/test-engine.js?v=20261026a"></script>
-  <script src="src/ui/math-renderer.js?v=20261026a"></script>
-  <script src="src/ui/rich-text.js?v=20261026a"></script>
-  <script src="src/ui/rich-blocks.js?v=20261026a"></script>
-  <script src="src/ui/study-views.js?v=20261026a"></script>
-  <script src="src/ui/summary-view.js?v=20261026a"></script>
-  <script src="src/ui/flashcard-faces.js?v=20261026a"></script>
-  <script src="src/ui/flashcard-view.js?v=20261026a"></script>
-  <script src="src/ui/quiz-card.js?v=20261026a"></script>
-  <script src="src/ui/test-report.js?v=20261026a"></script>
-  <script src="src/ui/test-view.js?v=20261026a"></script>
-  <script src="src/ui/quiz-view.js?v=20261026a"></script>
-  <script src="src/ui/demo-data.js?v=20261026a"></script>
-  <script src="src/ui/sidebar-tree.js?v=20261026a"></script>
-  <script src="src/ui/reader-controls.js?v=20261026a"></script>
-  <script src="src/ui/study-pipeline.js?v=20261026a"></script>
-  <script src="src/ui/main.js?v=20261026a"></script>
-  <script src="src/ui/events.js?v=20261026a"></script>
-  <script src="src/ui/keys.js?v=20261026a"></script>
-  <script src="src/ui/loading.js?v=20261026a"></script>
-  <script src="src/ui/tabs.js?v=20261026a"></script>
-  <script src="src/ui/shell.js?v=20261026a"></script>
+  <script src="vendor/pdf.min.js?v=20261113a"></script>
+  <script src="src/pdf/math-glyphs.js?v=20261113a"></script>
+  <script src="src/pdf/math-tex.js?v=20261113a"></script>
+  <script src="src/pdf/font-decoder.js?v=20261113a"></script>
+  <script src="src/pdf/page-rules.js?v=20261113a"></script>
+  <script src="src/pdf/math-line.js?v=20261113a"></script>
+  <script src="src/pdf/formula-builder.js?v=20261113a"></script>
+  <script src="src/pdf/column-layout.js?v=20261113a"></script>
+  <script src="src/pdf/span-format.js?v=20261113a"></script>
+  <script src="src/pdf/line-builder.js?v=20261113a"></script>
+  <script src="src/pdf/page-kind.js?v=20261113a"></script>
+  <script src="src/pdf/ink-detect.js?v=20261113a"></script>
+  <script src="src/pdf/ocr-canvas.js?v=20261113a"></script>
+  <script src="src/pdf/ocr-canvas-scope.js?v=20261113a"></script>
+  <script src="src/pdf/ocr-lines.js?v=20261113a"></script>
+  <script src="src/pdf/pdf-loader.js?v=20261113a"></script>
+  <script src="src/pdf/classifier.js?v=20261113a"></script>
+  <script src="src/pdf/slide-lines.js?v=20261113a"></script>
+  <script src="src/pdf/slide-reveal.js?v=20261113a"></script>
+  <script src="src/pdf/slide-extractor.js?v=20261113a"></script>
+  <script src="src/pdf/scope-lines.js?v=20261113a"></script>
+  <script src="src/pdf/figure-filter.js?v=20261113a"></script>
+  <script src="src/pdf/block-headings.js?v=20261113a"></script>
+  <script src="src/pdf/didactic-blocks.js?v=20261113a"></script>
+  <script src="src/pdf/text-cleaner.js?v=20261113a"></script>
+  <script src="src/pdf/scope-builder.js?v=20261113a"></script>
+  <script src="src/pdf/book-hierarchy.js?v=20261113a"></script>
+  <script src="src/nlp/math-text.js?v=20261113a"></script>
+  <script src="src/nlp/stem-noise.js?v=20261113a"></script>
+  <script src="src/nlp/noise-filter.js?v=20261113a"></script>
+  <script src="src/nlp/tokenizer.js?v=20261113a"></script>
+  <script src="src/nlp/bold-terms.js?v=20261113a"></script>
+  <script src="src/nlp/definition-miner.js?v=20261113a"></script>
+  <script src="src/nlp/keywords.js?v=20261113a"></script>
+  <script src="src/nlp/key-terms.js?v=20261113a"></script>
+  <script src="src/nlp/graph-rank.js?v=20261113a"></script>
+  <script src="src/nlp/summarizer.js?v=20261113a"></script>
+  <script src="src/nlp/stem-cards.js?v=20261113a"></script>
+  <script src="src/nlp/slide-model.js?v=20261113a"></script>
+  <script src="src/nlp/slide-cards.js?v=20261113a"></script>
+  <script src="src/nlp/flashcard-engine.js?v=20261113a"></script>
+  <script src="src/nlp/phrase-shape.js?v=20261113a"></script>
+  <script src="src/nlp/quiz-gate.js?v=20261113a"></script>
+  <script src="src/nlp/quiz-options.js?v=20261113a"></script>
+  <script src="src/nlp/stem-distractors.js?v=20261113a"></script>
+  <script src="src/nlp/slide-quiz.js?v=20261113a"></script>
+  <script src="src/nlp/block-quiz.js?v=20261113a"></script>
+  <script src="src/nlp/stem-questions.js?v=20261113a"></script>
+  <script src="src/nlp/quiz-engine.js?v=20261113a"></script>
+  <script src="src/nlp/test-engine.js?v=20261113a"></script>
+  <script src="src/hw/raster.js?v=20261113a"></script>
+  <script src="src/hw/segmenter.js?v=20261113a"></script>
+  <script src="src/hw/null-engine.js?v=20261113a"></script>
+  <script src="src/hw/hw-client.js?v=20261113a"></script>
+  <script src="src/hw/canvas-plan.js?v=20261113a"></script>
+  <script src="src/hw/canvas-order.js?v=20261113a"></script>
+  <script src="src/hw/canvas-read.js?v=20261113a"></script>
+  <script src="src/hw/hw-pipeline.js?v=20261113a"></script>
+  <script src="src/ui/math-renderer.js?v=20261113a"></script>
+  <script src="src/ui/rich-text.js?v=20261113a"></script>
+  <script src="src/ui/rich-blocks.js?v=20261113a"></script>
+  <script src="src/ui/study-views.js?v=20261113a"></script>
+  <script src="src/ui/summary-view.js?v=20261113a"></script>
+  <script src="src/ui/flashcard-faces.js?v=20261113a"></script>
+  <script src="src/ui/flashcard-view.js?v=20261113a"></script>
+  <script src="src/ui/quiz-card.js?v=20261113a"></script>
+  <script src="src/ui/test-report.js?v=20261113a"></script>
+  <script src="src/ui/test-view.js?v=20261113a"></script>
+  <script src="src/ui/quiz-view.js?v=20261113a"></script>
+  <script src="src/ui/demo-data.js?v=20261113a"></script>
+  <script src="src/ui/sidebar-tree.js?v=20261113a"></script>
+  <script src="src/ui/reader-controls.js?v=20261113a"></script>
+  <script src="src/ui/hw-crops.js?v=20261113a"></script>
+  <script src="src/ui/hw-review.js?v=20261113a"></script>
+  <!-- Handwriting and scanned-page reading is in progress and hidden from the live app. -->
+  <script>window.PDFStudy = window.PDFStudy || {}; PDFStudy.ENABLE_HANDWRITING = false;</script>
+  <script src="src/ui/study-pipeline.js?v=20261113a"></script>
+  <script src="src/ui/main.js?v=20261113a"></script>
+  <script src="src/ui/events.js?v=20261113a"></script>
+  <script src="src/ui/keys.js?v=20261113a"></script>
+  <script src="src/ui/loading.js?v=20261113a"></script>
+  <script src="src/ui/tabs.js?v=20261113a"></script>
+  <script src="src/ui/shell.js?v=20261113a"></script>
 </body>
 </html>

@@ -1,7 +1,23 @@
 /* Textbook math + CS code typography (pairs with src/ui/math-renderer.js and rich-text.js) */
+/* STIX Two (SIL OFL 1.1), self-hosted in vendor/fonts/stix-two/ by tools/fetch-math-font.py. An installed copy wins
+   (local()). If the files are absent the url() 404s quietly and the next family in the stacks below is used. */
+@font-face {
+  font-family: "PDF Study Math"; font-style: normal; font-weight: 400; font-display: swap;
+  src: local("STIX Two Math"), local("STIXTwoMath-Regular"), url("../vendor/fonts/stix-two/STIXTwoMath-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PDF Study Math Text"; font-style: italic; font-weight: 400; font-display: swap;
+  src: local("STIX Two Text Italic"), local("STIXTwoText-Italic"), url("../vendor/fonts/stix-two/STIXTwoText-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PDF Study Math Text"; font-style: normal; font-weight: 700; font-display: swap;
+  src: local("STIX Two Text Bold"), local("STIXTwoText-Bold"), url("../vendor/fonts/stix-two/STIXTwoText-Bold.woff2") format("woff2");
+}
 :root {
-  --font-math: "Cambria Math", "Latin Modern Math", "STIX Two Math", "STIX Two Text", Cambria,
-    "Times New Roman", Times, serif;
+  --font-math: "PDF Study Math", "STIX Two Math", "Cambria Math", "Latin Modern Math", "Noto Sans Math", "STIX Two Text",
+    Cambria, "Times New Roman", Times, serif;
+  /* Real italic / bold faces for variables and \mathbf (a math font has only an upright face) */
+  --font-math-italic: "PDF Study Math Text", "STIX Two Text", Cambria, "Times New Roman", Times, serif;
   --math-ink: var(--text);
 }
 
@@ -17,13 +33,14 @@
 .math-num, .math-den, .math-radicand, .math-cell, .math-over, .math-under { display: inline-flex; align-items: center; justify-content: center; }
 
 /* Variables italic, functions/numbers/text upright */
-.math-var { font-style: italic; font-family: var(--font-math); padding-right: 0.02em; }
+.math-var { font-style: italic; font-family: var(--font-math-italic); padding-right: 0.02em; }
 .math-fn, .math-digit, .math-text, .math-ord { font-style: normal; }
 .math-fn { padding: 0 0.12em; }
 .math-fn + .math-var, .math-fn + .math-digit, .math-sup + .math-var, .math-sub + .math-var, .math-supsub + .math-var { margin-left: 0.12em; }
 .math-text { padding: 0 0.25em; }
-.math-bold { font-weight: 700; font-style: normal; }
-.math-cal { font-family: "Segoe Script", "Brush Script MT", cursive; }
+.math-bold { font-weight: 700; font-style: normal; font-family: var(--font-math-italic); }
+/* \mathcal letters are Unicode script capitals (see math-renderer.js): upright, drawn by the math font, never a handwriting face */
+.math-cal { font-family: var(--font-math); font-style: normal; }
 .math-space { white-space: pre; }
 .math-punct { padding-right: 0.25em; }
 
@@ -63,7 +80,7 @@
 .math-limits { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 0.15em; line-height: 1.05; }
 .math-over, .math-under { font-size: 0.68em; line-height: 1.1; }
 .math-bigop { font-size: 1.45em; line-height: 1; font-style: normal; }
-.math-int { font-size: 1.6em; font-style: italic; margin-right: 0.05em; }
+.math-int { font-size: 1.6em; font-style: normal; margin-right: 0.05em; } /* integral glyphs are already slanted: no synthesised italic */
 .math-inline .math-bigop { font-size: 1.2em; }
 .math-inline .math-int { font-size: 1.3em; }
 .math-limop { padding: 0; }

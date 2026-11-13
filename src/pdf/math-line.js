@@ -13,6 +13,10 @@
   const STRONG_MATH_RE = /[=<>≤≥≠≈≡→⇒⇔∈∉⊂⊆∪∩∀∃∫∑∏√∞∂∇±×÷⋅′″α-ωΑ-Ω‖⌊⌋⌈⌉⟨⟩]/;
   const TALL_DELIM_RE = /^[|‖()[\]{}∫∑∏√⎧⎨⎩⎪⎫⎬⎭]+$/;
   const PROSE_WORD_RE = /[A-Za-z]{3,}/g;
+  const SHORT_WORD_RE = /^(?:at|as|is|if|in|on|or|of|to|by|an|be)$/;
+  const OPERATOR_END_RE = /[=<>≤≥≠≈+\-−×÷⋅·/^_]$/;
+  const SENTENCE_GLUE_RE = /\b([a-z]{3,}[.!?])([A-Z][a-z]{2,})/g;
+  const OPERATOR_START_RE = /^[=<>≤≥≠≈+\-−×÷⋅·/^_)\]]/;
 
   /** Base font size of a span group: upper non-delimiter tier so multi-char exponents (x^{10}, 2^{k+1}) never outvote x. */
   function baseSize(spans) {
@@ -82,6 +86,21 @@
     return words.some((w) => !isFn(w) && !/^(?:d[a-z]|[A-Za-z])$/.test(w)) || /^(?:a|A|I)$/.test(text);
   }
 
+  /**
+   * A two-letter italic word set apart by word spaces from non-operator neighbours ("f(x) at x = c",
+   * "0, if x is rational") is prose between two formulas, not the product of two variables.
+   */
+  function isShortProseWord(spans, i) {
+    const s = spans[i];
+    if (s.tex || !SHORT_WORD_RE.test((s.text || '').trim())) return false;
+    const prev = spans[i - 1];
+    const next = spans[i + 1];
+    const apart = (a, b) => b.x0 - a.x1 >= s.fontSize * 0.2;
+    const okPrev = !prev || (apart(prev, s) && !OPERATOR_END_RE.test((prev.text || '').trim()));
+    const okNext = !next || (apart(s, next) && !OPERATOR_START_RE.test((next.text || '').trim()));
+    return Boolean(prev || next) && okPrev && okNext;
+  }
+
   /** Builds TeX for a group of spans (a math run, a numerator, a bound). */
   function spansToTex(spans) {
     const sorted = [...spans].sort((a, b) => a.x0 - b.x0);
@@ -94,11 +113,16 @@
       script = null;
     };
     sorted.forEach((s, i) => {
-      const tex = s.tex || T().texOf(s.text, { italic: s.isItalic });
+      const word = role[i] === 'base' && isShortProseWord(sorted, i);
+      const tex = word ? `\\text{${s.text.trim()}}\\,` : s.tex || T().texOf(s.text, { italic: s.isItalic });
       if (role[i] === 'base') {
         flush();
         const prev = sorted[i - 1];
-        if (prev && tokens.length && s.x0 - prev.x1 > s.fontSize * 1.5) tokens.push('\\quad');
+        const gap = prev ? s.x0 - prev.x1 : 0;
+        // Table cells of numbers ("1.99499   1.99950") must not run together into one long number
+        const cells = prev && /\d$/.test((prev.text || '').trim()) && /^[-−]?\d/.test((s.text || '').trim()) && gap > s.fontSize * 0.45;
+        if (prev && tokens.length && (gap > s.fontSize * 1.5 || cells)) tokens.push('\\quad');
+        else if (prev && tokens.length && /^\\text\{/.test(tex) && gap >= s.fontSize * 0.2) tokens.push('\\,');
         tokens.push(tex);
       } else if (/^[).,:;]+$/.test(tex) && (!script || !script.parts.some((p) => p.includes('(')))) {
         flush();
@@ -153,7 +177,7 @@
     spans.forEach((s, i) => {
       const scripted = role[i + 1] && role[i + 1] !== 'base' && spans[i + 1].x0 - s.x1 < s.fontSize * 0.4 &&
         (s.__scriptBase || /^[A-Za-z0-9()]+$/.test((s.text || '').trim()));
-      const prose = !s.tex && role[i] === 'base' && !scripted && isProse(s);
+      const prose = !s.tex && role[i] === 'base' && !scripted && (isProse(s) || isShortProseWord(spans, i));
       const last = pieces[pieces.length - 1];
       if (!prose && last && last.math) {
         last.spans.push(s);
@@ -165,7 +189,10 @@
       if (p.math && runIsMath(p.spans, p.roles)) {
         out.push({ first: p.spans[0], last: p.spans[p.spans.length - 1], text: spansToPlain(p.spans), fmt: `$${spansToTex(p.spans)}$`, bold: false, math: true });
       } else {
-        for (const s of p.spans) out.push({ first: s, last: s, text: s.plain || s.text, fmt: null, bold: Boolean(s.isBold), math: false });
+        for (const s of p.spans) {
+          const text = String(s.plain || s.text).replace(SENTENCE_GLUE_RE, '$1 $2'); // "strokes.This": the PDF dropped the space
+          out.push({ first: s, last: s, text, fmt: null, bold: Boolean(s.isBold), math: false });
+        }
       }
     }
     let fullText = '';
@@ -173,7 +200,10 @@
     const runs = [];
     out.forEach((o, i) => {
       const prev = out[i - 1];
-      const sp = prev && o.first.x0 - prev.last.x1 > o.first.fontSize * 0.1 && !fullText.endsWith(' ') && !/^\s/.test(o.text) ? ' ' : '';
+      const gap = prev ? o.first.x0 - prev.last.x1 : 0;
+      // Two text items that touch but read "the|Tangent" or "strokes.|This" are two words: the space was kerned away
+      const wordEdge = prev && !prev.math && !o.math && gap > -1 && /[a-z.,;:!?]$/.test(prev.text) && /^[A-Z][a-z]/.test(o.text);
+      const sp = prev && (gap > o.first.fontSize * 0.1 || wordEdge) && !fullText.endsWith(' ') && !/^\s/.test(o.text) ? ' ' : '';
       fullText += sp + o.text;
       const piece = { text: sp + (o.fmt || o.text), bold: o.bold && !o.math, math: o.math };
       const last = runs[runs.length - 1];

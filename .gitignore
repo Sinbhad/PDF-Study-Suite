@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+# Handwriting runtime + model weights, installed by tools/fetch-handwriting-model.py (large; never committed)
+vendor/hw/
+*.part

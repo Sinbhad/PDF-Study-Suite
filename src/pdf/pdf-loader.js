@@ -52,6 +52,8 @@
     };
     const pk = mod('pageKind', './page-kind.js');
     if (pk) pageObj.kind = pk.classifyPage(pageObj);
+    const ink = mod('inkDetect', './ink-detect.js');
+    if (ink) pageObj.ink = ink.assess(pageObj, ink.opStats(opList, lib.OPS));
     return pageObj;
   }
 

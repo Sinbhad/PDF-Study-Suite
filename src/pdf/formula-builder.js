@@ -54,6 +54,10 @@
       const cut = Math.max(s.x0 + 1, s.x1 - s.fontSize * 0.8);
       return [{ ...s, text: t.slice(0, -1), x1: cut }, { ...s, text: '√', x0: cut }];
     });
+    // "x → −3" printed under a lim on the row above is that limit's bound, never the index of a radical below it
+    const lims = spans.filter((s) => !s.tex && (s.text || '').trim() === 'lim');
+    const underLim = (s) => lims.some((l) => cx(s) > l.x0 - l.fontSize * 0.5 && cx(s) < l.x1 + l.fontSize * 0.5 &&
+      s.baselineY > l.baselineY && s.baselineY - l.baselineY < l.fontSize * 1.6);
     for (const rad of spans.filter((s) => !s.tex && s.text.trim() === '√')) {
       const fs = rad.fontSize;
       // Vinculum starts at the right edge of √ (rad.x1), never at rad.x0 (which would be an enclosing fraction bar)
@@ -64,7 +68,7 @@
       if (!r) continue;
       const body = spans.filter((s) => s !== rad && cx(s) > r.x0 && cx(s) < r.x1 + 0.5 && s.baselineY > r.y && s.baselineY - r.y <= Math.max(fs * 1.6, 13));
       if (!body.length) continue;
-      const idx = spans.filter((s) => s !== rad && !body.includes(s) && s.fontSize < Math.max(fs, 10) * 0.8 &&
+      const idx = spans.filter((s) => s !== rad && !body.includes(s) && !underLim(s) && s.fontSize < Math.max(fs, 10) * 0.8 &&
         s.x1 <= rad.x0 + (rad.x1 - rad.x0) * 0.7 && s.x0 >= rad.x0 - fs && s.baselineY < rad.baselineY - fs * 0.15 && s.baselineY > rad.topY - fs);
       used.add(r);
       const inner = ML().spansToTex(body);

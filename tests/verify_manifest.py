@@ -6,7 +6,7 @@ and HTTP server asset endpoints.
 import os
 import shutil
 
-EXPECTED_SCRIPT_COUNT = 69
+EXPECTED_SCRIPT_COUNT = 83
 
 EXPECTED_NAMESPACES: dict[str, str] = {
     # PDF extraction, 2D formula reconstruction & textbook/slide structure (22)
@@ -32,6 +32,19 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/pdf/text-cleaner.js": "PDFStudy.textCleaner",
     "src/pdf/scope-builder.js": "PDFStudy.scopeBuilder",
     "src/pdf/book-hierarchy.js": "PDFStudy.bookHierarchy",
+    # Handwriting: ink-only page detection, recognised text -> page lines, on-device recognition pipeline, canvas pages (12)
+    "src/pdf/ink-detect.js": "PDFStudy.inkDetect",
+    "src/pdf/ocr-canvas.js": "PDFStudy.ocrCanvas",
+    "src/pdf/ocr-canvas-scope.js": "PDFStudy.ocrCanvasScope",
+    "src/pdf/ocr-lines.js": "PDFStudy.ocrLines",
+    "src/hw/raster.js": "PDFStudy.hwRaster",
+    "src/hw/segmenter.js": "PDFStudy.hwSegmenter",
+    "src/hw/null-engine.js": "PDFStudy.hwNullEngine",
+    "src/hw/hw-client.js": "PDFStudy.hwClient",
+    "src/hw/canvas-plan.js": "PDFStudy.hwCanvasPlan",
+    "src/hw/canvas-order.js": "PDFStudy.hwCanvasOrder",
+    "src/hw/canvas-read.js": "PDFStudy.hwCanvasRead",
+    "src/hw/hw-pipeline.js": "PDFStudy.hwPipeline",
     # Math-safe NLP, STEM garbage gate, flashcards, quiz & practice test engines (18)
     "src/nlp/math-text.js": "PDFStudy.mathText",
     "src/nlp/stem-noise.js": "PDFStudy.stemNoise",
@@ -74,6 +87,8 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/ui/demo-data.js": "PDFStudy.demoData",
     "src/ui/sidebar-tree.js": "PDFStudy.sidebarTree",
     "src/ui/reader-controls.js": "PDFStudy.readerControls",
+    "src/ui/hw-crops.js": "PDFStudy.hwCrops",
+    "src/ui/hw-review.js": "PDFStudy.hwReview",
     "src/ui/study-pipeline.js": "PDFStudy.studyPipeline",
     "src/ui/main.js": "PDFStudy.main",
     "src/ui/events.js": "PDFStudy.events",
@@ -89,9 +104,21 @@ NODE_FIXTURES: tuple[str, ...] = (
     "layout_fixtures.js",
     "flashcard_fixtures.js",
     "math_fixtures.js",
+    "extraction_fixtures.js",
     "structure_fixtures.js",
     "stem_fixtures.js",
     "ui_render_fixtures.js",
+    "math_font_fixtures.js",
+    "handwriting_fixtures.js",
+    "handwriting_flow_fixtures.js",
+    "handwriting_photo_fixtures.js",
+    "handwriting_prep_fixtures.js",
+    "handwriting_print_fixtures.js",
+    "handwriting_eval_fixtures.js",
+    "handwriting_engine_fixtures.js",
+    "handwriting_tiles_fixtures.js",
+    "handwriting_canvas_fixtures.js",
+    "handwriting_ppocr_fixtures.js",
 )
 
 STYLESHEET_PATHS: tuple[str, ...] = (
@@ -102,6 +129,36 @@ STYLESHEET_PATHS: tuple[str, ...] = (
     "/styles/study.css",
     "/styles/math.css",
     "/styles/practice.css",
+    "/styles/handwriting.css",
+)
+
+# Self-hosted math font (STIX Two, SIL OFL 1.1), committed with its licence
+FONT_ASSETS: tuple[str, ...] = (
+    "/vendor/fonts/stix-two/STIXTwoMath-Regular.woff2",
+    "/vendor/fonts/stix-two/STIXTwoText-Italic.woff2",
+    "/vendor/fonts/stix-two/STIXTwoText-Bold.woff2",
+    "/vendor/fonts/stix-two/OFL.txt",
+)
+
+# Loaded by the recognition Web Worker (importScripts), never by index.html
+WORKER_ASSETS: tuple[str, ...] = (
+    "/src/hw/hw-worker.js",
+    "/src/hw/hw-worker-core.js",
+    "/src/hw/page-flatten.js",
+    "/src/hw/rule-strip.js",
+    "/src/hw/clean.js",
+    "/src/hw/line-split.js",
+    "/src/hw/islands.js",
+    "/src/hw/slant-split.js",
+    "/src/hw/columns.js",
+    "/src/hw/print-detect.js",
+    "/src/hw/page-prep.js",
+    "/src/hw/engine-util.js",
+    "/src/hw/engine-model.js",
+    "/src/hw/ppocr-prep.js",
+    "/src/hw/ppocr-boxes.js",
+    "/src/hw/ppocr-ctc.js",
+    "/src/hw/engine-ppocr.js",
 )
 
 HTTP_ENDPOINTS: tuple[str, ...] = (
@@ -110,6 +167,8 @@ HTTP_ENDPOINTS: tuple[str, ...] = (
     "/vendor/pdf.min.js",
     "/vendor/pdf.worker.min.js",
     *(f"/{scr}" for scr in EXPECTED_NAMESPACES),
+    *WORKER_ASSETS,
+    *FONT_ASSETS,
     "/tests/quality.html",
     *(f"/tests/{fx}" for fx in NODE_FIXTURES),
 )

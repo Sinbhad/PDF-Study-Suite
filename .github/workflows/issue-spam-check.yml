@@ -1,0 +1,48 @@
+# Minimal spam filter for the feedback forms: closes new issues that clearly did not come
+# through a form or that look like link/advert spam. Anything closed by mistake can be reopened.
+name: Feedback spam check
+on:
+  issues:
+    types: [opened]
+permissions:
+  issues: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association) }}
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || '';
+            const text = `${issue.title}\n${body}`;
+            const reasons = [];
+
+            // 1. Must come from one of the forms (they always produce these headings).
+            if (!/^### (What happened|Your idea)\s*$/m.test(body)) reasons.push('not submitted through a feedback form');
+
+            // 2. The main answer must contain some actual words.
+            const answer = (body.split(/^### .*$/m)[1] || '').replace(/_No response_/g, '').trim();
+            if (answer.replace(/[^a-zA-Z]/g, '').length < 15) reasons.push('the description is empty or too short');
+
+            // 3. Link dumps.
+            const links = (text.match(/https?:\/\/|www\./gi) || []).length;
+            if (links > 3) reasons.push('too many links');
+
+            // 4. Common advert wording.
+            const advert = /\b(casino|betting|crypto(currency)?|forex|loan offer|seo (service|expert)|backlinks?|buy followers|whatsapp|telegram|viagra|escort|earn \$?\d+)/i;
+            if (advert.test(text)) reasons.push('advertising wording');
+
+            // 5. Brand-new accounts posting links.
+            const { data: user } = await github.rest.users.getByUsername({ username: issue.user.login });
+            const ageDays = (Date.now() - new Date(user.created_at).getTime()) / 86400000;
+            if (ageDays < 2 && links > 0) reasons.push('new account posting links');
+
+            if (!reasons.length) return;
+            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number };
+            await github.rest.issues.addLabels({ ...ref, labels: ['spam-check'] });
+            await github.rest.issues.createComment({ ...ref, body:
+              `This was closed automatically by the spam check (${reasons.join('; ')}).\n\n` +
+              'If you are a real person with real feedback, sorry about that. Please open a new report with one of the forms and describe the problem or idea in a sentence or two.' });
+            await github.rest.issues.update({ ...ref, state: 'closed', state_reason: 'not_planned' });

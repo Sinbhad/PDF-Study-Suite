@@ -8,6 +8,8 @@
 
   const getCleaner = () =>
     PDFStudy.textCleaner || (typeof require === 'function' ? require('./text-cleaner.js') : null);
+  const getCanvasScope = () =>
+    PDFStudy.ocrCanvasScope || (typeof require === 'function' ? require('./ocr-canvas-scope.js') : null);
 
   /**
    * Pages that the PDF outline files under front / back matter (cover, title page, copyright, contents,
@@ -28,18 +30,24 @@
   }
 
   function formatPagesToScope(allPages, startPage, endPage, parsedPdf) {
-    const cleaner = getCleaner();
     const isFluff = fluffPageTest(parsedPdf);
     const pages = (allPages || []).filter((p) => p && !isFluff(p.pageNumber));
+    const canvas = getCanvasScope();
+    if (canvas && pages.some(canvas.isCanvasPage)) {
+      return Object.assign(canvas.formatScope(pages, formatPlain), { pageCount: pages.length, startPage, endPage });
+    }
+    return Object.assign(formatPlain(pages), { pageCount: pages.length, startPage, endPage });
+  }
+
+  /** Ordinary pages -> { text, exerciseText, didacticBlocks } through the text cleaner. */
+  function formatPlain(pages) {
+    const cleaner = getCleaner();
     if (cleaner && cleaner.processSectionPages) {
       const cleaned = cleaner.processSectionPages(pages);
       return {
         text: cleaned.text,
         exerciseText: cleaned.exerciseText || '',
         didacticBlocks: cleaned.didacticBlocks,
-        pageCount: pages.length,
-        startPage,
-        endPage,
       };
     }
     const paragraphs = pages.map((p) =>
@@ -49,9 +57,6 @@
       text: paragraphs.join('\n\n'),
       exerciseText: '',
       didacticBlocks: [],
-      pageCount: pages.length,
-      startPage,
-      endPage,
     };
   }
 

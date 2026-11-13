@@ -5,6 +5,7 @@
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
+  if (typeof PDFStudy.ENABLE_HANDWRITING !== 'boolean') PDFStudy.ENABLE_HANDWRITING = false;
 
   const appState = {
     docName: '',
@@ -21,14 +22,37 @@
     quizCount: 10,
     quizSeed: 0,
     lastScopeObj: null,
+    handwriting: null, // { pages, regions, low, cancelled, engine } once handwritten pages were read
     generated: { summary: null, flashcards: [], quiz: [], test: null },
   };
 
+  let runToken = 0;
+  let runCtrl = null;
+
+  function abortRun() {
+    runToken++; // any run in flight is now stale
+    if (runCtrl) runCtrl.abort();
+    runCtrl = null;
+  }
+
   async function processLoadedDocument(docName, parsedPdf) {
+    abortRun();
+    if (PDFStudy.hwPipeline && PDFStudy.hwPipeline.dispose) PDFStudy.hwPipeline.dispose();
+    if (PDFStudy.hwReview) PDFStudy.hwReview.close();
     appState.docName = docName;
     appState.parsedPdf = parsedPdf;
     appState.classification = PDFStudy.classifier.classifyDocument(parsedPdf);
     appState.activeMode = appState.classification.type;
+    appState.handwriting = null;
+    const ink = PDFStudy.inkDetect && PDFStudy.inkDetect.summarise(parsedPdf);
+    if (ink && ink.share >= 0.5) { // ink-only pages are prose, not slides
+      appState.activeMode = 'book';
+      const extra = PDFStudy.ENABLE_HANDWRITING ? ['Handwritten or scanned pages: text is read on this device'] : [];
+      appState.classification = Object.assign({}, appState.classification, {
+        type: 'book',
+        reasons: extra.concat(appState.classification.reasons || []),
+      });
+    }
     appState.slideDeck = PDFStudy.slideExtractor.extractSlideDeck(parsedPdf);
     appState.bookHierarchy = PDFStudy.bookHierarchy.extractBookHierarchy(parsedPdf);
     appState.quizSeed = 0;
@@ -107,24 +131,43 @@
     });
   }
 
-  async function recomputeStudyMaterials() {
+  async function recomputeStudyMaterials(options) {
+    const retrySkipped = !!(options && options.retrySkipped);
     const { startPage, endPage } = appState.selectedScope;
     const L = PDFStudy.loading;
     const P = PDFStudy.studyPipeline;
     const panel = document.getElementById('activeStudyPanel');
     const onProgress = (cur, tot, pNum) => L.update(cur, tot, `Page ${pNum} (${cur} of ${tot})`);
+    const hwUi = PDFStudy.hwReview;
+    const useHw = !!PDFStudy.ENABLE_HANDWRITING;
+    if (runCtrl) runCtrl.abort();
+    const token = ++runToken;
+    const isCurrent = () => token === runToken;
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    runCtrl = ctrl;
+    const cancel = ctrl ? () => ctrl.abort() : null;
+    const onHandwriting = (p) => {
+      if (cancel) L.showCancel(cancel);
+      if (hwUi) hwUi.reportProgress(L, p);
+    };
     if (PDFStudy.testView && PDFStudy.testView.reset) PDFStudy.testView.reset();
+    if (hwUi) { hwUi.close(); hwUi.syncNotice(null); }
     panel.classList.remove('hidden');
-    L.start(panel, 'Reading pages');
+    const ink = useHw && PDFStudy.inkDetect && PDFStudy.hwPipeline ? PDFStudy.inkDetect.pagesNeeding(appState.parsedPdf, startPage, endPage) : [];
+    L.start(panel, 'Reading pages', ink.length && cancel ? { onCancel: cancel } : undefined);
     try {
-      await P.buildMaterials(appState, startPage, endPage, onProgress);
+      await P.buildMaterials(appState, startPage, endPage, onProgress, { signal: ctrl && ctrl.signal, onHandwriting, isCurrent, retrySkipped, handwriting: useHw });
     } catch (err) {
+      if (!isCurrent()) return;
       L.end();
       panel.innerHTML = PDFStudy.studyViews.emptyState("Couldn't build study materials", String((err && err.message) || err));
       PDFStudy.tabs.sync();
       return;
     }
+    if (!isCurrent()) return;
+    if (runCtrl === ctrl) runCtrl = null;
     L.end();
+    if (hwUi) hwUi.syncNotice(useHw ? appState.handwriting : null);
     renderSidebarScopeTree(); // lazy documents refine the slide list while pages load
     updateCounts();
     renderActiveTab();
@@ -140,6 +183,7 @@
     const viewEl = document.getElementById('activeStudyPanel');
     const readerEl = document.getElementById('pdfReaderPanel');
     const splitWrap = document.getElementById('studyAndReaderSplit');
+    if (PDFStudy.hwReview) PDFStudy.hwReview.close(); // leaving the review panel releases its crops
     const scopeTitle = appState.selectedScope.label || appState.selectedScope.title; // views show the short label
     const isReader = appState.activeTab === 'reader';
     const showReader = isReader || appState.splitView;

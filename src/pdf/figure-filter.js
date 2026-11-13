@@ -18,6 +18,7 @@
   const TICK_RE = new RegExp(String.raw`^[\s\-+−,()]*(?:${TICK_ATOM}[\s\-+−,()]*){1,6}$`);
   const TERMINAL_RE = /[.!?]["”')\]$]*$/;
   const LIST_START_RE = /^(?:\d{1,3}[.)]|\(?[a-z][.)]|[•▪◦‣∙✦✧➢–-])\s/;
+  const ITEM_LABEL_RE = /^\$*(?:\d{1,3}\.(?!\d)|\([a-z]\)(?![\^_]))\s*\S/;
   const CAPTION_LABEL_RE = /^\**(?:Figure|Fig\.|Table)\s+(?:[A-Z]\.)?[A-Z]?\d+(?:\.\d+)*\**$/i;
 
   const fmtOf = (l) => String((l && (l.formattedText || l.text)) || '').trim();
@@ -28,6 +29,7 @@
   /** Axis letter, tick run or bare point label: carries no statement. */
   function isTickLabel(line, bodySize) {
     const fmt = fmtOf(line);
+    if (ITEM_LABEL_RE.test(fmt)) return false; // "61. $(\sqrt 3, 1.56)$": a numbered item, not a tick run
     if (!fmt.includes('$')) return /^[\d\s.,+\-−–]+$/.test(fmt) && fmt.length <= 14;
     if (!isMathOnly(fmt)) return false;
     const inner = mathInner(fmt);
@@ -93,13 +95,18 @@
     flush();
   }
 
-  function markFigureText(page, bodySize) {
+  /**
+   * opts.ticksOnly (exercise sets): only tick / axis labels and caption labels. Exercise grids print short math
+   * items side by side, which the margin and fragment passes would mistake for curve labels.
+   */
+  function markFigureText(page, bodySize, opts = {}) {
     const drop = new Set();
     try {
       const h = (page && page.height) || 792; // running headers / footers are handled by the caller
       const lines = ((page && page.lines) || []).filter((l) => l && Number.isFinite(l.topY) && Number.isFinite(l.x0) && !l.isCode &&
         l.topY >= h * 0.055 && l.topY <= h * 0.95);
       for (const l of lines) if (isTickLabel(l, bodySize) || CAPTION_LABEL_RE.test(fmtOf(l))) drop.add(l);
+      if (opts.ticksOnly) return drop;
       markMargin(lines.filter((l) => l.isMargin && !drop.has(l)), drop);
       markMain(lines.filter((l) => !l.isMargin), drop, page && page.width);
     } catch (_err) {

@@ -4,14 +4,17 @@ Verifies:
 1. Strict 250-LOC Ceiling across all files in the repository.
 2. Sample PDF generation (Class Slides & Textbook with Chapters/Sections).
 3. HTML stylesheet & script graph integrity and module export completeness.
-4. All 8 Node fixture suites (quality, option, layout, flashcard, math, structure, stem, ui_render).
+4. All Node fixture suites listed in verify_manifest.NODE_FIXTURES (quality, layout, math, handwriting, ...).
 5. Local HTTP server delivery of all assets, vendor libraries, and /local-larson.pdf.
+6. When the optional handwriting model is installed: a real recognition run in a headless browser
+   (tools/smoke-handwriting.js). Skipped with a message when the model, Pillow or a browser is missing.
 """
 import http.server
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import urllib.request
 
@@ -39,7 +42,7 @@ for _stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252; 
 
 
 def test_loc_ceiling() -> None:
-    print("[1/5] Checking strict 250-LOC ceiling across all workspace files...")
+    print("[1/6] Checking strict 250-LOC ceiling across all workspace files...")
     checked = 0
     for dirpath, _, filenames in os.walk(ROOT_DIR):
         for fname in sorted(filenames):
@@ -55,7 +58,7 @@ def test_loc_ceiling() -> None:
 
 
 def test_sample_pdfs() -> None:
-    print("[2/5] Generating and verifying sample Class Slides & Textbook PDFs...")
+    print("[2/6] Generating and verifying sample Class Slides & Textbook PDFs...")
     generate_samples(ROOT_DIR)
     for name in ("sample_class_slides.pdf", "sample_textbook_chapters.pdf"):
         p = os.path.join(ROOT_DIR, "samples", name)
@@ -67,7 +70,7 @@ def test_sample_pdfs() -> None:
 
 
 def test_script_integrity() -> None:
-    print("[3/5] Verifying index.html stylesheet/script links and module exports...")
+    print("[3/6] Verifying index.html stylesheet/script links and module exports...")
     index_path = os.path.join(ROOT_DIR, "index.html")
     with open(index_path, "r", encoding="utf-8") as f:
         html = f.read()
@@ -92,7 +95,7 @@ def test_script_integrity() -> None:
 
 
 def test_quality_fixtures() -> None:
-    print(f"[4/5] Running all {len(NODE_FIXTURES)} Node fixture suites...")
+    print(f"[4/6] Running all {len(NODE_FIXTURES)} Node fixture suites...")
     node = _find_node()
     assert node and os.path.exists(node), "Node.js binary not found (Step 4 must never skip)"
     for name in NODE_FIXTURES:
@@ -104,7 +107,7 @@ def test_quality_fixtures() -> None:
 
 
 def test_http_server() -> None:
-    print("[5/5] Verifying local HTTP server asset delivery & Larson Calculus endpoint...")
+    print("[5/6] Verifying local HTTP server asset delivery & Larson Calculus endpoint...")
     server = StudySuiteServer(("127.0.0.1", 0), StudySuiteHandler)
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -131,10 +134,48 @@ def test_http_server() -> None:
         server.server_close()
 
 
+def test_handwriting_model() -> None:
+    """Optional extra: runs only when the model, Pillow, a handwriting-style font and Edge/Chrome are present."""
+    print("[6/6] Reading a synthetic handwritten page with the real model in a real browser...")
+    hw = os.path.join(ROOT_DIR, "vendor", "hw")
+    onnx = os.path.join(hw, "models", "trocr-small-handwritten", "onnx")
+    needed = ("transformers.min.mjs", "ort-wasm-simd-threaded.jsep.wasm",
+              os.path.join(onnx, "decoder_model_merged_quantized.onnx"))
+    # The full-precision encoder is the default; an older install with only the 8-bit one still runs
+    encoder = ("encoder_model.onnx", "encoder_model_quantized.onnx")
+    if not (all(os.path.exists(os.path.join(hw, n)) for n in needed)
+            and any(os.path.exists(os.path.join(onnx, n)) for n in encoder)):
+        print("   [SKIPPED] handwriting model not installed (tools/fetch-handwriting-model.py); step 4 covers type-it-in")
+        return
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        print("   [SKIPPED] Pillow is not installed, so the synthetic page cannot be drawn")
+        return
+    node = _find_node()
+    with tempfile.TemporaryDirectory() as tmp:
+        pdf = os.path.join(tmp, "fixture.pdf")
+        made = subprocess.run([sys.executable, os.path.join(ROOT_DIR, "tools", "make-handwriting-fixture.py"), pdf],
+                              capture_output=True, text=True, encoding="utf-8", timeout=60)
+        if made.returncode != 0:
+            print(f"   [SKIPPED] could not draw the synthetic page: {made.stderr.strip() or made.stdout.strip()}")
+            return
+        proc = subprocess.run([node, os.path.join(ROOT_DIR, "tools", "smoke-handwriting.js"), pdf, "--timeout=300"],
+                              capture_output=True, text=True, encoding="utf-8", timeout=480)
+    if proc.returncode == 2:
+        print(f"   [SKIPPED] {proc.stderr.strip()}")
+        return
+    tail = proc.stdout[proc.stdout.rfind("\n}") + 2:].strip().splitlines()
+    for line in tail:
+        print(f"   {line}")
+    assert proc.returncode == 0, f"handwriting smoke test failed: {proc.stdout[-3000:]} {proc.stderr[-2000:]}"
+
+
 if __name__ == "__main__":
     test_loc_ceiling()
     test_sample_pdfs()
     test_script_integrity()
     test_quality_fixtures()
     test_http_server()
+    test_handwriting_model()
     print("\nALL VERIFICATION CHECKS PASSED SUCCESSFULLY!")

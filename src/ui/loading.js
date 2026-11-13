@@ -4,7 +4,7 @@
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
-  const LOCK_SELECTOR = '.topbar button:not(#themeToggleBtn):not(#railToggleBtn), #pdfDropzone button, #pdfFileInput, #workspaceArea button, #workspaceArea input';
+  const LOCK_SELECTOR = '.topbar button:not(#themeToggleBtn):not(#railToggleBtn), #pdfDropzone button, #pdfFileInput, #workspaceArea button:not(#loadingCancelBtn), #workspaceArea input';
   let locked = [];
   let host = null;
   let busy = false;
@@ -28,7 +28,7 @@
   function find(sel) { return host ? host.querySelector(sel) : null; }
 
   /** Show a progress bar inside `target` (indeterminate until update() gets a total). */
-  function start(target, label) {
+  function start(target, label, opts) {
     host = target;
     busy = true;
     if (host) {
@@ -42,6 +42,24 @@
         </div>`;
     }
     lock();
+    if (opts && opts.onCancel) showCancel(opts.onCancel);
+  }
+
+  /** Add a Cancel button under the bar (idempotent). It is created after lock(), so it stays enabled. */
+  function showCancel(onCancel) {
+    const box = find('.loading');
+    if (!box || find('#loadingCancelBtn') || typeof onCancel !== 'function') return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'loadingCancelBtn';
+    btn.className = 'btn btn-secondary btn-sm loading-cancel';
+    btn.textContent = 'Cancel';
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      btn.textContent = 'Stopping…';
+      onCancel();
+    });
+    box.appendChild(btn);
   }
 
   function update(cur, total, detail, label) {
@@ -70,5 +88,5 @@
     unlock();
   }
 
-  PDFStudy.loading = { start, update, end, isBusy: () => busy };
+  PDFStudy.loading = { start, update, end, showCancel, isBusy: () => busy };
 })(typeof window !== 'undefined' ? window : globalThis);

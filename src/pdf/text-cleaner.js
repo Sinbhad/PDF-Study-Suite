@@ -71,7 +71,7 @@
     const inBand = (line, h) => line.topY < h * 0.055 || line.topY > h * 0.95;
     function keepExercise(line, raw, plain, h) {
       if (inBand(line, h) || sl.isFluffLine(plain) || (nf && nf.isBoilerplate(plain))) return;
-      sl.splitEnumerated(raw).forEach((part) => exerciseLines.push(part));
+      sl.splitEnumerated(raw).forEach((part) => sl.pushProseLine(exerciseLines, part));
     }
 
     for (const page of pages || []) {
@@ -86,7 +86,9 @@
         flushBlock();
         inExercises = kind === 'exercises';
         if (inExercises) {
+          const figures = ff ? ff.markFigureText(page, bodyFontSize(page), { ticksOnly: true }) : new Set(); // graph ticks
           for (const line of page.lines || []) {
+            if (figures.has(line)) continue;
             const raw = sl.stripPromo(stripPublisherBoilerplate(line.formattedText || line.text));
             if (raw && !(pk && pk.isExerciseStart(raw.replace(/\*\*/g, '')))) keepExercise(line, raw, raw.replace(/\*\*/g, ''), h);
           }
@@ -96,6 +98,7 @@
 
       const bodySize = bodyFontSize(page);
       const figureText = ff ? ff.markFigureText(page, bodySize) : new Set();
+      const exerciseTicks = ff ? ff.markFigureText(page, bodySize, { ticksOnly: true }) : new Set();
       recentProse = [];
       flushCode();
 
@@ -121,7 +124,7 @@
           inOpenerObjectives = true;
         }
         if (inExercises && !(line.isMargin && exStartY !== null && line.topY < exStartY)) {
-          keepExercise(line, raw, plain, h);
+          if (!exerciseTicks.has(line)) keepExercise(line, raw, plain, h);
           continue;
         }
 
@@ -163,7 +166,7 @@
         if (line.isMargin) {
           if (marginLines.lastPage !== page.pageNumber) marginLines.push('');
           marginLines.lastPage = page.pageNumber;
-          marginLines.push(raw);
+          sl.pushProseLine(marginLines, raw); // narrow notes hyphenate often: "contribu-" + "tions"
           continue;
         }
 

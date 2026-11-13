@@ -28,6 +28,9 @@
   const BIGOP = { sum: '∑', prod: '∏', coprod: '∐', bigcup: '⋃', bigcap: '⋂', int: '∫', iint: '∬', iiint: '∭', oint: '∮' };
   const SPACE = { ',': ' ', ':': ' ', ';': ' ', ' ': ' ', quad: '  ', qquad: '    ', '!': '' };
   const BB = { R: 'ℝ', N: 'ℕ', Z: 'ℤ', Q: 'ℚ', C: 'ℂ', P: 'ℙ' };
+  // \mathcal: Mathematical Script capitals (U+1D49C block); the Letterlike Symbols block holds the exceptions
+  const SCRIPT_X = { B: 'ℬ', E: 'ℰ', F: 'ℱ', H: 'ℋ', I: 'ℐ', L: 'ℒ', M: 'ℳ', R: 'ℛ' };
+  const script = (s) => s.replace(/[A-Z]/g, (c) => SCRIPT_X[c] || String.fromCodePoint(0x1D49C + c.charCodeAt(0) - 65));
   const USUP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '−', 'ⁿ': 'n' };
   const USUB = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', '₊': '+', '₋': '−', 'ₙ': 'n', 'ᵢ': 'i', 'ⱼ': 'j', 'ₖ': 'k' };
   const OP_CHARS = '=+−-<>≤≥≠≈→←⇒⇔±×÷·∈∉⊂⊆∪∩≡∼';
@@ -132,7 +135,13 @@
     if (name === 'mathbf' || name === 'boldsymbol' || name === 'textbf') return `<b class="math-bold">${this.arg()}</b>`;
     if (name === 'mathit' || name === 'textit') return `<i class="math-var">${this.arg()}</i>`;
     if (name === 'mathbb') { const g = this.rawGroup('{', '}') || ''; return `<span class="math-ord">${esc(BB[g] || g)}</span>`; }
-    if (name === 'mathcal') return `<span class="math-cal">${this.arg()}</span>`;
+    if (name === 'mathcal') {
+      this.ws();
+      // Plain letters become Unicode script capitals (upright, from the math font); anything with commands is parsed as before
+      const raw = this.peek() === '{' ? this.rawGroup('{', '}') : /^[A-Z]/.test(this.s.slice(this.i)) ? this.s[this.i++] : null;
+      if (raw === null) return `<span class="math-cal">${this.arg()}</span>`;
+      return `<span class="math-cal">${this.sub(raw.includes('\\') ? raw : script(raw))}</span>`;
+    }
     if (name === 'texttt' || name === 'mathtt') return `<code class="inline-code">${esc(this.rawGroup('{', '}') || '')}</code>`;
     if (name === 'overline' || name === 'bar') return `<span class="math-overline">${this.arg()}</span>`;
     if (name === 'vec' || name === 'hat' || name === 'dot') {
@@ -174,6 +183,7 @@
     }
     m = /^\d+(?:\.\d+)?/.exec(rest);
     if (m) { this.i += m[0].length; return `<span class="math-digit">${m[0]}</span>`; }
+    if (c >= '\uD800' && c <= '\uDBFF') { this.i += 2; this.noFrac = true; return `<span class="math-ord">${esc(rest.slice(0, 2))}</span>`; }
     this.i += 1;
     if (c === '∑' || c === '∏') return this.bigop(c, 'math-bigop', this.display);
     if (c === '∫') return this.bigop('∫', 'math-bigop math-int', false);

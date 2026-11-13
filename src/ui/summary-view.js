@@ -116,7 +116,7 @@
     if (!title && !body) return '';
     const kindTag = { question: 'Question', table: 'Table', section: 'Section' }[e.kind] || '';
     return `<article class="slide${e.kind === 'section' || e.kind === 'title' ? ' is-section' : ''}">
-        <div class="slide-head"><span class="label nums">${slideLabel(e)}</span>${kindTag ? `<span class="tag">${kindTag}</span>` : ''}${sv.pageJump(e.slideNumber)}</div>
+        <div class="slide-head"><span class="label nums">${e.topicLabel || slideLabel(e)}</span>${kindTag ? `<span class="tag">${kindTag}</span>` : ''}${sv.pageJump(e.slideNumber)}</div>
         ${title}${body}
       </article>`;
   }
@@ -155,7 +155,8 @@
     const points = (d.sentences || d.overviewSentences || []).map((s) => sv.rich(s)).filter(Boolean);
     const st = PDFStudy.main && PDFStudy.main.appState;
     const slideMap = new Map(((st && st.slideDeck && st.slideDeck.slides) || []).map((s) => [s.slideNumber, s]));
-    const slides = (d.slideBreakdown || []).map((e) => slideHtml(e, slideMap)).filter(Boolean);
+    // topics of a canvas page are numbered as topics: they all sit on the same page
+    const slides = (d.slideBreakdown || []).map((e, i) => slideHtml(d.byTopic ? { ...e, topicLabel: `Topic ${i + 1}` } : e, slideMap)).filter(Boolean);
     const formulas = formulaRows(d.keyFormulas);
 
     const body = [
@@ -165,7 +166,7 @@
       section('Guidelines and examples', others.length, others.join('')),
       section('Key concepts', 0, terms.length ? `<ul class="term-list">${terms.map((t) => `<li class="term">${t}</li>`).join('')}</ul>` : ''),
       section('Key takeaways', 0, points.length ? `<div class="prose"><ul>${points.map((s) => `<li>${s}</li>`).join('')}</ul></div>` : ''),
-      section('Slide by slide', slides.length, slides.join('')),
+      section(d.byTopic ? 'Topic by topic' : 'Slide by slide', slides.length, slides.join('')),
     ].join('');
 
     container.innerHTML = sv.viewHead('Summary', scopeTitle) +

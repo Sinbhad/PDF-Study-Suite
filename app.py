@@ -19,6 +19,17 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class StudySuiteHandler(http.server.SimpleHTTPRequestHandler):
+    # Fixed types for the optional handwriting runtime and math font: older Pythons and the Windows registry
+    # can map these wrongly, and browsers refuse ES modules / streaming WebAssembly with the wrong type.
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        ".js": "text/javascript",
+        ".mjs": "text/javascript",
+        ".wasm": "application/wasm",
+        ".woff2": "font/woff2",
+        ".onnx": "application/octet-stream",
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT_DIR, **kwargs)
 
@@ -65,7 +76,7 @@ def find_free_port(start_port: int = DEFAULT_PORT) -> int:
 
 def main() -> None:
     port = find_free_port(DEFAULT_PORT)
-    url = f"http://{HOST}:{port}/index.html?v=20261026a"
+    url = f"http://{HOST}:{port}/index.html?v=20261112a"
     server = StudySuiteServer((HOST, port), StudySuiteHandler)
 
     print("=" * 64)
