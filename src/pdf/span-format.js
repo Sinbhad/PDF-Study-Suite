@@ -6,7 +6,8 @@
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
 
-  const BOLD_FONT_RE = /bold|black|heavy|demi|semibold|extrabold|ultra/i;
+  // Abbreviated weights in PostScript names count too: "HelveticaNeueLTW1G-Bd", "Univers-Blk", "Frutiger-HvCn"
+  const BOLD_FONT_RE = /bold|black|heavy|demi|semibold|extrabold|ultra|[-_](?:X?Bd|SBd|Sb|Hv|Hvy|Blk)(?:It|Obl|Cn|Ex)?\b/i;
   const ITALIC_FONT_RE = /italic|oblique|slanted/i;
   const CODE_FONT_RE = /courier|mono|consol|menlo|typewriter|^cmtt|^sfmono|inconsolata|sourcecode|lucidaconsole/i;
   // Math / symbol fonts: their bold cuts are vectors and operators, never key terms.

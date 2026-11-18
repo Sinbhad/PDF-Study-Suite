@@ -97,7 +97,8 @@
       ...(quiz || []).map(
         (q, i) =>
           `${i + 1}. **[${q.badge || 'Question'}]** ${String(q.question || '').replace(/\n/g, ' ')}\n${
-            Array.isArray(q.options) && q.options.length ? `   - Options: ${q.options.join(' | ')}\n` : ''}   - **Answer:** ${q.answer}`
+            Array.isArray(q.options) && q.options.length ? `   - Options: ${q.options.join(' | ')}\n` : ''}${
+            q.type === 'typed' && PDFStudy.typedCheck ? `   - Type the answer (${PDFStudy.typedCheck.hintFor(q).toLowerCase()})\n` : ''}   - **Answer:** ${q.answer}`
       ),
     ];
     const safeName = (docName || 'study-guide').replace(/[^a-z0-9-_]/gi, '_');

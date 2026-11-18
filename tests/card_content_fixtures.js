@@ -181,7 +181,7 @@
     ]);
     check('tagged self-check -> ready-made Q&A card; tagged example -> nothing', tagged.some((c) => c.sourceKind === 'self-check' && c.back === 'Zero.') &&
       !tagged.some((c) => /Toronto/.test(c.back)), show(tagged));
-    check('tagged table -> cell cards', tagged.some((c) => c.sourceKind === 'table' && c.front === '== — Meaning' && c.back === 'equal to'), show(tagged));
+    check('tagged table -> cell cards', tagged.some((c) => c.sourceKind === 'table' && c.front === 'Operator == — Meaning' && c.back === 'equal to'), show(tagged));
     // A numbered box the extraction tagged ("Definition 2" as its title) is asked by its term, never its number.
     const boxed = S.flashcardEngine.extractBookFlashcards('Plain text that defines nothing at all here.', 'Sets', [
       { kind: 'definition', category: 'Definition', title: 'Definition 2', body: 'A set with exactly one element is called a singleton set.', pageNumber: 12 },

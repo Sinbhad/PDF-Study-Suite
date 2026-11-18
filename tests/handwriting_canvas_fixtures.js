@@ -93,7 +93,7 @@ function materialTests(g) {
   }
   check('cards: nothing from the unsure line', !cards.some((c) => `${c.front} ${c.back}`.includes(UNSURE)));
   const quiz = g.quiz;
-  check('quiz: 10 questions, answers among options', quiz.length === 10 && quiz.every((q) => q.type === 'reveal' || q.options.includes(q.answer)), String(quiz.length));
+  check('quiz: 10 questions, answers among options', quiz.length === 10 && quiz.every((q) => q.type === 'reveal' || q.type === 'typed' || q.options.includes(q.answer)), String(quiz.length));
   const defOf = new Map(PAIRS.map((p) => [up(p.def), up(p.term)]));
   const matched = quiz.filter((q) => /^Which term is defined as follows\?/.test(q.question));
   check('quiz: "which term matches" asks for the term of that very definition',

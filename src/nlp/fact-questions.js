@@ -21,6 +21,7 @@
   const os = () => dep('optionSets', './option-sets.js');
   const subjects = () => dep('quizSubjects', './quiz-subjects.js');
   const shuffle = (...a) => dep('stemDistractors', './stem-distractors.js').deterministicShuffle(...a);
+  const borrowed = () => dep('borrowedStatements', './borrowed-statements.js');
 
   const NEAR_WINDOW = 6; // a reshuffle only reorders the nearest siblings, it never reaches for far ones
   const QA_FRAME_SHARE = 0.4; // two lecture questions this alike ask the same kind of thing
@@ -60,7 +61,9 @@
   /** A numbered result reads as a name ("Theorem 1.2 — ..."); anything else is quoted. */
   const named = (term) => (/^(?:Theorem|Lemma|Corollary|Proposition)\s+[A-Z0-9]/.test(term) ? term : `"${term}"`);
   const skillOf = (fact) => (fact.kind === 'theorem' ? 'theorem' : fact.kind === 'algorithm' ? 'complexity' : 'definition');
-  const where = (fact) => (fact.context ? `${fact.term} (${fact.context})` : fact.term);
+  // A context that only names the selected pages ("Pages 188-210") tells the student nothing: left out
+  const PAGE_RANGE_RE = /^(?:pages?|slides?)\s+\d+(?:\s*[-–]\s*\d+)?$/i;
+  const where = (fact) => (fact.context && !PAGE_RANGE_RE.test(String(fact.context).trim()) ? `${fact.term} (${fact.context})` : fact.term);
   const subjectOf = (f) => f.subject || f.term;
   /** Key of a statement in ctx.shown: case, spacing, markup and punctuation folded. */
   const shownKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -81,64 +84,16 @@
   }
 
   /** Is `other`'s statement a wrong answer about `fact`'s subject? Without a claims index only the subject differs. */
-  const falseFor = (fact, other, ctx) => (ctx.claims ? ctx.claims.isFalseFor(fact, other) : other.subjectKey !== fact.subjectKey);
-
-  // "Fenbendazole is effective ...": a statement that opens on a name and a verb has a subject of its own.
-  const OWN_SUBJECT_RE = /^([A-Z][\w.-]*(?:\s+[A-Z][\w.-]*){0,2})\s+(?:is|are|was|were|has|have|can|cannot|does|do|causes?|produces?|inhibits?|kills?|binds?)\b/;
-
-  /**
-   * A wrong option that names the thing it is really about gives itself away: "Caused by equine herpesvirus 1"
-   * offered for a feline disease, "... in cats with Cryptococcus rhinitis" offered for Coccidioides, or a
-   * statement whose grammatical subject is another drug ("Fenbendazole is effective ..."). `other` is the fact the
-   * statement comes from; a word the asked subject's own name shares is no tell.
-   */
-  function namesItsOwner(fact, other, ctx) {
-    const asked = new Set(qf().contentStems(subjectOf(fact)));
-    const said = qf().contentStems(other.statement);
-    const owner = qf().contentStems(subjectOf(other)).filter((w) => !asked.has(w) && !subjects().isGenericHeading(w));
-    if (owner.some((w) => said.includes(w))) return true;
-    const opener = String(other.statement || '').match(OWN_SUBJECT_RE);
-    if (!opener || qf().contentStems(opener[1]).some((w) => asked.has(w))) return false;
-    // A name the scope never writes in lower case, or one its material about the asked subject never uses
-    // ("Fenbendazole" beside clorsulon); not a common noun opening a sentence about it ("Bacteria enter ...").
-    const name = opener[1];
-    if (ctx.forms && ctx.forms.running(name) === null) return true;
-    return Boolean(ctx.claims && ctx.claims.uses) && !ctx.claims.uses(fact.subjectKey, name);
-  }
-
-  // A predicate cut from "The storage elements are …" keeps its verb: "Are circuits that ...".
-  const BARE_PREDICATE_RE = /^(is|are|was|were|has|have|does|do)\b/i;
-  const PLURAL_VERB_RE = /^(?:are|were|have|do)$/i;
-
-  /**
-   * May `other`'s statement be set under `fact`'s subject as a False? Not when its verb disagrees in number with
-   * the subject ("SR latch" + "Are circuits ..." reads false for its grammar alone), and not when the scope says one
-   * subject is a kind of the other ("The most basic storage elements are latches"): what is true of storage
-   * elements is true of the SR latch as well. ctx.kinds: quizKinds.index of the scope.
-   */
-  function fitsSubject(fact, other, ctx) {
-    const statement = String(other.statement || '');
-    const verb = (statement.match(BARE_PREDICATE_RE) || [])[1];
-    if (verb && os().isPlural(subjectOf(fact)) !== PLURAL_VERB_RE.test(verb)) return false;
-    // A predicate without its subject ("Can be extended to three or more variables") only reads as a claim about
-    // a thing of the same kind: under a subject with another head noun (a theorem's line under "Digital circuits")
-    // it is false for its grammar alone.
-    if ((verb || BARE_MODAL_RE.test(statement)) && headOf(subjectOf(fact)) !== headOf(subjectOf(other))) return false;
-    return !kindOf(fact, other, ctx);
-  }
-
-  const BARE_MODAL_RE = /^(?:can|cannot|may|must|should|will|might)\b/i;
-  /** A predicate cut from its subject ("Are circuits ...", "Can be extended ..."). */
-  const isPredicate = (s) => BARE_PREDICATE_RE.test(String(s || '')) || BARE_MODAL_RE.test(String(s || ''));
-  /** Does a bare predicate's verb agree in number with the fact's subject? (modals agree with either) */
-  const agrees = (fact, s) => {
-    const verb = (String(s || '').match(BARE_PREDICATE_RE) || [])[1];
-    return !verb || os().isPlural(subjectOf(fact)) === PLURAL_VERB_RE.test(verb);
-  };
-  const headOf = (name) => os().lemma(String(name || '').toLowerCase().replace(/\$[^$]*\$/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').trim().split(/\s+/).pop() || '');
-
-  /** Does the scope say one of the two subjects is a kind of the other? (ctx.kinds: quizKinds.index) */
-  const kindOf = (fact, other, ctx) => Boolean(ctx.kinds && ctx.kinds.related(subjectOf(fact), subjectOf(other)));
+  const falseFor = (fact, other, ctx) => (ctx.claims ? ctx.claims.isFalseFor(fact, other) : other.subjectKey !== fact.subjectKey) &&
+    !borrowed().inherited(fact, other, ctx);
+  // The rules a borrowed statement must pass live in borrowed-statements.js.
+  const namesItsOwner = (...a) => borrowed().namesItsOwner(...a);
+  const fitsSubject = (...a) => borrowed().fitsSubject(...a);
+  const partlySaid = (...a) => borrowed().partlySaid(...a);
+  const isPredicate = (s) => borrowed().isPredicate(s);
+  const agrees = (fact, s) => borrowed().agrees(fact, s);
+  const kindOf = (...a) => borrowed().kindOf(...a);
+  const sameAspectAs = (...a) => borrowed().sameAspect(...a);
 
   function base(fact, type, badge, question, options, answer, explanation) {
     return {
@@ -158,18 +113,27 @@
     return shared / Math.max(1, Math.min(sa.size, sb.size)) >= QA_FRAME_SHARE;
   }
 
+  /**
+   * Something only the statement's own subject could own (fact-statements.isSpecificClaim); a long technical word
+   * counts only when no other subject's material uses it ("supportive" is said of several diseases).
+   */
+  const isSpecific = (o, ctx) => dep('factStatements', './fact-statements.js').isSpecificClaim(o.statement,
+    ctx.claims && ctx.claims.isDistinctive ? (word) => ctx.claims.isDistinctive(o.subjectKey, word) : null);
+
   /** subject -> statement */
   function describe(fact, ctx) {
     if (fact.selfNaming || fact.siblingOnly) return null;
     const termWords = new Set(qf().contentStems(fact.term));
     // A sibling statement that mentions this subject's own words would read as the answer.
     // A generic point ("Signs vary based on regions affected") may be true of the asked subject too: not offered.
-    const specific = (o) => fact.kind !== 'point' || dep('factStatements', './fact-statements.js').isSpecificClaim(o.statement);
+    const specific = (o) => fact.kind !== 'point' || isSpecific(o, ctx);
     // Options of one grammatical shape: a bare predicate ("Are circuits that ...") beside full sentences, or a verb
     // of the wrong number for the subject, marks the odd one out.
     const sameShape = (o) => isPredicate(o.statement) === isPredicate(fact.statement) && (!isPredicate(o.statement) || agrees(fact, o.statement));
+    // An identity line (what the subject is, from its own title slide) only faces identity lines: beside clinical
+    // signs or etiology it is the one option that describes a thing (borrowed-statements.sameStanding).
     const sibs = nearSiblings(fact, ctx).filter((o) => falseFor(fact, o, ctx) && !namesItsOwner(fact, o, ctx) && !kindOf(fact, o, ctx) &&
-      specific(o) && sameShape(o) && (fact.kind !== 'qa' || sameFrame(fact.term, o.term)));
+      specific(o) && sameShape(o) && borrowed().sameStanding(fact, o, ctx) && borrowed().fairBeside(fact, o, ctx) && (fact.kind !== 'qa' || sameFrame(fact.term, o.term)));
     const others = sibs.map((o) => o.statement).filter((s) => !qf().contentStems(s).some((w) => termWords.has(w)));
     const set = os().statementSet(fact.statement, others);
     if (!set) return null;
@@ -189,7 +153,7 @@
     if (fact.selfNaming || fact.siblingOnly || fact.kind === 'qa') return null;
     const strict = fact.kind === 'point';
     const candidates = nearSiblings(fact, ctx).filter((o) => (!ctx.claims ||
-      ctx.claims.isFalseOf(o.subjectKey, subjectOf(o), fact.statement, strict)) && !kindOf(fact, o, ctx));
+      ctx.claims.isFalseOf(o.subjectKey, subjectOf(o), fact.statement, strict)) && !kindOf(fact, o, ctx) && !borrowed().inherited(fact, o, ctx));
     const terms = [...new Map(candidates.map((o) => [o.subjectKey, subjectOf(o)])).values()];
     const set = os().termSet(subjectOf(fact), terms, { stem: fact.statement, position: 'list', forms: ctx.forms });
     if (!set) return null;
@@ -225,11 +189,19 @@
     // The borrowed statement must not name this subject, and must be false of it by the claims index, in every
     // clause ("Not metabolized, not distributed" is half true of a drug the scope calls unmetabolized). It comes
     // from a peer taught in the same aspect (subject-peers.js). A statement another question shows already is
-    // not borrowed: shown twice, the second is a repeat.
+    // not borrowed: shown twice, the second is a repeat. A borrowed point is only False when the scope contradicts it
+    // for this subject (a line of its own under the same label, saying something else: borrowed-statements.js).
     const shown = ctx.shown || new Set();
-    const specific = (o) => fact.kind !== 'point' || dep('factStatements', './fact-statements.js').isSpecificClaim(o.statement);
-    const sameAspect = (o) => fact.kind !== 'point' || !ctx.peers || ctx.peers.fitsAspect(fact.subjectKey, o);
-    const donor = nearSiblings(fact, ctx).find((o) => !taken(subjectOf(o)) && !shown.has(shownKey(o.statement)) && specific(o) && falseFor(fact, o, ctx) &&
+    const specific = (o) => fact.kind !== 'point' || isSpecific(o, ctx);
+    // A False needs a fact that contradicts it: the asked subject is taught in the borrowed statement's aspect, and
+    // the asked fact itself sits in that aspect (its own statement there is what makes the borrowed one false).
+    const sameAspect = (o) => fact.kind !== 'point' || !ctx.peers || (ctx.peers.fitsAspect(fact.subjectKey, o) && sameAspectAs(fact, o, ctx));
+    // (For a point the contradiction is the test: its own line under the same label must say otherwise, and nothing
+    // the scope says of it may say the borrowed statement; the claims index's label rule would refuse every such line.)
+    const isFalse = (o) => (fact.kind === 'point'
+      ? borrowed().contradicts(fact, o, ctx) && !borrowed().inherited(fact, o, ctx) && !(ctx.claims && ctx.claims.says(fact.subjectKey, o.statement))
+      : falseFor(fact, o, ctx));
+    const donor = nearSiblings(fact, ctx).find((o) => !taken(subjectOf(o)) && !shown.has(shownKey(o.statement)) && specific(o) && isFalse(o) &&
       !qf().contentStems(o.statement).some((w) => subjectWords.has(w)) && !namesItsOwner(fact, o, ctx) && fitsSubject(fact, o, ctx) &&
       sameAspect(o) && !partlySaid(fact, o, ctx));
     if (!donor) return null;
@@ -256,16 +228,6 @@
   function claimSubject(fact, from, ctx) {
     const aspect = fact.kind === 'point' && ctx.peers ? ctx.peers.aspectPhrase(from) : '';
     return aspect ? `the ${aspect} of ${named(subjectOf(fact))}` : named(subjectOf(fact));
-  }
-
-  const CLAUSE_SPLIT_RE = /\s*(?:[,;]|\band\b|\bbut\b)\s*/i;
-  const MIN_CLAUSE_WORDS = 2;
-
-  /** Does the scope say one clause of the borrowed statement about the asked subject? Then the False is half true. */
-  function partlySaid(fact, other, ctx) {
-    if (!ctx.claims || !ctx.claims.says) return false;
-    const clauses = String(other.statement || '').split(CLAUSE_SPLIT_RE).filter((c) => qf().contentStems(c).length >= MIN_CLAUSE_WORDS);
-    return clauses.length > 1 && clauses.some((c) => ctx.claims.says(fact.subjectKey, c));
   }
 
   /** A False that changes one detail of the fact's own statement (altered-statements.js), or null. */

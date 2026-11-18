@@ -19,6 +19,8 @@
  *                                            administration" could be said of several drugs, so it is never offered
  *                                            as false of one of them.
  *   index.uses(subjectKey, text)             does the subject's material use every content word of the text?
+ *   index.inherits(subjectKey, name)         does a line about the subject point to `name` as its model ("per X",
+ *                                            "same as X")? What is said of X may then hold for the subject too.
  *   overlap(a, b)                            share of a's content stems that b also has (0..1)
  */
 (function (root) {
@@ -33,6 +35,11 @@
 
   const STRICT_KINDS = new Set(['point', 'qa']);
   const LABEL_RE = /^([^:]{2,40}):\s/;
+  // A line that sets another subject apart from this one ties nothing together.
+  const CONTRAST_RE = /\b(?:unlike|whereas|versus|vs\.?|instead\s+of|rather\s+than|compared\s+(?:to|with)|not|no|except)\b/i;
+  // Words a subject's name shares with many others ("disease", "infection", "species"): no tie between two subjects.
+  const GENERIC_NAME_WORD_RE = /^(?:disease|diseas|infection|infect|syndrome|disorder|species|spp|type|form|general|other|lesion)$/;
+  const normLabel = (s) => String(s || '').toLowerCase().replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
   // Content stems plus two-letter acronyms ("PO", "IV"), which carry meaning in a claim but are too
   // short for the content-word rules.
@@ -48,9 +55,12 @@
   function create() {
     const lines = new Map(); // subjectKey -> [Set of stems]
     const vocabulary = new Map(); // subjectKey -> Set of every stem used about it
+    const raw = new Map(); // subjectKey -> [line as written]
 
     function add(key, text) {
       if (!key || !text) return;
+      if (!raw.has(key)) raw.set(key, []);
+      raw.get(key).push(String(text));
       const s = stems(text);
       if (!s.size) return;
       if (!lines.has(key)) {
@@ -107,7 +117,42 @@
       return Boolean(own) && [...stems(text)].every((w) => own.has(w));
     };
 
-    return { add, says, isFalseOf, isFalseFor, isDistinctive, uses, has: (key) => lines.has(key) };
+    /**
+     * Does a line said about `key` refer to `name` as its model ("PD: per praziquantel", "same as fenbendazole",
+     * "similar to X", "like X", "as for X")? Then what the scope says of `name` may hold for `key` as well.
+     */
+    function inherits(key, name) {
+      const n = String(name || '').trim();
+      if (!key || n.length < 3) return false;
+      const re = new RegExp(`\\b(?:per|same\\s+as|similar\\s+to|as\\s+(?:for|with|in)|like|see)\\s+(?:the\\s+|that\\s+of\\s+)?${escapeRe(n)}`, 'i');
+      return (raw.get(key) || []).some((line) => re.test(line));
+    }
+
+    /**
+     * What the scope gives `key` under a label ("Metabolism: ..." -> the text after it), from its "Label: value"
+     * lines; [] when it never uses the label. A False that borrows another subject's "Metabolism: X" is only
+     * contradicted when the subject has a "Metabolism:" line of its own.
+     */
+    function valuesFor(key, label) {
+      const want = normLabel(label);
+      if (!key || !want) return [];
+      return (raw.get(key) || []).map((line) => String(line).match(LABEL_RE)).filter((m) => m && normLabel(m[1]) === want)
+        .map((m) => String(m.input).slice(m[0].length - 1).trim());
+    }
+
+    /**
+     * Does the scope's material about `key` speak of `name` without setting it apart ("unlike", "whereas", "not")?
+     * "In very severe pneumonia ... invade the pleural fluid" ties pneumonia to pleural disease, "Pneumonia is the most
+     * common complication" ties strangles to pneumonia: a statement of one may well hold for the other.
+     * Only the name's own words count (a word of four letters or more that is no organising heading).
+     */
+    function mentions(key, name) {
+      const own = qf().contentStems(name).filter((w) => w.length >= 4 && !GENERIC_NAME_WORD_RE.test(w));
+      if (!key || !own.length) return false;
+      return (raw.get(key) || []).some((line) => !CONTRAST_RE.test(line) && qf().contentStems(line).some((w) => own.includes(w)));
+    }
+
+    return { add, says, isFalseOf, isFalseFor, isDistinctive, uses, inherits, mentions, valuesFor, has: (key) => lines.has(key) };
   }
 
   const CLAUSE_BREAK_RE = /,\s+(?:whereas|while|but|unlike)\s+|;\s+/i;

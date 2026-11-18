@@ -10,7 +10,7 @@ cross-check that a script was not dropped from both the map and index.html toget
 import os
 import shutil
 
-EXPECTED_SCRIPT_COUNT = 198  # <script src> tags in index.html (modules and vendor scripts)
+EXPECTED_SCRIPT_COUNT = 230  # <script src> tags in index.html (modules and vendor scripts)
 
 EXPECTED_NAMESPACES: dict[str, str] = {
     # PDF extraction, 2D formula reconstruction & textbook/slide structure (23)
@@ -25,6 +25,7 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/pdf/math-tex.js": "PDFStudy.mathTex",
     "src/pdf/font-decoder.js": "PDFStudy.fontDecoder",
     "src/pdf/page-rules.js": "PDFStudy.pageRules",
+    "src/pdf/math-runs.js": "PDFStudy.mathRuns",
     "src/pdf/math-line.js": "PDFStudy.mathLine",
     "src/pdf/overline-builder.js": "PDFStudy.overlineBuilder",
     "src/pdf/formula-builder.js": "PDFStudy.formulaBuilder",
@@ -36,6 +37,7 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/pdf/page-scheduler.js": "PDFStudy.pageScheduler",
     "src/pdf/invisible-text.js": "PDFStudy.invisibleText",
     "src/pdf/line-kinds.js": "PDFStudy.lineKinds",
+    "src/pdf/printed-pages.js": "PDFStudy.printedPages",
     "src/pdf/pdf-loader.js": "PDFStudy.pdfLoader",
     "src/pdf/classifier.js": "PDFStudy.classifier",
     "src/pdf/slide-extractor.js": "PDFStudy.slideExtractor",
@@ -81,12 +83,15 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/nlp/bold-terms.js": "PDFStudy.boldTerms",
     "src/nlp/keywords.js": "PDFStudy.keywords",
     "src/nlp/graph-rank.js": "PDFStudy.graphRank",
+    "src/nlp/summary-damage.js": "PDFStudy.summaryDamage",
     "src/nlp/summarizer.js": "PDFStudy.summarizer",
     "src/nlp/summary-statements.js": "PDFStudy.summaryStatements",
     "src/nlp/page-lines.js": "PDFStudy.pageLines",
     "src/nlp/book-sections.js": "PDFStudy.bookSections",
     "src/nlp/book-blocks.js": "PDFStudy.bookBlocks",
     "src/nlp/book-formulas.js": "PDFStudy.bookFormulas",
+    "src/nlp/book-law-table.js": "PDFStudy.bookLawTable",
+    "src/nlp/book-placement.js": "PDFStudy.bookPlacement",
     "src/nlp/book-outline.js": "PDFStudy.bookOutline",
     "src/nlp/deck-sections.js": "PDFStudy.deckSections",
     "src/nlp/slide-units.js": "PDFStudy.slideUnits",
@@ -113,12 +118,20 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/nlp/quiz-rank.js": "PDFStudy.quizRank",
     "src/nlp/deck-facts.js": "PDFStudy.deckFacts",
     "src/nlp/structured-gate.js": "PDFStudy.structuredGate",
+    "src/nlp/borrowed-statements.js": "PDFStudy.borrowedStatements",
     "src/nlp/fact-questions.js": "PDFStudy.factQuestions",
     "src/nlp/marked-terms.js": "PDFStudy.markedTerms",
+    "src/nlp/term-kinds.js": "PDFStudy.termKinds",
     "src/nlp/cloze-questions.js": "PDFStudy.clozeQuestions",
     "src/nlp/naming-questions.js": "PDFStudy.namingQuestions",
     "src/nlp/recall-questions.js": "PDFStudy.recallQuestions",
     "src/nlp/table-questions.js": "PDFStudy.tableQuestions",
+    "src/nlp/typed-numbers.js": "PDFStudy.typedNumbers",
+    "src/nlp/typed-check.js": "PDFStudy.typedCheck",
+    "src/nlp/typed-shape.js": "PDFStudy.typedShape",
+    "src/nlp/typed-questions.js": "PDFStudy.typedQuestions",
+    "src/nlp/typed-values.js": "PDFStudy.typedValues",
+    "src/nlp/typed-round.js": "PDFStudy.typedRound",
     "src/nlp/annotation-notes.js": "PDFStudy.annotationNotes",
     "src/nlp/quiz-assembly.js": "PDFStudy.quizAssembly",
     "src/nlp/quiz-scope.js": "PDFStudy.quizScope",
@@ -129,6 +142,7 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/nlp/key-terms.js": "PDFStudy.keyTerms",
     "src/nlp/slide-model.js": "PDFStudy.slideModel",
     "src/nlp/card-quality.js": "PDFStudy.cardQuality",
+    "src/nlp/card-answers.js": "PDFStudy.cardAnswers",
     "src/nlp/abbreviations.js": "PDFStudy.abbreviations",
     "src/nlp/note-patterns.js": "PDFStudy.notePatterns",
     "src/nlp/prose-definitions.js": "PDFStudy.proseDefinitions",
@@ -144,10 +158,28 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/nlp/slide-line-shapes.js": "PDFStudy.slideLineShapes",
     "src/nlp/definition-rules.js": "PDFStudy.definitionRules",
     "src/nlp/key-statements.js": "PDFStudy.keyStatements",
+    "src/nlp/advice-cards.js": "PDFStudy.adviceCards",
+    "src/nlp/syntax-cards.js": "PDFStudy.syntaxCards",
+    "src/nlp/condition-cards.js": "PDFStudy.conditionCards",
     "src/nlp/boxed-cards.js": "PDFStudy.boxedCards",
     "src/nlp/slide-structure-cards.js": "PDFStudy.slideStructure",
     "src/nlp/slide-quiz.js": "PDFStudy.slideQuiz",
     "src/nlp/block-quiz.js": "PDFStudy.blockQuiz",
+    # Worked rules: checkable rules a textbook section teaches, their cards and computed questions (14)
+    "src/nlp/logic-eval.js": "PDFStudy.logicEval",
+    "src/nlp/code-expr.js": "PDFStudy.codeExpr",
+    "src/nlp/logic-tables.js": "PDFStudy.logicTables",
+    "src/nlp/logic-forms.js": "PDFStudy.logicForms",
+    "src/nlp/set-rules.js": "PDFStudy.setRules",
+    "src/nlp/identity-rules.js": "PDFStudy.identityRules",
+    "src/nlp/section-rules.js": "PDFStudy.sectionRules",
+    "src/nlp/rule-cards.js": "PDFStudy.ruleCards",
+    "src/nlp/code-cards.js": "PDFStudy.codeCards",
+    "src/nlp/worked-algebra.js": "PDFStudy.workedAlgebra",
+    "src/nlp/worked-expressions.js": "PDFStudy.workedExpressions",
+    "src/nlp/worked-forms.js": "PDFStudy.workedForms",
+    "src/nlp/worked-sets.js": "PDFStudy.workedSets",
+    "src/nlp/worked-questions.js": "PDFStudy.workedQuestions",
     # Keep-it layer: stable keys, per-document state, deck merge, review scheduling, export (5 pure + 8 UI)
     "src/nlp/study-keys.js": "PDFStudy.studyKeys",
     "src/nlp/doc-state.js": "PDFStudy.docState",
@@ -174,6 +206,7 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/ui/summary-view.js": "PDFStudy.summaryView",
     "src/ui/flashcard-faces.js": "PDFStudy.flashcardFaces",
     "src/ui/flashcard-view.js": "PDFStudy.flashcardView",
+    "src/ui/typed-card.js": "PDFStudy.typedCard",
     "src/ui/quiz-card.js": "PDFStudy.quizCard",
     "src/ui/test-report.js": "PDFStudy.testReport",
     "src/ui/test-view.js": "PDFStudy.testView",
@@ -228,6 +261,7 @@ EXPECTED_SCRIPTS: frozenset[str] = frozenset(EXPECTED_NAMESPACES) | frozenset(NO
 
 NODE_FIXTURES: tuple[str, ...] = (
     "summary_fixtures.js",
+    "summary_shape_fixtures.js",
     "quality_fixtures.js",
     "eval_quiz_lint_fixtures.js",
     "question_fixtures.js",
@@ -269,6 +303,9 @@ NODE_FIXTURES: tuple[str, ...] = (
     "hw_check_fixtures.js",
     "ocr_store_fixtures.js",
     "page_schedule_fixtures.js",
+    "worked_rule_fixtures.js",
+    "typed_answer_fixtures.js",
+    "typed_question_fixtures.js",
 )
 
 STYLESHEET_PATHS: tuple[str, ...] = (

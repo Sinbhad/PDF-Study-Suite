@@ -10,6 +10,10 @@
  *                               options true of the same subject, garbled tokens, dangling definitions
  *   eval-quiz-review-lints.js   the defects of the second blind review: extraction debris, worked-example talk,
  *                               swaps that name their owner, open completions, kinds offered against each other
+ *   eval-quiz-third-lints.js    the third review's: arrow residue, non-claims, catch-all columns, head siblings
+ *   eval-quiz-fourth-lints.js   the fourth review's: option count and kind, adjective slots, unnamed table columns,
+ *                               open stems, filler list items, Falses about a subject that works "per" another
+ *   eval-quiz-typed-lints.js    typed answers: the answer printed in its prompt, an answer too long, an ambiguous blank
  *
  * All of it is heuristic: closed word lists and suffix rules from eval-quiz-text.js, no parser. The lints
  * are meant to move in the right direction when generation improves, not to be right on every question.
@@ -20,6 +24,8 @@ const setLints = require('./eval-quiz-set-lints.js');
 const contentLints = require('./eval-quiz-content-lints.js');
 const reviewLints = require('./eval-quiz-review-lints.js');
 const thirdLints = require('./eval-quiz-third-lints.js');
+const fourthLints = require('./eval-quiz-fourth-lints.js');
+const typedLints = require('./eval-quiz-typed-lints.js');
 
 const found = (lint, detail) => ({ lint, detail });
 
@@ -149,7 +155,8 @@ const REPEAT_LINTS = [setLints.lintDuplicateFact, setLints.lintReusedOptionSet];
 const LINT_NAMES = ['unresolved_reference', 'cloze_leading_blank', 'thin_stem', 'option_not_noun_phrase', 'option_case_mix',
   'option_number_mix', 'option_article_mismatch', 'answer_length_tell', 'answer_leak', 'tf_copied_true', 'tf_antonym_swap',
   'tf_double_antonym', 'malformed_math', 'duplicate_fact', 'reused_option_set', 'whole_block_stem',
-  ...contentLints.CONTENT_LINT_NAMES, ...reviewLints.REVIEW_LINT_NAMES, ...thirdLints.THIRD_LINT_NAMES, 'quiz_test_overlap'];
+  ...contentLints.CONTENT_LINT_NAMES, ...reviewLints.REVIEW_LINT_NAMES, ...thirdLints.THIRD_LINT_NAMES,
+  ...fourthLints.FOURTH_LINT_NAMES, ...typedLints.TYPED_LINT_NAMES, 'quiz_test_overlap'];
 
 /**
  * All findings for one question. `source` is the scope text (or a prebuilt index); `earlier` the questions
@@ -159,6 +166,7 @@ function lintQuestion(q, source, earlier = [], content = null, review = null) {
   const ctx = content || contentLints.buildContentIndex(typeof source === 'string' ? source : '');
   const rctx = review || reviewLints.buildReviewIndex(typeof source === 'string' ? source : '');
   const tctx = rctx.third || thirdLints.buildThirdIndex(typeof source === 'string' ? source : '');
+  const fctx = rctx.fourth || fourthLints.buildFourthIndex(typeof source === 'string' ? source : '');
   return [
     ...STEM_LINTS.map((lint) => lint(q)),
     ...OPTION_LINTS.map((lint) => lint(q)),
@@ -167,6 +175,8 @@ function lintQuestion(q, source, earlier = [], content = null, review = null) {
     ...contentLints.CONTENT_LINTS.map((lint) => lint(q, ctx)),
     ...reviewLints.REVIEW_LINTS.map((lint) => lint(q, rctx)),
     ...thirdLints.THIRD_LINTS.map((lint) => lint(q, tctx)),
+    ...fourthLints.FOURTH_LINTS.map((lint) => lint(q, fctx)),
+    ...typedLints.TYPED_LINTS.map((lint) => lint(q)),
   ].filter(Boolean);
 }
 
@@ -178,7 +188,7 @@ function lintQuestion(q, source, earlier = [], content = null, review = null) {
 function lintSet(questions, scopeText) {
   const source = setLints.buildSourceIndex(scopeText);
   const content = contentLints.buildContentIndex(scopeText);
-  const review = { ...reviewLints.buildReviewIndex(scopeText), third: thirdLints.buildThirdIndex(scopeText) };
+  const review = { ...reviewLints.buildReviewIndex(scopeText), third: thirdLints.buildThirdIndex(scopeText), fourth: fourthLints.buildFourthIndex(scopeText) };
   return questions.map((q, i) => lintQuestion(q, source, questions.slice(0, i), content, review));
 }
 
@@ -196,7 +206,7 @@ function lintQuizTestOverlap(quiz, test) {
 }
 
 module.exports = {
-  lintQuizTestOverlap, ...contentLints, ...reviewLints, ...thirdLints,
+  lintQuizTestOverlap, ...contentLints, ...reviewLints, ...thirdLints, ...fourthLints, ...typedLints,
   lintUnresolvedReference, lintClozeLeadingBlank, lintThinStem, lintAnswerLeak, lintWholeBlockStem,
   ...optionLints, ...setLints, LINT_NAMES, lintQuestion, lintSet,
 };

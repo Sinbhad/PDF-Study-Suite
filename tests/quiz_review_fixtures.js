@@ -83,7 +83,24 @@ const tfLatch = S.factQuestions.trueFalse(latch, kctx, false);
 check('a False never sets a kind\'s statement under its member, nor a bare predicate under a subject of another kind', !tfLatch, tfLatch && tfLatch.question);
 const sibling = { ...S.quizFacts.makeFact('D toggle', 'Follows its input transparently while the clock is high.', { kind: 'point' }), id: 'd' };
 const tfSibling = S.factQuestions.trueFalse(latch, { ...kctx, facts: [latch, cells, theorem, sibling] }, false);
-check('a bare predicate of the same kind of thing may stand as the False', Boolean(tfSibling) && /Follows its input/.test(tfSibling.question), tfSibling && tfSibling.question);
+// A sibling's point that the scope never contradicts for this subject is no False: not being said of it is not enough.
+check('an uncontradicted sibling statement is not keyed False', !tfSibling, tfSibling && tfSibling.question);
+// Under a label both subjects have, a different value contradicts it: that False is fair.
+const tOut = { ...S.quizFacts.makeFact('T toggle', 'Output: holds one bit until it is clocked.', { kind: 'point' }), id: 'to' };
+const dOut = { ...S.quizFacts.makeFact('D toggle', 'Output: follows its input transparently while the clock is high.', { kind: 'point' }), id: 'do' };
+const outClaims = S.subjectClaims.fromScope({ facts: [tOut, dOut], sentences: [] });
+const tfOut = S.factQuestions.trueFalse(tOut, { facts: [tOut, dOut], seed: 0, kinds, claims: outClaims, claimed: new Set(), shown: new Set() }, false);
+check('a sibling statement under a label the subject answers otherwise may stand as the False', Boolean(tfOut) && /follows its input/i.test(tfOut.question), tfOut && tfOut.question);
+const B = require('../src/nlp/borrowed-statements.js');
+const routes = S.subjectClaims.create();
+routes.add('beta', 'Route: given by injection under the skin.');
+routes.add('beta', 'Binds tubulin in the gut.');
+const askBeta = { kind: 'point', subjectKey: 'beta', subject: 'Drug Beta' };
+check('contradicts: a labelled value the subject gives otherwise', B.contradicts(askBeta, { statement: 'Route: given by mouth once a day.' }, { claims: routes }));
+check('contradicts: never an unlabelled point, nor the same value', !B.contradicts(askBeta, { statement: 'Paralyses the worm by opening calcium channels.' }, { claims: routes }) &&
+  !B.contradicts(askBeta, { statement: 'Route: given by injection under the skin daily.' }, { claims: routes }));
+routes.add('beta', 'Dose: per drug alpha.');
+check('inherits: "per <name>" ties a subject to the one it follows', routes.inherits('beta', 'Drug Alpha') && !routes.inherits('beta', 'Drug Gamma'));
 const vague = { ...S.quizFacts.makeFact('E toggle', 'Signs vary based on the inputs used.', { kind: 'point' }), id: 'e' };
 const tfVague = S.factQuestions.trueFalse(latch, { ...kctx, facts: [latch, vague] }, false);
 check('a generic point ("Signs vary based on ...") is never borrowed as a False', !tfVague, tfVague && tfVague.question);
@@ -101,7 +118,9 @@ const recallScope = { facts: [], counts: new Map(), recurs: (t) => /register/i.t
 ] };
 const recalls = S.recallQuestions.candidates(recallScope);
 check('completions that pin no single answer are not asked', !recalls.some((q) => /halves the range|Some editors|Error You/.test(q.question)), show(recalls));
-check('completions about a term the scope uses, or with an opening clause, are asked', recalls.some((q) => /A register is/.test(q.question)) &&
+// "A register is …" => "a small fast store ..." is asked as the question it answers; a completion whose grammar
+// gives no question ("When comparing two registers, test …") is asked as the statement to complete.
+check('completions about a term the scope uses, or with an opening clause, are asked', recalls.some((q) => q.question === 'What is a register?') &&
   recalls.some((q) => /When comparing two registers/.test(q.question)), show(recalls));
 check('"Define" with a bare name or advice is not asked', !recalls.some((q) => /Define "(?:Odd table|Kidney disease)"/.test(q.question)), show(recalls));
 

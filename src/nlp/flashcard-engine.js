@@ -76,7 +76,12 @@
         kind: extra.kind || stemCards().kindOf(category),
         topic: extra.topic || topicOf(extra.source),
         ...(extra.subject ? { subject: extra.subject } : {}),
-        ...(extra.sourceKind ? { sourceKind: extra.sourceKind } : {}),      });
+        ...(extra.sourceKind ? { sourceKind: extra.sourceKind } : {}),
+        // A rule card's checkable rule (worked-questions.js) and the text the scope prints for it
+        ...(extra.rule ? { rule: extra.rule, quote: extra.quote || '' } : {}),
+        // A table cell's row and headers, so its question names both columns (table-questions.js)
+        ...(extra.table ? { table: extra.table } : {}),
+      });
     }
 
     const flat = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -88,8 +93,9 @@
 
     /** Cards that arrive whole (key statements, self-check Q&A, table cells): same key, same stand-alone gate. */
     function addFact(card) {
-      const key = `fact:${boldTerms ? boldTerms.termKey(card.front) : card.front.toLowerCase()}`;
       const list = card.sourceKind === 'table' || card.sourceKind === 'self-check';
+      // A table row named by a symbol (">=", "!=") keeps its symbol in the key; a term key would drop it.
+      const key = `fact:${card.sourceKind === 'table' ? quality.frontKey(card.front) : boldTerms ? boldTerms.termKey(card.front) : card.front.toLowerCase()}`;
       if (seen.has(key) || selfContained.reason(card, { list })) return false;
       // "The Richter scale is …": a statement about a worked example's prop.
       const about = card.category === 'Key Statement' ? dep('keyStatements', './key-statements.js').subjectOf(card.front) : '';
@@ -128,6 +134,8 @@
       const key = thm ? thm[0].toLowerCase() : boldTerms ? boldTerms.termKey(fClean) : fClean.toLowerCase();
       if (seen.has(key)) return false;
       if (category === 'Key Term' && (quality.restatesFront(bClean, fClean) || quality.leansBack(bClean))) return false;
+      // A sentence that only mentions the term ("... formed using logical operators") does not say what it is.
+      if (category === 'Key Term' && !boxed && dep('cardAnswers', './card-answers.js').mentionsOnly(fClean, bClean)) return false;
       // A prop of a worked example (the scale an example program measures with) is not a term of the section.
       if (category === 'Key Term' && !boxed && quality.introducedByExample(fClean, text)) return false;
       // A card is studied alone: no "this condition", "(here, 10)", praise, or the author talking to the reader.
@@ -136,6 +144,25 @@
       if (selfContained.reason({ front: fClean, back: bClean }, { prose: category === 'Key Term' && !boxed && !emphasised })) return false;
       seen.add(key);
       pushCard(fClean, bClean, category, { pageNumber, source: source || back });
+      return true;
+    }
+
+    /**
+     * A rule card (rule-cards.js) is built from checked notation, so the sentence gates do not apply. Its front
+     * holds symbols a term key would drop ("Simplify X + X" vs "Simplify X ⋅ X"): it is keyed as written.
+     */
+    function addRuleCard(card) {
+      const key = `rule:${card.front}`;
+      if (seen.has(key)) return false;
+      // A definition box already made a card of the same sentence: the rule rides on that card instead
+      const probe = flat(card.quote).slice(0, 40);
+      const twin = card.rule.kind === 'set' && probe.length >= 20 ? cards.find((c) => !c.rule && flat(c.back).includes(probe)) : null;
+      if (twin) {
+        twin.teaches = card.rule;
+        return false;
+      }
+      seen.add(key);
+      pushCard(card.front, card.back, card.category, { ...card, pageNumber: card.page || null, source: card.quote || card.back });
       return true;
     }
 
@@ -167,7 +194,16 @@
     // 1b. Named theorems/rules, core formulas, complexities & recurrences stated in running text
     for (const sc of stemCards().extractStemCards(text, splitSentences)) addCard(sc.front, sc.back, sc.category);
 
-    // 1c. Line-shaped notes ("term - definition", arrows, headings over bullets) have no sentences to mine.
+    // 1c. Rules the section teaches that a question can work out (section-rules.js): its laws and identities, the
+    //     operators of its truth tables, bit operations, the 2^n counts. Read from the whole scope text, displays
+    //     included; each card carries the rule for worked-questions.js.
+    const ruleInput = { text: rawText, blocks: didacticBlocks, lines: opts.lines, startPage: firstPage(opts.lines) };
+    ruleInput.tables = (didacticBlocks || []).filter((b) => b && b.kind === 'table');
+    dep('ruleCards', './rule-cards.js').fromRules(dep('sectionRules', './section-rules.js').read(ruleInput)).forEach(addRuleCard);
+    // A family of short listings under numbered headings ("7.3.2 Sum and Average Value"): which algorithm is this?
+    dep('codeCards', './code-cards.js').fromScope(ruleInput).forEach(addRuleCard);
+
+    // 1d. Line-shaped notes ("term - definition", arrows, headings over bullets) have no sentences to mine.
     const notes = dep('notePatterns', './note-patterns.js');
     if (notes.looksLikeNotes(text)) {
       notes.extractNoteCards(text).forEach(addNoteCard);
@@ -189,6 +225,12 @@
     const defined = dep('proseDefinitions', './prose-definitions.js').mine(sentences, { isNoise });
     for (const d of [...defined].sort((a, b) => b.strength - a.strength)) {
       if (d.strength >= 3 || !isBadSentence(d.back)) addCard(d.term, d.back, 'Key Term', null, false, d.sentence, d.strength >= 3);
+    }
+
+    // 2c. Definitions written as conditions ("A relation is in 2NF if and only if ...", "This condition is called a
+    //     **deletion anomaly**"): condition-cards.js.
+    for (const c of dep('conditionCards', './condition-cards.js').fromText(text)) {
+      if (addFact({ front: c.front, back: c.back, category: 'Definition', kind: 'definition', sourceKind: 'definition', subject: c.term, sentence: c.sentence })) seen.add(boldTerms ? boldTerms.termKey(c.term) : c.term.toLowerCase());
     }
 
     for (const item of candidates) {
@@ -240,7 +282,18 @@
       // A card mined from running text gets the page its back is printed on (extraction's scope.lines).
       const pageOf = fields.pageLocator(opts.lines);
       const placed = (c) => (c.page || c.pageNumber ? c : { ...c, pageNumber: pageOf(c.back) || pageOf(c.front) || null });
-      return quality.dedupe([...cards, ...contrasts]).map((c, i) => fields.finish({ ...placed(c), id: `fc-${i + 1}` }, { topic: contextLabel }));
+      // Rule cards were keyed as written when added; the word-based repeat check would merge "X + X" with "X ⋅ X".
+      // A back that does not answer its front (card-answers.js) is dropped before repeats are judged.
+      const all = [...cards, ...contrasts].map(dep('cardAnswers', './card-answers.js').answered).filter(Boolean);
+      const kept = new Set(quality.dedupe(all.filter((c) => !c.rule)));
+      return all.filter((c) => c.rule || kept.has(c))
+        .map((c, i) => fields.finish({ ...placed(c), id: `fc-${i + 1}` }, { topic: contextLabel }));
+    }
+
+    /** The first page the extraction's lines are on (book-sections.js places paragraphs from it). */
+    function firstPage(lines) {
+      const pages = (lines || []).map((l) => l && l.pageNumber).filter(Number.isFinite);
+      return pages.length ? Math.min(...pages) : 1;
     }
 
     /** 6. "process control block (PCB)": the abbreviation gets a card unless a term card already shows it. */

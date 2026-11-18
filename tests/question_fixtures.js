@@ -74,9 +74,9 @@ check('inside a sentence, sentence-case terms are lowered and an acronym is left
 const plural = O.termSet('context switches', ['latch', 'Waiting time', 'gate delay'], { stem: 'many add up', position: 'inside', number: 'plural', forms });
 check('a plural slot only takes forms the source uses in the plural', plural === null || plural.distractors.every((d) => O.isPlural(d)), JSON.stringify(plural));
 check('a singular answer never fills a plural slot', O.termSet('latch', ['gate delay', 'context switch'], { number: 'plural', forms }) === null);
-const named = O.termSet('context switch', ['Squeeze Theorem', 'gate delay', 'waiting time'], { forms });
+const named = O.termSet('context switch', ['Squeeze Theorem', 'gate delay', 'waiting time', 'ready queue'], { forms });
 check('a named result is never offered beside plain terms', named && !named.distractors.some((d) => /Theorem/.test(d)), named && named.distractors.join(' | '));
-const adjectives = O.termSet('reflexive', ['symmetric', 'transitive', 'equivalence relation', 'functionally dependent'], {});
+const adjectives = O.termSet('reflexive', ['symmetric', 'transitive', 'equivalence relation', 'functionally dependent', 'antisymmetric'], {});
 check('adjective terms only face adjective terms', adjectives && adjectives.distractors.every((d) => !/relation/.test(d)), adjectives && adjectives.distractors.join(' | '));
 const headRepeat = O.termSet('foreign key', ['primary key', 'candidate key', 'update anomaly', 'surrogate key'], { stem: 'the key of another table' });
 check('a word of the answer repeated in the stem must be in every option', headRepeat && headRepeat.distractors.every((d) => /key$/.test(d)), headRepeat && headRepeat.distractors.join(' | '));
@@ -102,12 +102,14 @@ const cards = [
   { front: 'Moraine', back: 'A ridge of rock debris that a glacier leaves behind when it melts back.', kind: 'definition', category: 'Key Term' },
   { front: 'Crevasse', back: 'A deep crack that opens in the brittle upper layer of moving ice.', kind: 'definition', category: 'Key Term' },
   { front: 'Esker', back: 'A winding ridge of sand and gravel laid down by a stream under the ice.', kind: 'definition', category: 'Key Term' },
+  { front: 'Cirque', back: 'A bowl-shaped hollow that a glacier carves at the head of a valley.', kind: 'definition', category: 'Key Term' },
+  { front: 'Drumlin', back: 'An oval hill of packed till that a glacier shapes as it flows over it.', kind: 'definition', category: 'Key Term' },
   { front: 'Length', back: 'The number of elements is called the length of the array.', kind: 'definition', category: 'Key Term' },
   { front: 'Tan rule', back: '$\\sec^{2} x$', kind: 'formula', category: 'Formula' },
 ];
 const facts = F.fromCards(cards, '');
 const byTerm = (t) => facts.find((f) => f.term === t);
-check('formula cards are not facts', facts.length === 5 && !byTerm('Tan rule'));
+check('formula cards are not facts', facts.length === 7 && !byTerm('Tan rule'));
 check('a term repeated in its definition makes the fact sibling-only', byTerm('Binary Heap').siblingOnly && !byTerm('Moraine').siblingOnly);
 check('a definition that contains its term is self-naming', byTerm('Length').selfNaming);
 const ctx = { facts, seed: 0, forms: O.textForms(''), claimed: new Set() };
@@ -135,9 +137,33 @@ const terms = S.quizScope.clozeTerms(scope);
 const termTexts = terms.map((t) => t.text.toLowerCase());
 check('terms defined in prose are marked', ['lateral moraine', 'terminal moraine', 'snow bridge', 'accumulation zone', 'ablation zone'].every((t) => termTexts.includes(t)), termTexts.join(' | '));
 const sentenceCtx = { terms, seed: 0, variant: 0, forms: O.textForms(GLACIERS) };
-const cloze = S.clozeQuestions.forSentence('When the accumulation zone shrinks for many years in a row, the front of the glacier retreats up the valley.', sentenceCtx);
-check('cloze blanks a marked term and offers marked terms', cloze && /________/.test(cloze.question) && cloze.options.includes(cloze.answer) &&
-  cloze.options.every((o) => termTexts.includes(o.toLowerCase())), cloze && `${cloze.question} :: ${cloze.options.join(' | ')}`);
+// A cloze needs four options of the answer's own kind: in the passage only two terms are zones, so the naming
+// sentence is not asked as a choice; among more zones it is, and only zones are offered.
+check('no cloze when fewer than three wrong options of the same kind exist',
+  S.clozeQuestions.forSentence('The area where yearly snowfall exceeds yearly melting is called the accumulation zone.', sentenceCtx) === null);
+const zoneTerms = ['accumulation zone', 'ablation zone', 'percolation zone', 'runoff zone', 'snow bridge', 'terminal moraine', 'basal sliding']
+  .map((text, order) => ({ text, rank: 0, order }));
+const zoneCtx = { terms: zoneTerms, seed: 0, variant: 0, forms: O.textForms(GLACIERS) };
+const cloze = S.clozeQuestions.forSentence('The area where yearly snowfall exceeds yearly melting is called the accumulation zone.', zoneCtx);
+check('cloze blanks a marked term and offers four marked terms of its kind', cloze && /________/.test(cloze.question) && cloze.options.includes(cloze.answer) &&
+  cloze.options.length === 4 && cloze.options.every((o) => / zone$/.test(o)), cloze && `${cloze.question} :: ${cloze.options.join(' | ')}`);
+check('a sentence that does not name its blank offers no sibling of the same head (it could complete it too)',
+  S.clozeQuestions.forSentence('When the accumulation zone shrinks for many years in a row, the front of the glacier retreats up the valley.', zoneCtx) === null);
+const zoneTerms5 = [...zoneTerms, { text: 'firn zone', rank: 0, order: 8 }, { text: 'meltwater zone', rank: 0, order: 9 }];
+const echo = S.clozeQuestions.forSentence('Meltwater soaks the area where yearly snowfall exceeds yearly melting, which is called the accumulation zone.',
+  { ...zoneCtx, terms: zoneTerms5 });
+check('a wrong option that repeats a word of the stem is not offered', echo && !echo.options.includes('meltwater zone') && echo.options.length === 4,
+  echo && echo.options.join(' | '));
+const compoundTerms = ['gate delay', 'wire delay', 'pin delay', 'net delay'].map((text, order) => ({ text, rank: 0, order }));
+const compoundStem = 'The table a designer reads for each cell of the adder is called the gate delay model of the cell.';
+const compoundCtx = (text) => ({ terms: compoundTerms, seed: 0, variant: 0, forms: O.textForms(text), text });
+const allModels = 'A gate delay model, a wire delay model, a pin delay model and a net delay model are kept apart.';
+const oneModel = 'A gate delay model is kept per cell. Wire delay grows with length. Pin delay is small. Net delay adds up.';
+check('a blank before a noun takes terms the text writes before that noun',
+  Boolean(S.clozeQuestions.forSentence(compoundStem, compoundCtx(allModels))));
+check('a blank before a noun takes no term the text never writes before it', S.clozeQuestions.forSentence(compoundStem, compoundCtx(oneModel)) === null);
+check('a stem that names its category offers only that category',
+  S.clozeQuestions.forSentence('Packed snow over a hidden crack forms a fragile arch called a snow bridge that climbers must probe with care.', zoneCtx) === null);
 check('no cloze from a thin stem', S.clozeQuestions.forSentence('The glacier is a snow bridge.', sentenceCtx) === null);
 check('no cloze from a sentence that points outside itself', S.clozeQuestions.forSentence('This is why the accumulation zone of the glacier is watched so closely by geologists each year.', sentenceCtx) === null);
 const namingFalse = S.namingQuestions.forSentence('The area where yearly melting exceeds yearly snowfall is called the ablation zone.', sentenceCtx, false);
@@ -152,9 +178,11 @@ const set = A.createSet(10);
 const mc = (question, answer, options) => ({ type: 'multiple_choice', question, answer, options });
 const swap = (statement, answer) => ({ type: 'true_false', question: `True or False:\n"${statement}"`, answer, options: ['True', 'False'], construction: 'sibling_swap' });
 check('a lone swap True is refused', !set.accept(swap('A crevasse is a deep crack in moving ice.', 'True')));
-check('first question kept', set.accept(mc('Which term is defined as follows?\n"A deep crack in the upper layer of moving ice"', 'Icefall', ['Icefall', 'Esker', 'Moraine'])));
-check('same answer refused', !set.accept(mc('Complete the statement:\n"Climbers fear the hidden ________ on the upper glacier in spring and early summer."', 'icefalls', ['icefalls', 'eskers', 'kames'])));
-check('same options refused', !set.accept(mc('Which term is defined as follows?\n"A winding ridge of sand and gravel under the ice"', 'Esker', ['Moraine', 'Esker', 'Icefall'])));
+const three = mc('Which term is defined as follows?\n"A deep crack in the upper layer of moving ice"', 'Icefall', ['Icefall', 'Esker', 'Moraine']);
+check('a choice question with three options is refused', set.refusal(three) === 'too few options' && !set.accept(three));
+check('first question kept', set.accept(mc('Which term is defined as follows?\n"A deep crack in the upper layer of moving ice"', 'Icefall', ['Icefall', 'Esker', 'Moraine', 'Kame'])));
+check('same answer refused', set.refusal(mc('Complete the statement:\n"Climbers fear the hidden ________ on the upper glacier in spring and early summer."', 'icefalls', ['icefalls', 'eskers', 'kames', 'drumlins'])) === 'same answer');
+check('same options refused', set.refusal(mc('Which term is defined as follows?\n"A winding ridge of sand and gravel under the ice"', 'Esker', ['Moraine', 'Esker', 'Icefall', 'Kame'])) === 'same options');
 check('same fact refused', !set.accept(swap('A deep crack in the upper layer of moving ice.', 'False')));
 check('swap True kept once a swap False is in the set', set.accept(swap('A ridge of rock debris left behind by retreating ice.', 'False')) &&
   set.accept(swap('A winding ridge of sand and gravel laid down by a stream.', 'True')) && set.size() === 3);
@@ -168,7 +196,7 @@ const show = (list) => list.map((q) => q.question.replace(/\n/g, ' / ')).join(' 
 // snowfall"): the second of such a pair is the same fact again, so four or five questions is right.
 check('engine: several questions from prose that defines its terms', quiz.length >= 4, `${quiz.length}: ${show(quiz)}`);
 const choice = all.filter((q) => q.type !== 'true_false' && q.type !== 'reveal');
-check('engine: answer among options, 3+ options, no repeats in a set', choice.every((q) => q.options.length >= 3 && q.options.includes(q.answer) &&
+check('engine: answer among options, 4 options, no repeats in a set', choice.every((q) => q.options.length === 4 && q.options.includes(q.answer) &&
   new Set(q.options.map((o) => o.toLowerCase())).size === q.options.length));
 const caseMixed = choice.filter((q) => new Set(q.options.map((o) => /^[A-Z]/.test(o))).size > 1);
 check('engine: one leading case per option set', caseMixed.length === 0, caseMixed.map((q) => q.options.join('/')).join(' | '));
@@ -201,11 +229,25 @@ check('engine: nothing built from an antonym swap', !all.some((q) => /the source
 // overlaps the answer ("Dogs" against "Dogs, Cats").
 const tableCards = S.tableCards.rowCards({ header: ['Assay', 'Sample', 'Target'], rows: [
   ['Serology', 'Clotted blood', 'Host antibodies'], ['PCR', 'Whole blood, urine', 'Bacterial DNA'],
-  ['Culture', 'Urine', 'Live bacteria'], ['Histology', 'Kidney tissue', 'Bacterial antigen']] });
+  ['Culture', 'Urine', 'Live bacteria'], ['Histology', 'Kidney tissue', 'Bacterial antigen'], ['Biopsy', 'Liver tissue', 'Fixed cells']] });
 const tableQs = S.tableQuestions.candidates(tableCards, { seed: 0 });
-const pcrSample = tableQs.find((q) => /sample for "PCR"/.test(q.question));
+const pcrSample = tableQs.find((q) => /Assay is "PCR", what is the Sample\?$/.test(q.question));
 check('table: one column asked with other rows\' values as options', pcrSample && pcrSample.answer === 'Whole blood, urine' &&
-  pcrSample.options.includes('Clotted blood') && !pcrSample.options.includes('Urine'), pcrSample && pcrSample.options.join(' | '));
+  pcrSample.options.includes('Clotted blood') && !pcrSample.options.includes('Urine') && pcrSample.options.length === 4, pcrSample && pcrSample.options.join(' | '));
+check('table: the stem names the column asked and the column its value sits in', pcrSample && /^In the row where Assay is "PCR", what is the Sample\?$/.test(pcrSample.question),
+  pcrSample && pcrSample.question);
+// A host table: a row that lists the stem's value in another column is never an option, a value two rows share is
+// not asked, and a table whose first header cell is empty names no column for its row values.
+const hostRows = [['cattle', 'sheep', 'Alpha'], ['goats', 'cattle', 'Beta'], ['horses', 'pigs', 'Gamma'], ['dogs', 'cats', 'Delta'], ['rats', 'mice', 'Epsilon']];
+const hostQs = S.tableQuestions.candidates(S.tableCards.rowCards({ header: ['Main host', 'Other host', 'Strain'], rows: hostRows }), { seed: 0 });
+const cattle = hostQs.find((q) => /Main host is "cattle", what is the Strain/.test(q.question));
+check('table: a row holding the stem value in another column is never an option', cattle && !cattle.options.includes('Beta') && cattle.options.length === 4,
+  cattle && cattle.options.join(' | '));
+const noHeader = S.tableQuestions.candidates(S.tableCards.rowCards({ header: ['', 'Other host', 'Strain'], rows: hostRows }), { seed: 0 });
+check('table: no question when the row values have no header', noHeader.length === 0, noHeader.map((q) => q.question).join(' | '));
+const shared = S.tableQuestions.candidates(S.tableCards.rowCards({ header: ['Main host', 'Other host', 'Strain'],
+  rows: [['cattle', 'sheep', 'Alpha'], ['cattle, goats', 'pigs', 'Beta'], ['horses', 'pigs', 'Gamma'], ['dogs', 'cats', 'Delta'], ['rats', 'mice', 'Epsilon']] }), { seed: 0 });
+check('table: a stem value two rows list is not asked', !shared.some((q) => /Main host is "cattle"/.test(q.question)), shared.map((q) => q.question).join(' | '));
 
 console.log(failures ? `\n${failures} question fixture(s) FAILED` : '\nAll question fixtures passed');
 process.exitCode = failures ? 1 : 0;

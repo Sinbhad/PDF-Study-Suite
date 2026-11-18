@@ -5,7 +5,8 @@
  * Shapes: multiple choice / cloze { id, question, options[], answer, answerIndex?, explanation?,
  *   badge?, skill?, category?, pageNumber?|page? } and self-graded { type: 'reveal', question,
  *   answer, explanation? } (no options: "Show answer", then "I got it / I missed it").
- * An answer value is an option index, or 'got' / 'missed' for reveal questions.
+ * An answer value is an option index, or 'got' / 'missed' for reveal questions, or { typed, override? } for a
+ * typed question { type: 'typed', answer, accept, form, others } (field and verdict: typed-card.js).
  * Every question carries a "Bad question" button (question-flags.js); a flagged question is not
  * valid any more, so it is never shown or counted again for this document.
  */
@@ -15,20 +16,25 @@
   const has = (t) => PDFStudy.richBlocks.hasContent(t);
 
   const hasOptions = (q) => Array.isArray(q.options) && q.options.filter(has).length >= 2;
-  const isReveal = (q) => !!q && (q.type === 'reveal' || !hasOptions(q)) && has(q.answer);
+  // A typed question (typed-card.js) has no options and is checked by the app, so it is no self-graded reveal.
+  const isTyped = (q) => !!q && q.type === 'typed' && has(q.answer) && !!PDFStudy.typedCard;
+  const isReveal = (q) => !!q && (q.type === 'reveal' || (!hasOptions(q) && q.type !== 'typed')) && has(q.answer);
   const isFlagged = (q) => !!PDFStudy.questionFlags && PDFStudy.questionFlags.isFlagged(q);
   /**
    * Questions with no prompt, with neither options nor an answer, or flagged as bad are never shown or counted.
    * The generator already skips flagged sources (excludeSources); the flag check stays for the list that was
    * drawn before the student flagged a question, and for saved runs from an earlier visit.
    */
-  const isValid = (q) => !!q && has(q.question) && (isReveal(q) || (hasOptions(q) && q.type !== 'reveal')) && !isFlagged(q);
+  const isValid = (q) => !!q && has(q.question) && (isReveal(q) || isTyped(q) || (hasOptions(q) && q.type !== 'reveal' && q.type !== 'typed')) && !isFlagged(q);
 
   function correctIdx(q) {
     if (Number.isInteger(q.answerIndex)) return q.answerIndex;
     return (q.options || []).findIndex((o) => o === q.answer);
   }
-  const isCorrect = (q, ans) => (isReveal(q) ? ans === 'got' : Number.isInteger(ans) && ans === correctIdx(q));
+  function isCorrect(q, ans) {
+    if (isTyped(q)) return PDFStudy.typedCard.isCorrect(q, ans);
+    return isReveal(q) ? ans === 'got' : Number.isInteger(ans) && ans === correctIdx(q);
+  }
 
   const SKILL_LABEL = { formula: 'Formula', theorem: 'Theorem', definition: 'Definition', complexity: 'Complexity', algorithm: 'Algorithm', recall: 'Recall' };
   function skillOf(q) {
@@ -105,7 +111,7 @@
     const sv = PDFStudy.studyViews;
     const esc = sv.escapeHtml;
     if (isFlagged(q)) return ''; // a sheet that still lists it (practice-test sections) skips it
-    const body = isReveal(q) ? revealBody(q, state, esc) : choiceBody(q, state, esc);
+    const body = isTyped(q) ? PDFStudy.typedCard.body(q, state, esc) : isReveal(q) ? revealBody(q, state, esc) : choiceBody(q, state, esc);
     const flagBtn = PDFStudy.questionFlags ? PDFStudy.questionFlags.buttonHtml(q) : '';
     return `
       <article class="q-card" data-qcard="${esc(q.id)}">
@@ -146,11 +152,13 @@
         if (q && onShow) onShow(q);
       };
     });
+    // Typed answers: Check (quiz) or kept as typed (practice test), and "I was right" after checking.
+    if (PDFStudy.typedCard) PDFStudy.typedCard.bind(container, questions, onPick, (liveRun && liveRun.typed) || {});
     if (PDFStudy.studyViews.bindPageJumps) PDFStudy.studyViews.bindPageJumps(container);
     if (PDFStudy.questionFlags) PDFStudy.questionFlags.bind(container, questions, liveRun);
     if (PDFStudy.attemptLog) PDFStudy.attemptLog.drawn(container, questions, liveRun);
   }
 
-  PDFStudy.quizCard = { correctIdx, isCorrect, isReveal, isValid, skillOf, skillLabel, questionCard, bindOptions, repeatsAnswer, LETTERS };
+  PDFStudy.quizCard = { correctIdx, isCorrect, isReveal, isTyped, isValid, skillOf, skillLabel, questionCard, bindOptions, repeatsAnswer, LETTERS };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.quizCard;
 })(typeof window !== 'undefined' ? window : globalThis);

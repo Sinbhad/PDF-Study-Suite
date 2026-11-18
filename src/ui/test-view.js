@@ -64,7 +64,7 @@
     }
     stopTicker();
     const answeredCount = () => Object.keys(S.answers).length;
-    const cardState = (q) => ({ picked: S.answers[q.id], reveal: S.submitted, locked: S.submitted, shown: !!S.shown[q.id] });
+    const cardState = (q) => ({ picked: S.answers[q.id], reveal: S.submitted, locked: S.submitted, shown: !!S.shown[q.id], typedMode: 'sheet' });
 
     function submit(timedOut) {
       stopTicker();
@@ -79,9 +79,47 @@
     }
     /** After a redraw that removed the button just used, focus `sel` (or the first question's first control). */
     function refocus(sel) {
-      const target = (sel && container.querySelector(sel)) || container.querySelector('.q-card .q-opt:not(:disabled), .q-card [data-show-qid]');
+      const target = (sel && container.querySelector(sel)) || container.querySelector('.q-card .q-opt:not(:disabled), .q-card [data-show-qid], .q-card .q-typed-input:not(:disabled)');
       if (target) target.focus();
     }
+    const cardSel = (q) => `[data-qcard="${root.CSS && CSS.escape ? CSS.escape(q.id) : q.id}"]`;
+
+    /** The answered count and the bar, without redrawing the sheet (a typed answer keeps its field and caret). */
+    function refreshProgress() {
+      const n = answeredCount();
+      const lbl = container.querySelector('#testAnswered');
+      if (lbl) lbl.textContent = `${n} of ${S.questions.length} answered`;
+      const fill = container.querySelector('#testProgressFill');
+      if (fill) fill.style.width = `${Math.round((n / S.questions.length) * 100)}%`;
+    }
+    // Typed answers on the sheet: kept as typed until "Submit test"; Enter moves on; "I was right" after submitting.
+    const typed = {
+      onDraft(q, text) {
+        if (S.submitted) return;
+        if (String(text).trim()) S.answers[q.id] = { typed: text };
+        else delete S.answers[q.id];
+        refreshProgress();
+      },
+      onEnter(q) {
+        const card = container.querySelector(cardSel(q));
+        const open = Array.from(container.querySelectorAll('.q-opt:not(:disabled), [data-show-qid], .q-typed-input:not(:disabled), #testSubmitBtn'));
+        const next = card ? open.find((el) => !card.contains(el) && (card.compareDocumentPosition(el) & 4)) : null;
+        if (next) next.focus();
+      },
+      onOverride(q) {
+        if (!S.submitted || !S.answers[q.id]) return;
+        S.answers[q.id] = { ...S.answers[q.id], override: true };
+        TR.markRight(q);
+        if (PDFStudy.attemptLog) PDFStudy.attemptLog.overridden(q, S.answers[q.id], true);
+        draw();
+        PDFStudy.questionFlags.say(container, 'Counted as right. The question is marked so its answer can be checked.');
+        // The button is gone: on to the next question's controls, or back to the score.
+        const card = container.querySelector(cardSel(q));
+        const later = card ? Array.from(container.querySelectorAll('.q-card button, .q-card a')).find((el) => !card.contains(el) && (card.compareDocumentPosition(el) & 4)) : null;
+        const target = later || (card && card.querySelector('.q-bad')) || container.querySelector('.test-report');
+        if (target) target.focus({ preventScroll: !later });
+      },
+    };
 
     /** Re-render one question in place (keeps scroll position), then refresh the progress line. */
     function redrawCard(q) {
@@ -97,11 +135,7 @@
         const target = again && container.querySelector(`${sel} ${again}`);
         if (target) target.focus();
       }
-      const n = answeredCount();
-      const lbl = container.querySelector('#testAnswered');
-      if (lbl) lbl.textContent = `${n} of ${S.questions.length} answered`;
-      const fill = container.querySelector('#testProgressFill');
-      if (fill) fill.style.width = `${Math.round((n / S.questions.length) * 100)}%`;
+      refreshProgress();
     }
     function pick(q, value) {
       if (S.submitted) return;
@@ -145,7 +179,7 @@
         ${S.submitted ? `<h3 class="sec-title">${S.reviewAll ? 'All answers' : 'Missed items'}<span class="sec-count">${S.reviewAll ? total : S.result.missed.length}</span></h3>` : ''}
         <div class="test-sheet">${sheetHtml()}</div>
         ${S.submitted ? '' : '<div class="q-nav"><button class="btn btn-primary" id="testSubmitBtn" type="button">Submit test</button></div>'}`;
-      QC.bindOptions(container, S.questions, pick, show, { redraw: draw, answers: S.answers, retrying: S.retry });
+      QC.bindOptions(container, S.questions, pick, show, { redraw: draw, answers: S.answers, retrying: S.retry, typed });
       const $ = (sel) => container.querySelector(sel);
       if ($('#testSubmitBtn')) {
         $('#testSubmitBtn').onclick = () => {

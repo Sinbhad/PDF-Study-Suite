@@ -21,10 +21,13 @@
 
   // A line set this much smaller than the slide's main bullet size is a figure label or caption.
   const LABEL_SIZE_RATIO = 0.82;
+  // A bulleted line at least this share of the main size is an item of the list, however small.
+  const LIST_ITEM_MIN_RATIO = 0.6;
   // A nested line at least this share of its parent's size is a sub-point even when small on the slide.
   const CHILD_SIZE_RATIO = 0.85;
   // A label ("Pros:", "Moderate disease") is at most this many words.
   const LABEL_MAX_WORDS = 5;
+  const SUBHEADING_MAX_WORDS = 3;
   // A column counts as a column when it holds at least this many lines.
   const MIN_COLUMN_LINES = 2;
   // A remark about the course this short is furniture; a longer one carries a fact and is kept.
@@ -117,9 +120,13 @@
     if (kind === 'quip' && wordCount(t) <= QUIP_MAX_WORDS) return 'quip';
     // The lecturer's own aside under a photo: "My cat Luna, who ...".
     if (/^My\s+[a-z]/.test(t)) return 'quip';
-    // Small type is a label or caption unless it is a sub-point set only a little smaller than its parent.
-    if (node.fontSize && size && node.fontSize < size * LABEL_SIZE_RATIO && (!parentSize || node.fontSize < parentSize * CHILD_SIZE_RATIO)) return 'label';
-    if (nf && nf.isGarbled(t)) return 'garbled';
+    // Small type is a label or caption unless it is a sub-point set only a little smaller than its parent,
+    // or an item of the list itself: a bulleted line ("• 4-pt Block") squeezed into smaller type to fit
+    const listItem = node.glyph && node.fontSize >= size * LIST_ITEM_MIN_RATIO;
+    if (node.fontSize && size && !listItem && node.fontSize < size * LABEL_SIZE_RATIO && (!parentSize || node.fontSize < parentSize * CHILD_SIZE_RATIO)) return 'label';
+    // A short dose or measure ("10-20 mL above") is mostly digits and still plain words, never garbled
+    const measured = t.split(/\s+/).every((w) => /^[\d.,\-–/:%+<>~×]+$/.test(w) || /^[A-Za-z][a-z]*[.,:;]?$/.test(w) || /^(?:mL|IU|mEq|[mµ]g|kg|lb|cc)$/i.test(w));
+    if (nf && !measured && nf.isGarbled(t)) return 'garbled';
     if (/^[^(]*\)/.test(t)) return 'debris'; // "Beef) pias ...": the tail of a cut line
     if (st && st.isMangled(node.text, { slide: true })) return 'mangled';
     return '';
@@ -150,12 +157,19 @@
   const isBoldLabel = (n, next) => Boolean(n) && /^\*\*[^*]+\*\*$/.test(String(n.text).trim()) && wordCount(n.text) <= LABEL_MAX_WORDS &&
     !/[.;!?]$/.test(plain(n.text)) && Boolean(next) && !/^\*\*[^*]+\*\*$/.test(String(next.text).trim());
 
+  /**
+   * A short plain line in Title Case with no punctuation ("Pharmacodynamics", "Adverse Effects"): once a
+   * labelled group has items, such a line is the next group's label even when no bulleted item follows it.
+   */
+  const isSubheading = (n) => !n.glyph && wordCount(n.text) <= SUBHEADING_MAX_WORDS && /^[A-Z]/.test(plain(n.text)) &&
+    !/[.,;:!?…)]$/.test(plain(n.text)) && plain(n.text).split(' ').every((w) => /^[A-Z(&]/.test(w) || /^(?:of|and|or|the|in|to|vs)$/.test(w));
+
   /** Units by labels: each label owns what follows it, up to the next label. Lines before the first label stand alone. */
   function byLabels(nodes, isLabel) {
     const out = [];
     let current = null;
     nodes.forEach((n, i) => {
-      if (isLabel(n, nodes[i + 1])) {
+      if (isLabel(n, nodes[i + 1]) || (isLabel === isGlyphLabel && current && current.children.length && isSubheading(n))) {
         current = { node: n, children: [], label: true };
         out.push(current);
       } else if (current) current.children.push(n);

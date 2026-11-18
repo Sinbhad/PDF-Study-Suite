@@ -137,10 +137,14 @@
     return /^[a-z]/.test(t) ? t[0].toUpperCase() + t.slice(1) : t;
   }
 
+  // Operator symbols a term key drops: ">= — Description" and "> — Description" are two cards, not one.
+  const OPERATOR_RUN_RE = /[<>=!&|^~+*/%≤≥≠⋅∧∨¬→↔⊕]+/g;
   const frontKey = (front) => {
     const bt = dep('boldTerms', './bold-terms.js');
     const text = plain(front).replace(/^(?:the|an?)\s+/i, '');
-    return bt ? bt.termKey(text) : text.toLowerCase();
+    const key = bt ? bt.termKey(text) : text.toLowerCase();
+    const ops = text.replace(/\$[^$]*\$/g, ' ').match(OPERATOR_RUN_RE);
+    return ops ? `${key} ${ops.join(' ')}` : key;
   };
   const backKey = (back) => contentWords(back).map(stem).join(' ');
 

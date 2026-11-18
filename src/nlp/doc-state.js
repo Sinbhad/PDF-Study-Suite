@@ -7,6 +7,7 @@
  *   userCards [ { id, front, back, scope, created } ]
  *   flags     { [sourceKey]: { at, text, questionKey } }      questions marked "Bad question"
  *   attempts  [ { kind: 'quiz'|'test', scopeId, at, score, total, retry, rows, missed? } ]   newest last
+ *   overrides [ { questionKey, source, answer, typed, at } ]   typed answers the student marked "I was right"
  *   view      { tab, scope, mode } | null                     where the student left off
  */
 (function (root) {
@@ -18,8 +19,11 @@
   const ATTEMPTS_TOTAL = 60;
   const MIN_SOURCE_MATCH = 25; // shorter source texts must match exactly, not by containment
   const QUESTION_FIELDS = ['id', 'type', 'question', 'options', 'answer', 'answerIndex', 'explanation', 'badge', 'skill', 'category', 'pageNumber', 'page'];
+  // A typed question needs what its check reads (typed-check.js) to be asked again after a reload.
+  const TYPED_FIELDS = ['accept', 'form', 'others', 'shown', 'symbols', 'source'];
+  const OVERRIDES_KEPT = 100;
 
-  const empty = () => ({ v: VERSION, cards: {}, userCards: [], flags: {}, attempts: [], view: null });
+  const empty = () => ({ v: VERSION, cards: {}, userCards: [], flags: {}, attempts: [], overrides: [], view: null });
 
   /** Stored data from an older or damaged record always comes back with every field present. */
   function upgrade(raw) {
@@ -32,7 +36,18 @@
       userCards: Array.isArray(s.userCards) ? s.userCards : [],
       flags: s.flags && typeof s.flags === 'object' ? s.flags : {},
       attempts: Array.isArray(s.attempts) ? s.attempts : [],
+      overrides: Array.isArray(s.overrides) ? s.overrides : [],
     };
+  }
+
+  /**
+   * "I was right" on a typed answer the check refused: { questionKey, source, answer, typed } is kept (newest last,
+   * one per question) so a check that rejects a correct answer can be found and fixed.
+   */
+  function addOverride(state, entry, now) {
+    state.overrides = (state.overrides || []).filter((o) => o.questionKey !== entry.questionKey);
+    state.overrides.push({ ...entry, at: now || Date.now() });
+    state.overrides = state.overrides.slice(-OVERRIDES_KEPT);
   }
 
   /** The entry for a card, created on first use. Empty entries are dropped again by tidy(). */
@@ -136,6 +151,7 @@
   function plainQuestion(q) {
     const out = {};
     QUESTION_FIELDS.forEach((f) => { if (q[f] !== undefined && q[f] !== null) out[f] = q[f]; });
+    if (q.type === 'typed') TYPED_FIELDS.forEach((f) => { if (q[f] !== undefined && q[f] !== null) out[f] = q[f]; });
     return out;
   }
 
@@ -171,7 +187,7 @@
   const api = {
     VERSION, empty, upgrade, lookup, setMark, setEdit, setSchedule,
     addUserCard, updateUserCard, removeUserCard, restoreUserCard, migrateLegacyKnown,
-    flagQuestion, unflag, isFlagged, flaggedSources, plainQuestion, addAttempt, lastAttempt, setView,
+    flagQuestion, unflag, isFlagged, flaggedSources, plainQuestion, addAttempt, lastAttempt, setView, addOverride,
   };
   PDFStudy.docState = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

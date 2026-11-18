@@ -192,9 +192,11 @@ function lintBadDefinition(q) {
   const first = String(q.question || '').split('\n')[0];
   if (!DEFINITION_STEM_RE.test(first)) return null;
   const subject = subjectOf(q);
-  const definition = q.type === 'true_false' || /defined as follows/i.test(first) ? statementOf(q) : String(q.answer || '');
+  // A typed "Which term is defined as:" shows the definition and asks for the term, like "defined as follows".
+  const showsDefinition = /defined as follows/i.test(first) || q.type === 'typed';
+  const definition = q.type === 'true_false' || showsDefinition ? statementOf(q) : String(q.answer || '');
   if (!definition) return null;
-  const term = q.type === 'multiple_choice' && /defined as follows/i.test(first) ? String(q.answer || '') : subject;
+  const term = (q.type === 'multiple_choice' || q.type === 'typed') && showsDefinition ? String(q.answer || '') : subject;
   // A self-graded "Define X" reveals its answer after the student has answered: naming X there gives nothing away.
   if (term && q.type !== 'reveal' && mentions(definition, term)) return found('bad_definition', `the definition contains its own term "${term}"`);
   const m = definition.match(DANGLING_DEFINITION_RE);
@@ -214,6 +216,7 @@ function lintGarbledToken(q, ctx) {
     const tok = raw.replace(EDGE_PUNCT_RE, '').replace(EDGE_PUNCT_RE, '').replace(/-$/, '');
     if (!tok || tok.length < 3 || /_{3,}/.test(tok) || WORD_SHAPED_RE.test(tok) || !/[A-Za-z]/.test(tok)) continue;
     if (/^[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)+$/.test(tok)) continue; // "and/or", "input-output", "T-cell", "0-to-1"
+    if (/^\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?[a-z%]{0,4}(?:\/[a-z]{1,4})?$/i.test(tok)) continue; // a dose or a range: "0.1-0.2mg/kg"
     const uses = ctx && ctx.wordCounts ? [...ctx.wordCounts].filter(([w]) => w.includes(tok)).reduce((n, [, c]) => n + c, 0) : 0;
     if (uses <= 1) return found('garbled_token', `"${tok}" is not word-shaped and occurs nowhere else in the scope`);
   }

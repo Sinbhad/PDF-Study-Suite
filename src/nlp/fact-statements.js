@@ -123,8 +123,15 @@
   // long one: "neurotropic", "pyogranulomas"). "Short to long term supportive care", "Signs vary based on regions
   // affected" or "Doses may vary based on age and species" could be said of any disease or drug, so they are never
   // borrowed as a False about another subject: there they may well be true.
-  const SPECIFIC_RE = /\d|\s[A-Z][A-Za-z]*[A-Z0-9]|\s[A-Z][a-z]{2,}|\b[a-z]{10,}\b/;
-  const isSpecificClaim = (text) => SPECIFIC_RE.test(String(text || '').replace(/\([^)]*\)/g, ' '));
+  // distinctive(word), when given, says whether a long word is the owner's alone; without it any long word counts.
+  const SPECIFIC_RE = /\d|\s[A-Z][A-Za-z]*[A-Z0-9]|\s[A-Z][a-z]{2,}/;
+  const LONG_WORD_RE = /\b[a-z]{10,}\b/g;
+  const isSpecificClaim = (text, distinctive) => {
+    const t = String(text || '').replace(/\([^)]*\)/g, ' ');
+    if (SPECIFIC_RE.test(t)) return true;
+    const long = t.match(LONG_WORD_RE) || [];
+    return typeof distinctive === 'function' ? long.some(distinctive) : long.length > 0;
+  };
 
   const api = { isSpecificClaim, isStandalone, isPointStatement, isDefinitionText, isNameable, isShouted, isRunTogether };
   PDFStudy.factStatements = api;

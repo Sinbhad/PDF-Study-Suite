@@ -46,7 +46,8 @@
       question,
       options: sd().deterministicShuffle([answer, ...distractors], question, seedOffset),
       answer,
-      explanation: `${card.front} (${card.context || 'source'}): ${answer}`,
+      // A context that only names the selected pages ("Pages 55-71") is left out of the explanation
+      explanation: card.context && !/^(?:pages?|slides?)\s+\d+(?:\s*[-–]\s*\d+)?$/i.test(String(card.context).trim()) ? `${card.front} (${card.context}): ${answer}` : `${card.front}: ${answer}`,
       skill: skillOf(card, answer),
       category: card.category,
       pageNumber: card.pageNumber || null,

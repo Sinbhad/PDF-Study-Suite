@@ -35,7 +35,8 @@
   function engineScore(test, questions, answers) {
     const QC = PDFStudy.quizCard;
     const eng = PDFStudy.testEngine;
-    if (!eng || typeof eng.gradeTest !== 'function' || !test || questions.some(QC.isReveal)) return null;
+    // Self-graded and typed answers are graded here (the student's grade, the typed check and "I was right").
+    if (!eng || typeof eng.gradeTest !== 'function' || !test || questions.some((q) => QC.isReveal(q) || QC.isTyped(q))) return null;
     try {
       const byText = {};
       questions.forEach((q) => { if (Number.isInteger(answers[q.id])) byText[q.id] = q.options[answers[q.id]]; });
@@ -72,6 +73,14 @@
   const forget = (q) => setDropped(q, true);
   const recall = (q) => setDropped(q, false);
 
+  /** "I was right" on a typed answer: the newest report counts the question right. */
+  function markRight(q) {
+    const row = lastGraded && lastGraded.rows.find((r) => r.q === q);
+    if (!row) return;
+    row.right = true;
+    Object.assign(lastGraded.result, summarise(lastGraded.rows));
+  }
+
   function verdict(pct) {
     if (pct >= 90) return 'Excellent, exam ready.';
     if (pct >= 75) return 'Solid. Review the missed items below.';
@@ -104,6 +113,6 @@
       </section>`;
   }
 
-  PDFStudy.testReport = { grade, forget, recall, reportHtml, verdict };
+  PDFStudy.testReport = { grade, forget, recall, markRight, reportHtml, verdict };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.testReport;
 })(typeof window !== 'undefined' ? window : globalThis);

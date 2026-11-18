@@ -148,6 +148,8 @@
     const flat = String(text || '');
     const out = [];
     (cards || []).forEach((card, i) => {
+      // A rule card is asked by working its rule out (worked-questions.js), not as a statement about a subject.
+      if (card.rule) return;
       const kind = factKindOf(card);
       if (!kind || !content().cardIsContent(card) || mt().isFormula(card.back)) return;
       const page = card.pageNumber || card.page || null;

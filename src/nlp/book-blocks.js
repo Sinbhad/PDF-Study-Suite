@@ -190,6 +190,67 @@
     return null;
   }
 
+  /**
+   * Two tables printed side by side come out as one row set whose header starts over part way along
+   * ("p | q | p ∧ q | p | q | p ∨ q"): they are cut apart where the header repeats its first two cells.
+   */
+  function splitSideBySide(t) {
+    const head = (t.header || (t.rows || [])[0] || []).map(plain);
+    for (let k = 2; k <= head.length - 2; k++) {
+      if (!head[0] || head[k] !== head[0] || head[k + 1] !== head[1]) continue;
+      const part = (from, to) => ({ ...t, header: t.header ? t.header.slice(from, to) : t.header, rows: (t.rows || []).map((r) => r.slice(from, to)) });
+      return [part(0, k), ...splitSideBySide(part(k, head.length))];
+    }
+    return [t];
+  }
+
+  /**
+   * The scope's tables, side-by-side pairs cut apart, each with the label its caption gives it ("Table 2")
+   * when a page's captions name exactly as many tables as the page holds, in the same order.
+   */
+  function separateTables(tables, ctx = {}) {
+    const out = (tables || []).flatMap((t) => (t ? splitSideBySide({ ...t }) : []));
+    const byPage = new Map();
+    out.forEach((t) => byPage.set(t.pageNumber, [...(byPage.get(t.pageNumber) || []), t]));
+    for (const [page, list] of byPage) {
+      const captions = ((ctx.captionsByPage && ctx.captionsByPage.get(page)) || []).map(plain).join(' ');
+      const labels = [...captions.matchAll(/\bTABLE\s+([A-Z]?\d+(?:[.\-]\d+)*)\b/gi)].map((m) => `Table ${m[1]}`);
+      if (labels.length === list.length) list.forEach((t, i) => { t.label = labels[i]; });
+    }
+    return out;
+  }
+
+  // A truth table: every body cell a truth value, the first columns its inputs in every combination
+  const TRUTH_CELL_RE = /^[TF01]$/;
+  const INPUT_HEAD_RE = /^\$?(?:\\overline\{)?[A-Za-z](?:_?\{?\d\}?)?\}?\$?$/;
+  function truthTable(rows) {
+    const [head, ...body] = rows;
+    if (body.length < 2 || !body.every((r) => r.length === head.length && r.every((c) => TRUTH_CELL_RE.test(plain(c))))) return false;
+    const inputs = Math.log2(body.length);
+    if (!Number.isInteger(inputs) || inputs < 1 || inputs >= head.length) return false;
+    if (!head.slice(0, inputs).every((c) => INPUT_HEAD_RE.test(plain(c)))) return false;
+    return new Set(body.map((r) => r.slice(0, inputs).map(plain).join(' '))).size === body.length;
+  }
+
+  const CAPTION_MAX_CHARS = 110;
+  const LABEL_START_RE = /^(?:table|figure|fig\.)\s+[A-Z]?\d/i;
+
+  /**
+   * A table's caption: its "Table n" line and the wrapped lines after it, up to the next label. Two captions
+   * printed side by side run together on one line ("TABLE 4 The Truth ... TABLE 5 The Truth ..."): only the
+   * label is kept then. '' when the page's captions do not say which table this is.
+   */
+  function captionOf(captions, label) {
+    const lines = captions.map(plain);
+    const at = label ? lines.findIndex((c) => norm(c).startsWith(norm(label))) : (lines.filter((c) => /^table\s+[\w.-]+/i.test(c)).length === 1 ? lines.findIndex((c) => /^table\s+[\w.-]+/i.test(c)) : -1);
+    const tidy = (s) => s.replace(/^TABLE\b/, 'Table');
+    if (at < 0) return label ? tidy(label) : '';
+    if ((lines[at].match(/\btable\s+[A-Z]?\d/gi) || []).length > 1) return tidy(label || lines[at].match(/^\S+\s+\S+/)[0]);
+    let text = lines[at];
+    for (let k = at + 1; k < lines.length && !LABEL_START_RE.test(lines[k]) && text.length < CAPTION_MAX_CHARS; k++) text += ` ${lines[k]}`;
+    return tidy(text.length > CAPTION_MAX_CHARS ? lines[at] : text);
+  }
+
   /** A table worth showing: its rows line up in two or more columns. */
   function table(t, ctx = {}) {
     if (!t) return null;
@@ -214,11 +275,9 @@
     const wordsIn = (c) => (plain(c).replace(/\$[^$]*\$/g, ' ').match(/[A-Za-z]{2,}/g) || []).length;
     const proseColumn = Array.from({ length: width }, (_, k) => rows.map((r) => wordsIn(r[k])))
       .some((counts) => counts.reduce((a, b) => a + b, 0) / counts.length >= PROSE_CELL_WORDS);
-    if (!header && !proseColumn) return null;
-    const captions = (ctx.captionsByPage && ctx.captionsByPage.get(t.pageNumber)) || [];
-    const tableCaptions = captions.filter((c) => /^table\s+[\w.-]+/i.test(plain(c)));
+    if (!header && !proseColumn && !truthTable(rows)) return null;
     return {
-      title: tableCaptions.length === 1 ? plain(tableCaptions[0]) : '',
+      title: captionOf((ctx.captionsByPage && ctx.captionsByPage.get(t.pageNumber)) || [], t.label),
       rows: rows.slice(0, MAX_TABLE_ROWS + 1),
       more: Math.max(0, rows.length - MAX_TABLE_ROWS - 1),
       page: t.pageNumber,
@@ -243,7 +302,7 @@
     return { linesByBlock, captionsByPage, lines: lines || [] };
   }
 
-  const api = { item, table, context, boxTerm, boxTerms, trimBody, flagOf, repairSwallowed };
+  const api = { item, table, separateTables, context, boxTerm, boxTerms, trimBody, flagOf, repairSwallowed };
   PDFStudy.bookBlocks = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

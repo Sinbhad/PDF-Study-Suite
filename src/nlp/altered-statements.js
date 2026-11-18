@@ -71,10 +71,14 @@
   function alterDirection(statement, text) {
     const words = statement.match(/[A-Za-z-]+/g) || [];
     const found = words.filter((w) => OPPOSITE.has(w.toLowerCase()));
-    if (found.length !== 1) return null;
+    // "None ... up to 5x the highest dose": inside a bound, the opposite word ("lowest") weakens the claim, and a
+    // weaker claim is still true.
+    if (found.length !== 1 || BOUND_RE.test(statement)) return null;
     const word = found[0];
     const opposite = OPPOSITE.get(word.toLowerCase());
-    if (words.some((w) => w.toLowerCase() === opposite)) return null;
+    // The opposite already in the statement in either number ("gram negatives") would print it twice.
+    const one = (w) => w.toLowerCase().replace(/s$/, '');
+    if (words.some((w) => one(w) === one(opposite))) return null;
     const to = /^[A-Z]/.test(word) ? opposite[0].toUpperCase() + opposite.slice(1) : opposite;
     const altered = statement.replace(new RegExp(`(?<![A-Za-z-])${word}(?![A-Za-z-])`), to);
     // The scope saying the altered phrase (the opposite with the word after it) would make it true somewhere.

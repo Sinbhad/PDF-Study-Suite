@@ -5,6 +5,7 @@
  *                                       finished quiz, and on a fresh run adds the line
  *                                       "Last time: 7/10 on 12 Nov." with "Retry the 3 you missed"
  *   dropQuestion(q)                     a question flagged as bad stops counting in the saved result
+ *   overridden(q, answer, saved)        "I was right" on a typed answer: kept for review, counted right once saved
  * The missed questions are stored whole, so the retry works even when the next quiz is generated
  * differently. run: { answers, retrying } from the view (see quiz-card.js).
  */
@@ -56,6 +57,27 @@
     return () => PDFStudy.docSession.change(() => Object.assign(attempt, JSON.parse(before)), USER);
   }
 
+  /**
+   * "I was right" on a typed answer: the answer is kept for a check of the question (docState.addOverride), and when
+   * the run was saved already (`saved`: a finished quiz, a submitted test) its saved result counts the question right.
+   */
+  function overridden(q, answer, saved) {
+    if (!PDFStudy.docSession || !app()) return;
+    const K = PDFStudy.studyKeys;
+    const key = K.questionKey(q);
+    PDFStudy.docSession.change((state) => {
+      PDFStudy.docState.addOverride(state, { questionKey: key, source: K.sourceText(q), answer: String(q.answer || ''), typed: String((answer && answer.typed) || '') });
+      if (!saved) return;
+      const mine = state.attempts.filter((a) => a.kind === kindNow() && a.scopeId === scopeId());
+      const attempt = mine[mine.length - 1];
+      const row = attempt && attempt.rows.find((r) => r.key === key);
+      if (!row) return;
+      row.right = true;
+      attempt.score = attempt.rows.filter((r) => r.right).length;
+      attempt.missed = (attempt.missed || []).filter((m) => K.questionKey(m) !== key);
+    }, USER);
+  }
+
   function retryStored(container, kind, missed) {
     nextRunIsStoredRetry = true; // read by drawn() during the render below
     if (kind === 'quiz') {
@@ -105,6 +127,6 @@
     if (fresh && !run.retrying && !storedRetries.has(run.answers)) lastTimeLine(container, kind);
   }
 
-  PDFStudy.attemptLog = { record, drawn, dropQuestion };
+  PDFStudy.attemptLog = { record, drawn, dropQuestion, overridden };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.attemptLog;
 })(typeof window !== 'undefined' ? window : globalThis);

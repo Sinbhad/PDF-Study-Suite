@@ -158,7 +158,9 @@ ${slide.prompt}` : title, back: dotList(steps, 6), ...ctx, category: 'Worked Exa
     const contrasts = dep('contrastCards', './contrast-cards.js').fromCards([...groups.definition, ...groups.concept], norm);
     const ordered = [...groups.definition, ...groups.stem, ...groups.qa, ...groups.worked, ...groups.concept, ...contrasts, ...groups.overview];
     // Every card leaves with subject, sourceKind and page (card-fields.js); the slide's defaults sit under FIELDS.
-    return quality.dedupe(ordered).map((c, i) => {
+    // A back that does not answer its front (circular, a statement for a label, only "Etc." left) is no card.
+    const answers = dep('cardAnswers', './card-answers.js');
+    return quality.dedupe(ordered.map(answers.answered).filter(Boolean)).map((c, i) => {
       const { [FIELDS]: fields, ...card } = c;
       return { id: `fc-${i + 1}`, ...cardFields.finish(card, fields || {}) };
     });

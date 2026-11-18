@@ -35,7 +35,8 @@
   const TEST_VARIANT = 1;
   const DEFAULT_QUIZ_LENGTH = 10;
   const REVIEW_SECTION = 'Review';
-  const isSelfGraded = (q) => q.type === 'reveal' || !Array.isArray(q.options) || q.options.length < 2;
+  // A typed question has no options but is checked by the app (typed-check.js): it is not self-graded.
+  const isSelfGraded = (q) => q.type === 'reveal' || (q.type !== 'typed' && (!Array.isArray(q.options) || q.options.length < 2));
 
   /** The quiz the app shows for this scope (its length and seed, when the caller says them). */
   function scopeQuiz(input, opts) {
@@ -110,7 +111,10 @@
     // A section of a deck (or of mind-map pages) is a list of slides: its text is their titles and lines.
     const text = Array.isArray(input) ? input.map((s) => [s.title, ...(s.bullets || [])].join(' ')).join(' ') : input;
     const flat = norm(text);
-    return cards.filter((c) => flat.includes(norm(c.back).slice(0, 40)));
+    // A rule card's back is written out by the card (a law with its number and page): the text it quotes, or
+    // the notation it states, is what the section prints.
+    const printed = (c) => (c.rule ? c.quote || c.rule.lhsTex || c.back : c.back);
+    return cards.filter((c) => flat.includes(norm(printed(c)).slice(0, 40)));
   }
 
   /**
@@ -149,7 +153,7 @@
     const gate = dep('quizAssembly', './quiz-assembly.js').createSet(Infinity, {});
     const keep = (q) => {
       const key = norm(q.question) + '|' + norm(q.answer);
-      if (seen.has(key) || (!isSelfGraded(q) && q.options.length < 2)) return false;
+      if (seen.has(key) || (!isSelfGraded(q) && q.type !== 'typed' && q.options.length < 2)) return false;
       if (!gate.accept(q)) return false;
       seen.add(key);
       return true;
@@ -178,7 +182,14 @@
     return { title: scopeTitle, sections: sectionsOut, questions, total: questions.length, skills };
   }
 
-  /** answers: { [questionId]: chosenOptionString | 'got' | 'missed' } or an array aligned with test.questions. */
+  /** A typed answer: the text, or { typed, override } when the student marked a rejected answer as right. */
+  function typedRight(q, given) {
+    if (given && typeof given === 'object') return Boolean(given.override) || typedRight(q, given.typed);
+    const tc = dep('typedCheck', './typed-check.js');
+    return Boolean(tc) && tc.check(q, given).correct;
+  }
+
+  /** answers: { [questionId]: chosenOptionString | typedText | 'got' | 'missed' } or an array aligned with test.questions. */
   function gradeTest(test, answers = {}) {
     const qs = (test && (test.questions || (test.sections || []).flatMap((s) => s.questions))) || [];
     const bySkill = {};
@@ -189,7 +200,7 @@
     qs.forEach((q, i) => {
       const given = Array.isArray(answers) ? answers[i] : answers[q.id];
       const answered = given !== undefined && given !== null;
-      const ok = answered && (isSelfGraded(q) ? given === 'got' : same(given, q.answer));
+      const ok = answered && (isSelfGraded(q) ? given === 'got' : q.type === 'typed' ? typedRight(q, given) : same(given, q.answer));
       for (const [map, key] of [[bySkill, q.skill || 'definition'], [bySection, q.section || 'Test']]) {
         map[key] = map[key] || { correct: 0, total: 0 };
         map[key].total++;

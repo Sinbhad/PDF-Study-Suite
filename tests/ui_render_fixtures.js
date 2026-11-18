@@ -183,6 +183,27 @@ const gradeMixed = tr.grade(mixed.raw, mixed.sections[0].questions, { q1: 0, r1:
 check('test keeps reveal questions, drops broken ones, self-grade scores', mixed.sections[0].questions.length === 2 && tv.count(mixed.raw, 'Ch 2') === 2 && gradeMixed.score === 2 && tr.grade(mixed.raw, mixed.sections[0].questions, { q1: 0, r1: 'missed' }).missed.length === 1, '');
 check('test grading + missed tracking', gradeOk.score === 1 && gradeOk.percent === 100 && gradeMiss.score === 0 && gradeMiss.missed.length === 1 && gradeMiss.bySkill.formula.total === 1, '');
 
+// 10c. Typed answers: a labelled field with its hint and Check (quiz), kept as typed (test), then verdict and "I was right"
+require(path.join(__dirname, '..', 'src', 'nlp', 'typed-check.js'));
+const tcard = ui('typed-card.js');
+const ty = { id: 't1', type: 'typed', form: 'term', question: 'Type the missing term:\n"A rotating part that moves the fluid is called a(n) ________."', answer: 'impeller',
+  accept: [], others: ['casing'], options: [], explanation: 'Source statement: "A rotating part that moves the fluid is called an impeller."', page: 7 };
+check('typed validity: not a reveal, checked by the app', qc.isTyped(ty) && qc.isValid(ty) && !qc.isReveal(ty) && !qc.isValid({ ...ty, answer: '' }), '');
+let tyHtml = qc.questionCard(ty, 1, { reveal: false, locked: false });
+check('typed field is labelled, described by its hint, with Check', /<label class="q-typed-label" for="typed-t1">Your answer<\/label>/.test(tyHtml) && /id="typed-t1"/.test(tyHtml) &&
+  /aria-describedby="typed-t1-hint"/.test(tyHtml) && /id="typed-t1-hint">One term</.test(tyHtml) && /type="submit"[^>]*>Check</.test(tyHtml), tyHtml);
+check('typed field: no autocomplete, autocapitalise or spellcheck', /autocomplete="off"/.test(tyHtml) && /autocapitalize="off"/.test(tyHtml) && /spellcheck="false"/.test(tyHtml), tyHtml);
+tyHtml = qc.questionCard(ty, 1, { picked: { typed: 'impeler' }, reveal: false, locked: false, typedMode: 'sheet' });
+check('typed on the test sheet: kept as typed, no Check', /value="impeler"/.test(tyHtml) && !/q-typed-check/.test(tyHtml) && /kept until you submit/.test(tyHtml), tyHtml);
+tyHtml = qc.questionCard(ty, 1, { picked: { typed: 'impeler' }, reveal: true, locked: true });
+check('typed verdict: a slip is right and says the spelling', /Correct — spelled impeller/.test(tyHtml) && !/data-override-qid/.test(tyHtml) && qc.isCorrect(ty, { typed: 'impeler' }), tyHtml);
+tyHtml = qc.questionCard(ty, 1, { picked: { typed: 'casing' }, reveal: true, locked: true });
+check('typed verdict: wrong shows the answer, the source and "I was right"', /Not quite/.test(tyHtml) && /The answer is <strong>impeller<\/strong>/.test(tyHtml) &&
+  /Source statement/.test(tyHtml) && /data-override-qid="t1"/.test(tyHtml) && /data-jump-page="7"/.test(tyHtml) && !qc.isCorrect(ty, { typed: 'casing' }), tyHtml);
+check('typed override counts as right', qc.isCorrect(ty, { typed: 'casing', override: true }) && /Counted as right/.test(qc.questionCard(ty, 1, { picked: { typed: 'casing', override: true }, reveal: true, locked: true })), '');
+check('typed answers grade in the test report', tr.grade(null, [ty, qSample], { t1: { typed: 'Impellers' }, q1: 0 }).score === 2 && tr.grade(null, [ty], { t1: { typed: 'pump' } }).missed.length === 1, '');
+check('typed text is escaped', /value="&lt;b&gt;"/.test(qc.questionCard(ty, 1, { picked: { typed: '<b>' }, reveal: false, locked: false })) && tcard.textOf({ typed: 'x' }) === 'x', '');
+
 // 11. Demo data: CS Algorithms slides + Calculus textbook
 const ds = demo.createDemoSlidesPdf();
 const db = demo.createDemoBookPdf();

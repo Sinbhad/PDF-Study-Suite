@@ -193,7 +193,10 @@
       pages.push(pageCache.get(pNum));
     }
 
-    const parsed = { pdfDoc, numPages, pages, pageCache, outline, isLazy: !isSmallDoc };
+    // The page numbers printed in the book, when the PDF records them (printed-pages.js)
+    const pp = mod('printedPages', './printed-pages.js');
+    const pageLabels = pp ? await pp.labelsOf(pdfDoc) : null;
+    const parsed = { pdfDoc, numPages, pages, pageCache, outline, isLazy: !isSmallDoc, pageLabels };
     // parsed.inkSummary: typed / needs reading / empty page counts, recounted as pages load (ink-summary.js)
     const summary = mod('inkSummary', './ink-summary.js');
     if (summary) {

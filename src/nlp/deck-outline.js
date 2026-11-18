@@ -43,13 +43,31 @@
   const norm = (s) => plain(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const wordCount = (s) => plain(s).split(/\s+/).filter(Boolean).length;
 
+  /**
+   * Two narrow columns the extraction read as one: every cell holds the same number of values ("1:200 <1:100")
+   * and the header as many names ("Icterohaemorragiae Bratislava"). Such a column is cut back into its columns.
+   */
+  function unpackColumns(rows) {
+    if (rows.length < 3) return rows;
+    const width = Math.max(...rows.map((r) => r.length));
+    const tokens = (c) => plain(c).split(' ').filter(Boolean);
+    const value = (w) => !/[A-Za-z]{2,}/.test(w);
+    const splits = Array.from({ length: width }, (_, k) => {
+      const n = tokens(rows[0][k]).length;
+      if (n < 2 || !tokens(rows[0][k]).every((w) => /^[A-Za-z]/.test(w))) return 1;
+      return rows.slice(1).every((r) => tokens(r[k]).length === n && tokens(r[k]).every(value)) ? n : 1;
+    });
+    if (splits.every((n) => n === 1)) return rows;
+    return rows.map((r) => r.flatMap((c, k) => (splits[k] > 1 ? tokens(c) : [c])));
+  }
+
   /** Table rows from the extractor's table (rows or header + rows), a table block, or " | "-joined bullets. */
   function tableOf(raw, slide) {
     const sources = [raw && raw.table, slide.table].concat((raw && raw.blocks) || []).concat((raw && raw.tables) || []);
     for (const t of sources) {
       if (!t || (t.kind && t.kind !== 'table')) continue;
       const rows = Array.isArray(t) ? t : (t.header ? [t.header] : []).concat(t.rows || []);
-      const clean = rows.filter((r) => Array.isArray(r) && r.some((c) => plain(c)));
+      const clean = unpackColumns(rows.filter((r) => Array.isArray(r) && r.some((c) => plain(c))));
       if (clean.length) return { rows: clean.slice(0, MAX_TABLE_ROWS + 1), more: Math.max(0, clean.length - MAX_TABLE_ROWS - 1) };
     }
     const piped = (slide.bullets || []).filter((b) => (String(b).match(/\s\|\s/g) || []).length >= 1);
@@ -136,8 +154,31 @@
    * The slide's units in slide order: the first MAX_UNITS shown (a flattened text box or a line cut off
    * mid-phrase is held instead), every other content line held back for "N more on this slide".
    */
+  /**
+   * A line that is only names printed in two columns and read across as one ("Streptococcus equi zooepidemicus
+   * Staphylococcus spp."): each name ("Genus species") is a line of its own again.
+   */
+  function splitNameRuns(nodes) {
+    return nodes.flatMap((n) => {
+      const words = plain(n.text).split(' ');
+      const nameWord = (w) => /^[A-Z][a-z]+$/.test(w) || /^[a-z]+\.?$/.test(w);
+      if (words.length < 4 || !words.every(nameWord) || words.some((w) => NAME_JOIN_RE.test(w))) return [n];
+      const names = [];
+      words.forEach((w, i) => {
+        if (/^[A-Z]/.test(w) && i > 0 && /^[a-z]/.test(words[i - 1])) names.push([w]);
+        else if (names.length) names[names.length - 1].push(w);
+        else names.push([w]);
+      });
+      const binomial = names.every((x) => x.length >= 2 && /^[A-Z]/.test(x[0]) && x.slice(1).every((w) => /^[a-z]/.test(w)));
+      return names.length >= 2 && binomial ? names.map((x) => ({ ...n, text: x.join(' ') })) : [n];
+    });
+  }
+  // Running words never found inside a list of names
+  const NAME_JOIN_RE = /^(?:and|or|of|the|a|an|in|to|with|for|is|are|by|on|from|as)$/;
+
   function pickBullets(raw, slide, seen, read, furniture) {
-    const { nodes: all, size } = read || readSlide(raw, slide);
+    const { nodes: rawNodes, size } = read || readSlide(raw, slide);
+    const all = splitNameRuns(rawNodes);
     const qaText = new Set((slide.qa || []).flatMap((q) => [norm(q.question), norm(q.answer)]));
     // A recurring badge is dropped unless lines nest under it (then it is a recurring heading, kept).
     // A bulleted item ("• albendazole" listed on several slides) is content, never a badge.
@@ -145,8 +186,10 @@
     const content = all.filter((n, i) => !qaText.has(norm(n.text)) && !/\s\|\s/.test(n.text) && !badge(n, i));
     const top = content.length ? Math.min(...content.map((n) => n.level)) : 0;
     // A nested line is judged against the line above it at a shallower level.
+    // ... and only by a line in its own column: labels set beside a figure are not sub-points of the text
+    const sameColumn = (a, b) => a.column === null || b.column === null || a.column === undefined || b.column === undefined || a.column === b.column;
     const kept = content.filter((n, i) => {
-      const parent = n.level > top ? content.slice(0, i).reverse().find((p) => p.level < n.level) : null;
+      const parent = n.level > top ? content.slice(0, i).reverse().find((p) => p.level < n.level && sameColumn(p, n)) : null;
       return !su().lineNoise(n, size, parent && parent.fontSize);
     });
     let units = su().units(kept).map((u) => ({
@@ -200,13 +243,26 @@
     const table = cleanTable(tableOf(raw, slide), furniture);
     const read = readSlide(raw, slide);
     const picked = table && table.fromBullets ? { shown: [], more: [] } : pickBullets(raw, slide, seen, read, furniture);
+    // A slide titled with a whole statement shows that statement as its first point
+    if (slide.statement && !picked.shown.some((b) => norm(b.text) === norm(slide.statement))) picked.shown.unshift({ text: slide.statement, children: [], more: [] });
     const qa = (slide.qa || []).filter((q) => q.question && q.answer).map((q) => ({ question: q.question, answer: q.answer }));
     const pages = Array.isArray(raw && raw.pages) && raw.pages.length ? raw.pages : [slide.slideNumber];
     const held = picked.more.reduce((n, b) => n + 1 + b.children.length + b.more.length, 0) + picked.shown.reduce((n, b) => n + b.more.length, 0);
-    return { page: Math.max(...pages.filter(Number.isFinite), slide.slideNumber), slide: slide.slideNumber, title: read.title, bullets: picked.shown, more: picked.more, held, table, qa };
+    return { page: Math.max(...pages.filter(Number.isFinite), slide.slideNumber), slide: slide.slideNumber, title: slide.statement ? slide.title : read.title, bullets: picked.shown, more: picked.more, held, table, qa };
   }
 
   const hasContent = (e) => e.bullets.length || e.more.length || e.table || e.qa.length;
+
+  // A title of this many words or more, mostly running words, states something: it is a point, not a title.
+  const STATEMENT_TITLE_WORDS = 8;
+  const STATEMENT_HEAD_WORDS = 5;
+  function statementTitle(title) {
+    const t = plain(title).replace(/\$[^$]*\$/g, 'x');
+    const words = t.split(' ').filter(Boolean);
+    if (words.length < STATEMENT_TITLE_WORDS || /\?\s*$/.test(t)) return false;
+    const running = words.filter((w) => /^[a-z]/.test(w)).length;
+    return running / words.length >= 0.45 && /\b(?:is|are|was|were|can|could|may|must|should|will|would|serve|cause|causes|need|needs)\b/.test(t);
+  }
 
   /**
    * "What this lecture covers": each objective once. Several questions run together on one line are split;
@@ -261,10 +317,23 @@
     const model = opts.model || dep('slideModel', './slide-model.js').normalize(rawSlides);
     const rawBy = new Map((rawSlides || []).filter(Boolean).map((s) => [s.slideNumber, s]));
     // Titles repaired before grouping, so a slide is filed under its own subject.
+    let previous = '';
     const titled = model.slides.map((s) => {
       const raw = rawBy.get(s.slideNumber) || {};
       const fixed = readSlide(raw, s).title;
-      return { ...s, title: fixed || s.title, rawTitle: s.title, nestedBullets: raw.nestedBullets };
+      const out = { ...s, title: fixed || s.title, rawTitle: s.title, nestedBullets: raw.nestedBullets };
+      // A title that is a whole statement ("Serovar Canicola: Coyotes +/- javelina could serve as reservoir
+      // species", "Since the microscopic lesions ... are similar, ... testing is critical") is the slide's point:
+      // the slide is filed under the words before its colon, or with the slide before it
+      if (statementTitle(out.title)) {
+        const head = plain(out.title).split(/:\s+/)[0];
+        out.statement = plain(out.title);
+        out.title = head !== plain(out.title) && wordCount(head) <= STATEMENT_HEAD_WORDS ? head : previous || head;
+        if (out.kind === 'section') out.kind = 'content';
+        if (!(out.bullets || []).length) out.bullets = [out.statement];
+      }
+      if (out.kind !== 'title') previous = out.title;
+      return out;
     });
     const grouped = dep('deckSections', './deck-sections.js').group(titled);
     const covers = coversOf(grouped.covers, rawBy);
@@ -278,7 +347,14 @@
         return { title: tp.title, page: slides.length ? slides[0].page : tp.slides[0].slideNumber, slides };
       }).filter((tp) => tp.slides.length),
     })).filter((sec) => sec.topics.length);
-    sections.forEach((sec) => { sec.page = sec.topics[0].page; });
+    sections.forEach((sec) => {
+      sec.page = sec.topics[0].page;
+      // A section whose one topic is a sibling kind of the same thing ("Caudal Epidural" divider slides, then
+      // only "Lumbosacral Epidural" points: same head word, another kind) is that topic: its points are never
+      // shown under the name of the other kind
+      const [a, b] = [norm(sec.title).split(' '), sec.topics.length === 1 ? norm(sec.topics[0].title).split(' ') : []];
+      if (b.length && a.length > 1 && b.length > 1 && a[a.length - 1] === b[b.length - 1] && a[0] !== b[0]) sec.title = sec.topics[0].title;
+    });
     return {
       kind: 'deck',
       lead: `Outline of ${rangeLabel(model.slides)}: each topic with its points, worded as on the slides.`,

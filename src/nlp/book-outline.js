@@ -29,13 +29,20 @@
   const NUMBERED_RE = /^(?:\d+(?:[.\-]\d+)+)\s+\S/;
   // "A **surrogate key** is an artificial column ...", "**Normalization** is the process of ..."
   const BOLD_DEFINITION_RE = /^(?:(?:An?|The)\s+)?\*\*([^*$]{3,40})\*\*,?\s+(?:is|are|refers\s+to|means)\s+(?:an?|the|one|any|said|called|defined|used|any)\b/;
+  const BOLD_NAMED_RE = /^(?:An?|The)\s[^*$]{8,}?\b(?:is|are)\s+(?:(?:called|known\s+as|termed|referred\s+to\s+as)\s+)?(?:an?\s+|the\s+)?\*\*([^*$]{3,40})\*\*\s*\.?$/;
 
   const norm = (s) => String(s || '').toLowerCase().replace(/\*\*|__|\$/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const titleCase = (t) => (/^[a-z]{2}/.test(t) ? t[0].toUpperCase() + t.slice(1) : t);
 
-  function rangeLabel(start, end) {
+  /** "pages 146–168 (PDF pages 188–210)" when the book prints its own numbers, else "pages 188–210". */
+  function rangeLabel(start, end, printed) {
     if (!start) return 'this selection';
-    return end && end > start ? `pages ${start}–${end}` : `page ${start}`;
+    const span = (a, b) => (b && b !== a ? `pages ${a}–${b}` : `page ${a}`);
+    const pdf = span(start, end && end > start ? end : null);
+    if (printed && printed.start && (printed.end || !(end > start))) {
+      return `${span(printed.start, end > start ? printed.end : null)} (PDF ${pdf})`;
+    }
+    return pdf;
   }
 
   /** Sentences of a paragraph, each with the page its first words sit on. */
@@ -59,16 +66,25 @@
     return out;
   }
 
+  /**
+   * A definition without the example the author tucked into it: "The variable on the left, here
+   * NumberOfBoxes, is called the determinant." -> "The variable on the left is called the determinant."
+   */
+  const withoutAside = (text) => String(text || '').replace(/,\s+(?:here|say|for\s+example|for\s+instance|e\.g\.)\s+[^,.;]{1,40},\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+
   /** A mined definition is kept only when it reads on its own and really names its term. */
   function usableDefinition(d) {
     const st = dep('summaryStatements', './summary-statements.js');
     const sn = dep('stemNoise', './stem-noise.js');
     const kt = dep('keyTerms', './key-terms.js');
     const term = String(d.term || '').trim();
+    const text = withoutAside(d.definition);
     if (!term || term.split(/\s+/).length > TERM_MAX_WORDS || (sn && sn.isLabelTerm(term)) || (kt && !kt.realTerm(term))) return false;
-    if (!norm(d.definition).includes(norm(term).split(' ')[0])) return false;
-    if (/\b(?:here|for\s+example|for\s+instance|of\s+this\s+type|this\s+condition)\b/i.test(d.definition)) return false;
-    const reason = st.rejectReason(d.definition);
+    if (!norm(text).includes(norm(term).split(' ')[0])) return false;
+    if (/\b(?:here|for\s+example|for\s+instance|of\s+this\s+type|this\s+condition)\b/i.test(text)) return false;
+    // An example worked through before the term is named ("If, say, 10,000 rows ... This is called X") defines nothing
+    if (/^(?:If|Suppose|Consider|Imagine|When)\b[^.]*,/.test(text) && /\b(?:this|that)\s+(?:is|was)\s+(?:called|known)\b/i.test(text)) return false;
+    const reason = st.rejectReason(text);
     return !reason || reason === 'length';
   }
 
@@ -89,6 +105,7 @@
     return out;
   }
 
+  const QUALIFIED_NEXT_RE = /^(?:However|But|Yet|Nevertheless|Still|On\s+the\s+other\s+hand)\b/;
   const CODE_MIN_LINES = 2;
   const CODE_MAX_LINES = 10;
   // Program statements, not program output or sample data ("32 | 54 | 67.5")
@@ -119,10 +136,31 @@
       if (rows.some((r) => /[a-z=]\.\s+[A-Z]/.test(r) || /^\s*[A-Za-z]+:\s*$/.test(r))) continue;
       const prev = paragraphs[i - 1];
       const lead = prev && prev.kind === 'prose' ? String(prev.text).split(/(?<=[.!?])\s+/).pop() : '';
-      const title = /:\s*$/.test(lead) && lead.split(/\s+/).length <= 20 ? lead.replace(/:\s*$/, '') : 'Code';
+      // The sentence that introduces it, when it is one ("Here is the loop:"), never the tail of one ("named values:")
+      const sentence = /^[A-Z]/.test(lead) && lead.split(/\s+/).length >= 4 && lead.split(/\s+/).length <= 20 && /:\s*$/.test(lead);
+      const title = sentence ? lead.replace(/:\s*$/, '') : 'Code';
       return { title, body: ['```', ...rows, '```'].join('\n'), page: p.page, kind: 'code' };
     }
     return null;
+  }
+
+  // A box sentence that hands over to a displayed formula: "... ordered pairs (a, b). Hence," / "... as follows:"
+  const LEADS_TO_DISPLAY_RE = /(?:\b(?:Hence|Thus|That\s+is|i\.e\.|So|Therefore|In\s+symbols|we\s+have|as\s+follows)\s*[,:]?|:)\s*$/i;
+  const DISPLAY_RE = /^\$\$[\s\S]+\$\$$|^\$[^$]+\$\.?$/;
+
+  /**
+   * A definition or theorem box whose text ends by handing over to a displayed formula keeps that formula:
+   * the display is printed after the box, so the extraction filed it as the next paragraph.
+   */
+  function withDisplay(it, block, paragraphs) {
+    if (!it || !LEADS_TO_DISPLAY_RE.test(String(it.body || '').trim())) return it;
+    let at = -1;
+    paragraphs.forEach((p, i) => { if (p.blockId && p.blockId === block.id) at = i; });
+    const next = at >= 0 ? paragraphs[at + 1] : null;
+    const shown = next && String(next.text || '').trim();
+    if (!shown || !DISPLAY_RE.test(shown) || bb().flagOf(shown)) return it;
+    const display = shown.startsWith('$$') ? shown : `$$${shown.replace(/^\$|\$\.?$/g, '')}$$`;
+    return { ...it, body: `${String(it.body).trim()}\n${display}` };
   }
 
   function buildSection(sec, ctx) {
@@ -144,7 +182,7 @@
       return false;
     };
     for (const b of ctx.blocksBySection.get(sec) || []) {
-      const it = bb().item(b, ctx.blockCtx);
+      const it = withDisplay(bb().item(b, ctx.blockCtx), b, sec.paragraphs);
       if (!it || (!it.body && !it.title) || seenBody(it)) continue;
       // The paragraph that holds the block's own text is shown as the block, not again as statements.
       const probe = norm(b.body).slice(0, 24);
@@ -156,7 +194,7 @@
     const sentences = [];
     prose.forEach((p) => {
       if (used.has(norm(p.text))) return;
-      sentencesOf(p, tok.splitSentences).forEach((s, k) => sentences.push({ ...s, indexInParagraph: k }));
+      sentencesOf(p, tok.splitSentences).forEach((s, k, all) => sentences.push({ ...s, indexInParagraph: k, followedBy: all[k + 1] ? all[k + 1].text : '' }));
     });
 
     const definitions = [];
@@ -169,7 +207,7 @@
       if (!key || ctx.seenTerms.has(key) || !usableDefinition(d)) continue;
       ctx.seenTerms.add(key);
       const src = sentences.find((s) => norm(s.text).includes(norm(d.definition).slice(0, 40))) || sentences.find((s) => norm(s.text).includes(norm(d.term)));
-      definitions.push({ term: titleCase(d.term.replace(/\*\*/g, '').trim()), text: d.definition, page: src ? src.page : sec.page });
+      definitions.push({ term: titleCase(d.term.replace(/\*\*/g, '').trim()), text: withoutAside(d.definition), page: src ? src.page : sec.page });
       if (src) used.add(norm(src.text));
     }
 
@@ -178,13 +216,15 @@
     // column ..."), which the general miner may not read as a definition
     for (const s of sentences) {
       if (used.has(norm(s.text))) continue;
-      const m = String(s.text).match(BOLD_DEFINITION_RE);
+      // ... or named in bold at the end of a sentence that describes it ("The variable on the left is called
+      // the **determinant**.", "The technical name for ... is **transitive dependency**.")
+      const m = String(s.text).match(BOLD_DEFINITION_RE) || String(s.text).match(BOLD_NAMED_RE);
       if (!m) continue;
       const term = titleCase(m[1].trim());
       const key = dm.termKey(term);
-      if (!key || ctx.seenTerms.has(key) || !usableDefinition({ term, definition: s.text })) continue;
+      if (!key || ctx.seenTerms.has(key) || !usableDefinition({ term, definition: s.text.replace(/\*\*/g, '') })) continue;
       ctx.seenTerms.add(key);
-      definitions.push({ term, text: s.text.replace(/\*\*/g, ''), page: s.page });
+      definitions.push({ term, text: withoutAside(s.text.replace(/\*\*/g, '')), page: s.page });
       used.add(norm(s.text));
     }
 
@@ -215,10 +255,26 @@
     }
 
     const tables = (ctx.tablesBySection.get(sec) || []).map((t) => bb().table(t, ctx.blockCtx)).filter(Boolean);
+    // A numbered list of laws the book prints in two columns, with the laws' names beside some rows, is shown
+    // as that table rather than flattened into one list (book-law-table.js)
+    const lawTable = dep('bookLawTable', './book-law-table.js');
+    const secPages = ctx.pages.filter((p) => p && p.pageNumber >= sec.page && p.pageNumber <= (sec.endPage || sec.page));
+    for (const f of formulas.slice()) {
+      if (!f.numbered) continue;
+      const paired = prose.some((p) => /\bduals?\b|\bduality\b/i.test(p.text));
+      const caption = ((ctx.blockCtx.captionsByPage && ctx.blockCtx.captionsByPage.get(f.page)) || []).map((c) => String(c).trim()).find((c) => /^table\s+[\w.-]+$/i.test(c));
+      const laid = lawTable && lawTable.build(secPages, f.numbered, { paired, title: [caption, f.title].filter(Boolean).join(' ') });
+      delete f.numbered;
+      if (!laid) continue;
+      formulas.splice(formulas.indexOf(f), 1);
+      tables.unshift(laid);
+    }
     const terms = definitions.map((d) => norm(d.term)).concat(blocks.flatMap((b) => b.terms.map(norm)));
     const headingWords = st.headingWords(sec.title);
     const candidates = sentences
-      .filter((s) => !used.has(norm(s.text)) && !st.rejectReason(s.text))
+      // A sentence the author qualifies straight away ("... need not be concerned ... However, when you copy
+      // ...") would mislead on its own
+      .filter((s) => !used.has(norm(s.text)) && !st.rejectReason(s.text) && !QUALIFIED_NEXT_RE.test(s.followedBy || ''))
       .map((s) => ({ ...s, score: st.score(s.text, { indexInParagraph: s.indexInParagraph, terms, headingWords }) }));
     const words = prose.reduce((n, p) => n + p.text.split(/\s+/).length, 0);
     const items = blocks.length + definitions.length + formulas.length;
@@ -242,59 +298,6 @@
       }
       sec.statements = chosen.sort((a, b) => sec.candidates.indexOf(a) - sec.candidates.indexOf(b)).map((c) => ({ text: c.text, page: c.page }));
     });
-  }
-
-  /**
-   * Each block goes under the heading whose paragraphs the extraction filed it in (blockId), else under the
-   * heading whose text holds the block's opening words, else under the last heading on or before its page.
-   */
-  function placeBlocks(split, blocks, pages) {
-    const out = new Map();
-    for (const b of blocks) {
-      const probe = norm(`${b.title || ''} ${b.body || ''}`).slice(0, 40);
-      // A note in the margin is read after its page's main text, so it is filed by where it is printed:
-      // under the last heading above it on its page (or on an earlier page)
-      const byPosition = b.kind === 'key-concept' && b.bbox ? besideHeading(split, pages, b.bbox) : null;
-      const byId = byPosition || (b.id && split.find((s) => s.paragraphs.some((p) => p.blockId === b.id)));
-      const byText = !byId && probe.length >= 12 && split.find((s) => s.paragraphs.some((p) => norm(p.text).includes(probe.slice(0, 24))));
-      const home = byId || byText || byPage(split, b.pageNumber || b.page);
-      if (!home) continue;
-      if (!out.has(home)) out.set(home, []);
-      out.get(home).push(b);
-    }
-    return out;
-  }
-
-  /** The section whose heading is printed last above a margin note's top (same page or an earlier one). */
-  function besideHeading(split, pages, box) {
-    const yOf = (s) => {
-      const page = (pages || []).find((p) => p && p.pageNumber === s.page);
-      const line = page && (page.lines || []).find((l) => !l.isMargin && norm(l.text) === norm(s.title));
-      return line && Number.isFinite(line.topY) ? line.topY : null;
-    };
-    let home = null;
-    for (const s of split) {
-      if (!s.title || s.page > box.page) continue;
-      if (s.page < box.page) { home = s; continue; }
-      const y = yOf(s);
-      if (y === null) return null; // a heading on the note's page whose place is unknown: do not guess
-      if (y <= box.top + 2) home = s;
-    }
-    return home;
-  }
-
-  /** The last heading that starts on or before `page`; a table on the first page goes to the first heading. */
-  const byPage = (split, page) => [...split].reverse().find((s) => s.page <= (page || 0)) || split[0];
-
-  function placeTables(split, tables) {
-    const out = new Map();
-    for (const t of tables || []) {
-      const home = split.find((s) => s.paragraphs.some((p) => p.kind === 'table' && p.page === t.pageNumber && norm(p.text).includes(norm((t.rows && t.rows[0] && t.rows[0][0]) || '').slice(0, 20)))) || byPage(split, t.pageNumber);
-      if (!home) continue;
-      if (!out.has(home)) out.set(home, []);
-      out.get(home).push(t);
-    }
-    return out;
   }
 
   /** Terms the author set in bold inside what the outline shows: "A **relational operator** tests ...". */
@@ -322,10 +325,14 @@
     const split = dep('bookSections', './book-sections.js').split(text, { pages: opts.pages, startPage: opts.startPage, lines: opts.lines });
     // Each section runs to the page before the next section starts.
     split.forEach((s, i) => { s.endPage = split[i + 1] ? split[i + 1].page : opts.endPage || s.page; });
+    const place = dep('bookPlacement', './book-placement.js');
+    const blockCtx = bb().context(opts.lines);
+    // Tables printed side by side are read as one row set: each is placed and shown on its own
+    const tables = bb().separateTables(opts.tables || [], blockCtx);
     const ctx = {
-      blocksBySection: placeBlocks(split, opts.didacticBlocks || [], opts.pages),
-      tablesBySection: placeTables(split, opts.tables),
-      blockCtx: bb().context(opts.lines),
+      blocksBySection: place.blocks(split, opts.didacticBlocks || [], opts.pages),
+      tablesBySection: place.tables(split, tables, (t) => t.label || ''),
+      blockCtx, pages: opts.pages || [],
       seenTerms: new Set(), seenFormulas: new Set(), seenBlocks: new Set(),
     };
     // A chapter's opening pages before its first numbered section ("2.1 Sets") preview the whole chapter
@@ -356,13 +363,13 @@
     boldTerms(sections, text).forEach(addTerm);
     return {
       kind: 'book',
-      lead: `Key points from ${rangeLabel(opts.startPage, opts.endPage)}, in the book's own words.`,
+      lead: `Key points from ${rangeLabel(opts.startPage, opts.endPage, opts.printed)}, in the book's own words.`,
       sections,
       terms,
     };
   }
 
-  const api = { build, usableDefinition, rangeLabel };
+  const api = { build, usableDefinition, withoutAside, rangeLabel };
   PDFStudy.bookOutline = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

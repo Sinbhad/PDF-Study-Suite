@@ -74,7 +74,7 @@
 
   function mcq(badge, question, answer, distractors, extra, seed, k) {
     const ds = uniq(distractors, k).filter((d) => d && (k || fkey)(d) !== (k || fkey)(answer)).slice(0, 3);
-    if (ds.length < 2) return null;
+    if (ds.length < 3) return null; // four options or no choice question
     return { type: 'multiple_choice', badge, question, options: shuffle([answer, ...ds], question, seed), answer, ...extra };
   }
 

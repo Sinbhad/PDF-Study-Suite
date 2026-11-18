@@ -153,11 +153,11 @@
 
   /**
    * ctx: { stem, position: 'start' | 'inside' | 'list', number: 'singular' | 'plural' | null,
-   *        forms: textForms(sourceText), count = 3, min = 2 }
+   *        forms: textForms(sourceText), count = 3, min = 3 }
    * -> { answer, distractors } with every option in its final spelling, or null.
    */
   function termSet(answer, candidates, ctx = {}) {
-    const { stem: stemText = '', position = 'list', number = null, forms = null, count = 3, min = 2 } = ctx;
+    const { stem: stemText = '', position = 'list', number = null, forms = null, count = 3, min = 3 } = ctx;
     const target = String(answer || '').trim();
     if (!target) return null;
     const plural = number ? number === 'plural' : isPlural(target);
@@ -215,10 +215,10 @@
 
   /**
    * Statement options ("Which statement describes X?"): distractors of the same math/prose kind and of
-   * comparable length. opts: { count = 3, min = 2 } -> { answer, distractors } or null.
+   * comparable length. opts: { count = 3, min = 3 } -> { answer, distractors } or null.
    */
   function statementSet(answer, candidates, opts = {}) {
-    const { count = 3, min = 2 } = opts;
+    const { count = 3, min = 3 } = opts;
     const target = tidyStatement(answer);
     const key = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const seen = new Set([key(target)]);
@@ -231,6 +231,9 @@
       // Two distractors where one contains the other ("Spread by droplets" / "Spread by droplets: Targets
       // many organs") are one claim offered twice.
       if (fitting.some((f) => key(f).includes(k) || k.includes(key(f)))) continue;
+      // Two wrong options that say nearly the same ("Often polymicrobial infections, aerobic and anaerobic" / "...
+      // both gram positive and gram negatives") pair off, and the answer is the odd one out.
+      if ([target, ...fitting].some((f) => sharedShare(f, cand) >= TWIN_SHARE)) continue;
       if (mt().hasMathToken(cand) !== hasMath || !mt().isBalanced(cand)) continue;
       if (cand.length < target.length * 0.5 || cand.length > target.length * 2) continue;
       seen.add(k);
@@ -238,6 +241,20 @@
     }
     const picked = pickBalanced(target, fitting, count, min);
     return picked ? { answer: target, distractors: picked } : null;
+  }
+
+  const TWIN_SHARE = 0.6;
+  const CONTENT_STOP = new Set('the a an of in on at by for to and or is are be with from that this as its it can may not no both'.split(' '));
+  /** Share of the shorter statement's content words the other one also has. */
+  function sharedShare(a, b) {
+    const ws = (s) => new Set(words(s).filter((w) => w.length > 2 && !CONTENT_STOP.has(w)).map(stem));
+    const [x, y] = [ws(a), ws(b)];
+    const small = x.size <= y.size ? x : y;
+    const large = small === x ? y : x;
+    if (small.size < 3) return 0;
+    let shared = 0;
+    for (const w of small) if (large.has(w)) shared++;
+    return shared / small.size;
   }
 
   /** "a ________" / "An ________" -> "a(n) ________" / "A(n) ________". */

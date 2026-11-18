@@ -47,15 +47,32 @@
       if (!q || isAnswered(q)) return;
       answers[q.id] = value;
       const plain = PDFStudy.richText ? PDFStudy.richText.plain(q.answer) : q.answer;
-      announce = QC.isReveal(q) ? (isRight(q) ? 'Marked as correct.' : 'Marked as missed.') : isRight(q) ? 'Correct.' : `Incorrect. The answer is ${plain}.`;
+      if (QC.isTyped(q)) {
+        const r = PDFStudy.typedCard.result(q, value);
+        announce = r.correct ? r.message : `${r.message} The answer is ${plain}.`;
+      } else {
+        announce = QC.isReveal(q) ? (isRight(q) ? 'Marked as correct.' : 'Marked as missed.') : isRight(q) ? 'Correct.' : `Incorrect. The answer is ${plain}.`;
+      }
       draw();
-      // One at a time: on to "Next question". All questions: the answered card locks, so on to the next open
-      // question, or to the results once every question is answered.
+      focusNextOpen(q);
+    }
+    /** One at a time: on to "Next question". All questions: on to the next open question, or to the results. */
+    function focusNextOpen(q) {
       const cardEl = container.querySelector(`[data-qcard="${root.CSS && CSS.escape ? CSS.escape(q.id) : q.id}"]`);
-      const open = Array.from(container.querySelectorAll('.q-opt:not(:disabled), [data-show-qid], [data-grade]:not(:disabled)'));
+      const open = Array.from(container.querySelectorAll('.q-opt:not(:disabled), [data-show-qid], [data-grade]:not(:disabled), .q-typed-input:not(:disabled)'));
       const later = cardEl ? open.find((el) => !cardEl.contains(el) && (cardEl.compareDocumentPosition(el) & 4)) : null;
       const next = container.querySelector('#quizNextBtn') || later || container.querySelector('#retryMissedBtn, #newQuizSetBtn');
       if (next) next.focus();
+    }
+    /** "I was right" on a typed answer the check refused: counted as right, and kept for a check of the question. */
+    function override(q) {
+      if (!q || !answers[q.id]) return;
+      const finished = allDone();
+      answers[q.id] = { ...answers[q.id], override: true };
+      if (PDFStudy.attemptLog) PDFStudy.attemptLog.overridden(q, answers[q.id], finished);
+      announce = 'Counted as right. The question is marked so its answer can be checked.';
+      draw();
+      focusNextOpen(q);
     }
     function show(q) {
       if (!q || shown[q.id]) return;
@@ -71,7 +88,7 @@
       const q = showResults ? null : active[idx];
       announce = q ? `Question ${idx + 1} of ${active.length}: ${plain(q.question)}` : 'Results';
       draw();
-      const target = container.querySelector('.q-card .q-opt:not(:disabled), .q-card [data-show-qid], #retryMissedBtn, #newQuizSetBtn');
+      const target = container.querySelector('.q-card .q-opt:not(:disabled), .q-card [data-show-qid], .q-card .q-typed-input:not(:disabled), #retryMissedBtn, #newQuizSetBtn');
       if (target) target.focus();
     }
     function goNext() {
@@ -93,6 +110,7 @@
       const q = currentQuestion();
       if (!q || isAnswered(q)) return false;
       const k = e.key.toLowerCase();
+      if (QC.isTyped(q)) return false; // letters belong to the answer field
       if (QC.isReveal(q)) {
         if (!shown[q.id] && (k === ' ' || k === 'enter')) show(q);
         else if (shown[q.id] && (k === 'g' || k === 'm')) answer(q, k === 'g' ? 'got' : 'missed');
@@ -148,7 +166,8 @@
         ? `<div class="q-nav"><button class="btn btn-primary" id="quizNextBtn" type="button">${idx === active.length - 1 ? 'See results' : 'Next question'}</button></div>`
         : '';
       const status = single && !results ? `Question ${idx + 1} of ${active.length}` : `${answered} of ${active.length} answered`;
-      const hint = !cur || results || isAnswered(cur) ? '' : QC.isReveal(cur) ? 'Space shows the answer · G got it · M missed it' : keyHint(cur);
+      const hint = !cur || results || isAnswered(cur) ? '' : QC.isTyped(cur) ? 'Type the answer · Enter checks it'
+        : QC.isReveal(cur) ? 'Space shows the answer · G got it · M missed it' : keyHint(cur);
 
       container.innerHTML = `
         ${sv.viewHead('Quiz', scopeTitle, `${status} · ${correct} correct${retrying ? ' · missed questions only' : ''}`)}
@@ -177,7 +196,7 @@
     }
 
     function bind() {
-      QC.bindOptions(container, active, answer, show, { redraw: draw, answers, retrying });
+      QC.bindOptions(container, active, answer, show, { redraw: draw, answers, retrying, typed: { onOverride: override } });
       container.querySelectorAll('[data-mode]').forEach((btn) => {
         btn.onclick = () => {
           viewMode = btn.getAttribute('data-mode');

@@ -88,9 +88,9 @@
         if (prev.qa) prev.qa.answer = `${prev.qa.answer}\n${answer}`;
         else if (question) prev.qa = { question, answer };
         else {
-          // A title-only frame (a picture under the title) followed by the frame with the text: the text's page is
-          // the slide's page, so a card or question links to where its words are printed.
-          if (!prev.bullets.length && !prev.table) prev.slideNumber = slide.slideNumber;
+          // A build-up's last frame is the one that shows every point (a title-only frame, then the frames that add
+          // the text): its page is the slide's page, so a card or question links to where its words are printed.
+          prev.slideNumber = slide.slideNumber;
           prev.title = slide.title;
           prev.formattedTitle = slide.formattedTitle;
           prev.bullets = slide.bullets.slice();

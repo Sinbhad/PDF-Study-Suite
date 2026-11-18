@@ -7,6 +7,7 @@
  *     overlap: { count, of, review } (practice-test questions that re-ask a quiz fact without saying so, of all test
  *              questions; review: those flagged as review, asked in another form),
  *     recall: { quiz, test } (self-graded questions in each set),
+ *     typed: { quiz, test } (typed-answer questions in each set, checked by the app; absent in older baselines),
  *     flashcards, per1000, gold: { hit, total, pct, missing },
  *     guess: { n, expected, byChance, accuracy, chance, tells } }
  * guess.expected / guess.byChance are question counts (solver vs blind guessing); accuracy / chance the same in %.
@@ -40,6 +41,7 @@ function totalOf(records) {
       review: sum((r) => (r.overlap && r.overlap.review) || 0),
     },
     recall: { quiz: sum((r) => (r.recall ? r.recall.quiz : 0)), test: sum((r) => (r.recall ? r.recall.test : 0)) },
+    typed: { quiz: sum((r) => (r.typed ? r.typed.quiz : 0)), test: sum((r) => (r.typed ? r.typed.test : 0)) },
     flashcards: sum((r) => r.flashcards), per1000: words ? Math.round((generated / words) * 10000) / 10 : 0,
     gold: { hit: goldHit, total: goldTotal, pct: pct(goldHit, goldTotal) },
     guess: {
@@ -72,7 +74,9 @@ function recordLines(r, base) {
     `  lints       ${lintLine(r.lints)}`,
     ...(r.overlap ? [`  test overlap ${r.overlap.count} of ${r.overlap.of} test questions re-ask a quiz fact` +
       (r.overlap.review ? ` (+${r.overlap.review} flagged review, in another form)` : '')] : []),
-    ...(r.recall ? [`  recall      ${r.recall.quiz} of ${r.quiz} quiz, ${r.recall.test} of ${r.test} test questions are self-graded`] : []),
+    ...(r.recall ? [`  recall      ${r.recall.quiz} of ${r.quiz} quiz, ${r.recall.test} of ${r.test} test questions are self-graded` +
+      ` (${pct(r.recall.quiz + r.recall.test, r.generated)}% of all)`] : []),
+    ...(r.typed ? [`  typed       ${r.typed.quiz} of ${r.quiz} quiz, ${r.typed.test} of ${r.test} test questions are typed and checked`] : []),
     `  flashcards  ${r.flashcards}${d(r.flashcards, base && base.flashcards, 0)}`,
     `  gold terms  ${r.gold.hit} of ${r.gold.total} (${r.gold.pct}%)${d(r.gold.pct, base && base.gold && base.gold.pct)}`,
     `  guessable   solver ${r.guess.accuracy}% vs chance ${r.guess.chance}%${d(r.guess.accuracy, base && base.guess && base.guess.accuracy)}` +

@@ -26,7 +26,7 @@
         title="Remove this question and keep it out of future quizzes for this document">Bad question</button>`;
   }
 
-  /** Announce through the view's own live region, or a hidden one added for the practice test. */
+  /** Announce through the view's own live region, or a hidden one added for the practice test (typed-card.js uses it too). */
   function say(container, message) {
     let live = container.querySelector('#quizLive') || container.querySelector('[data-flag-live]');
     if (!live) {
@@ -127,6 +127,6 @@
     showPending(container);
   }
 
-  PDFStudy.questionFlags = { isFlagged, buttonHtml, bind };
+  PDFStudy.questionFlags = { isFlagged, buttonHtml, bind, say };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.questionFlags;
 })(typeof window !== 'undefined' ? window : globalThis);

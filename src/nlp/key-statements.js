@@ -161,6 +161,7 @@
   const VAGUE_SUBJECT_RE = /^(?:a|an|the)\s+(?:different|other|new|separate|similar|same|certain|particular)\b|^(?:each|every)\s+\S+\s+\S+$/i;
   // "Sets may have …": a bare subject and a modal leave the predicate open; anything could follow.
   const OPEN_MODAL_FRONT_RE = /^\S+\s+(?:may|might|can)(?:\s+\S+)?$/i;
+  const OPEN_VERB_END_RE = /\s(?:can(?:not)?|may|might|could|will|has|have)$/i;
   // "Every if statement contains … a condition", "Each slot contains … an element": one noun after an article.
   const TRIVIAL_BACK_RE = /^(?:a|an|the|some|one)\s+[\w-]+$/i;
   // A one-word answer is a fact only when it is a quality or a number ("fixed", "immutable", "zero").
@@ -181,6 +182,9 @@
     const subject = head.slice(start);
     if (start === 0 && OPEN_SUBORDINATE_RE.test(subject.replace(/^[^,]*,\s*/, ''))) return null;
     if (HEDGE_START_RE.test(head) || VAGUE_SUBJECT_RE.test(subject) || OPEN_MODAL_FRONT_RE.test(subject.trim())) return null;
+    // "A bit can …", "The Rectangle class has …": a modal or "has" leaves the predicate open (it can do many things,
+    // it has many parts), so the front asks no one question. "must" and "need to" state a rule and stay.
+    if (OPEN_VERB_END_RE.test(head)) return null;
     // A back runs to its own sentence's end only: "values. The == operator tests ..." is two notes, not one answer.
     let back = tail.split(/(?<=[a-z0-9)\]])[.!?]\s+(?=[A-Z$])/)[0].trim();
     let front = head;
@@ -207,6 +211,17 @@
     return np ? np[0].toUpperCase() + np.slice(1) : '';
   }
 
+  // A sentence that opens on a condition ("For the clock input equal to 0, ...", "When the clock is 1, ...").
+  const CONDITION_LEAD_RE = /^(?:for|when|whenever|if|while|with|once|during|after|before|until|as\s+long\s+as)\s[^,]{3,80},\s/i;
+  // A state claim with no condition of its own: "X is disabled", "X are transparent", "X remains fixed".
+  const STATE_CLAIM_RE = /\s(?:is|are|remains?|stays?|becomes?)\s+(?:(?:then|now|also|still)\s+)?[a-z]+(?:ed|ble|ent|ant|ive|al|ic)\b/i;
+
+  /** Does `sentence` state a condition-bound state that the sentence before set up (and it does not repeat)? */
+  function continuesCondition(previous, sentence) {
+    return CONDITION_LEAD_RE.test(previous) && !CONDITION_LEAD_RE.test(sentence) && !SUBORDINATE_START_RE.test(sentence) &&
+      STATE_CLAIM_RE.test(` ${sentence}`) && !/\b(?:always|whenever|regardless)\b/i.test(sentence);
+  }
+
   function extract(text, opts = {}) {
     const tok = dep('tokenizer', './tokenizer.js');
     const taken = opts.taken || new Set();
@@ -215,7 +230,11 @@
       if (SKIPPED_SECTION_RE.test(section.heading)) continue;
       const stems = new Set(headingStems(section.heading));
       const scored = [];
-      tok.splitSentences(section.body).forEach((raw, order) => {
+      const all = tok.splitSentences(section.body);
+      all.forEach((raw, order) => {
+        // "For the clock input equal to 0, the master latch is enabled ... The slave latch is disabled ...": a state
+        // the sentence before set under a condition is only true under it; alone it would mislead.
+        if (order > 0 && continuesCondition(plain(all[order - 1]), plain(raw))) return;
         // "(see Syntax 5.1)" asides and a heading glued in front ("Primary Keys When designing ...") are dropped.
         const unglued = dep('proseDefinitions', './prose-definitions.js').dropGluedHeading(plain(raw));
         const t = dep('cardQuality', './card-quality.js').withoutAsides(unglued);

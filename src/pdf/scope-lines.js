@@ -67,6 +67,13 @@
       return;
     }
     const prev = out[out.length - 1];
+    // A bold term broken across the wrap ("**transitive depen-**" + "**dency**. We ...") joins inside the bold
+    const bold = prev.match(/^(.*\b[a-z]{2,})[-‐‑]\*\*$/);
+    const boldNext = bold && text.match(/^\*\*([a-z]{2,}[^*]*)\*\*([\s\S]*)$/);
+    if (boldNext && ((prev.match(/\$/g) || []).length % 2 === 0)) {
+      out[out.length - 1] = `${bold[1]}${boldNext[1]}**${boldNext[2]}`;
+      return;
+    }
     const m = prev.match(/^(.*\b[a-z]{2,})[-‐‑]$/);
     const nextWord = text.match(/^([a-z]{2,}\b[\s\S]*)$/);
     if (

@@ -86,7 +86,9 @@ check('deck: nothing from the case slide', !both.some((q) => /8y\/o|wet pasture|
 const owner = (statement) => DECK.find((s) => s.bullets.some((b) => statement.includes(b.replace(/\.$/, ''))));
 const subjectOfSlide = (slide) => (slide && slide.title === 'Pharmacokinetics' ? DECK[DECK.indexOf(slide) - 1].title : slide && slide.title);
 const falses = both.filter((q) => q.type === 'true_false' && q.answer === 'False');
-check('deck: every False puts a statement under a subject it does not belong to', falses.length > 0 &&
+// (This deck's points carry no labels the drugs share, so the scope contradicts none of them for another drug: a False,
+// if any, can only be an altered statement or a definition. quiz_review_fixtures builds a labelled contradiction.)
+check('deck: every False puts a statement under a subject it does not belong to',
   falses.every((q) => subjectOfSlide(owner(q.question)) !== q.subject), falses.map((q) => `${q.subject}: ${q.question.split('\n')[1]}`).join(' | '));
 const choices = both.filter((q) => q.type === 'multiple_choice' && /^Which statement/.test(q.question));
 check('deck: every wrong option of "which statement" comes from another subject', choices.every((q) => q.options.filter((o) => o !== q.answer)

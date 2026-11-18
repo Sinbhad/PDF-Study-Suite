@@ -29,7 +29,9 @@ const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWit
 const CORPUS = path.resolve(ROOT, typeof flags.corpus === 'string' ? flags.corpus : 'tests/corpus/manifest.json');
 
 const MAX_TERM_WORDS = 8;
-const isSelfGraded = (q) => q.type === 'reveal' || !Array.isArray(q.options) || q.options.length < 2;
+// A typed question has no options but is checked by the app: it is counted apart, never as self-graded.
+const isTyped = (q) => q.type === 'typed';
+const isSelfGraded = (q) => q.type === 'reveal' || (!isTyped(q) && (!Array.isArray(q.options) || q.options.length < 2));
 /** A term as crude stems; one-letter fragments ("Dijkstra's" -> dijkstra, s) are dropped. */
 const termStems = (s) => (stripMath(stripMarkdown(s)).toLowerCase().match(/[a-z0-9]+/g) || [])
   .filter((w) => w.length > 1 || /\d/.test(w)).map(crudeStem);
@@ -78,6 +80,8 @@ async function measure(P, entry, manifest) {
     overlap: { count: overlap.filter((o, i) => o && !built.test[i].review).length, of: built.test.length, review: review.length },
     // Self-graded recall questions, per set: what no choice form could ask honestly.
     recall: { quiz: built.quiz.filter(isSelfGraded).length, test: built.test.filter(isSelfGraded).length },
+    // Typed questions (an answer the student types, checked by the app), per set.
+    typed: { quiz: built.quiz.filter(isTyped).length, test: built.test.filter(isTyped).length },
     lints: Object.fromEntries(LINT_NAMES.filter((name) => lints[name]).map((name) => [name, lints[name]])),
     flashcards: built.flashcards.length,
     per1000: words ? Math.round((questions.length / words) * 10000) / 10 : 0,

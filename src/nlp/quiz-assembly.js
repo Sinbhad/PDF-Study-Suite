@@ -29,7 +29,11 @@
   const MAX_TRUE_FALSE_SHARE = 0.4; // 4 of 10, 8 of 20
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const isSelfGraded = (q) => q.type === 'reveal' || !q.options || q.options.length < 2;
+  // A typed question (typed-questions.js) has no options but is checked by the app: it is not self-graded.
+  const isTyped = (q) => q.type === 'typed';
+  const isSelfGraded = (q) => q.type === 'reveal' || (!isTyped(q) && (!q.options || q.options.length < 2));
+  const CHOICE_OPTIONS = 4;
+  const isChoice = (q) => !isSelfGraded(q) && !isTyped(q) && q.type !== 'true_false';
   const isSwap = (q, answer) => q.type === 'true_false' && q.construction === 'sibling_swap' && q.answer === answer;
   const isTrueFalse = (q, answer) => q.type === 'true_false' && q.answer === answer;
 
@@ -125,6 +129,9 @@
     function refusal(q) {
       if (!q) return 'none';
       if (kept.length >= max) return 'full';
+      // A choice question offers four options: with three, one implausible option leaves a coin toss.
+      // (Options are told apart as written: "$\overline{A}\overline{B}$" and "$\overline{A} + \overline{B}$" differ.)
+      if (isChoice(q) && new Set(q.options.map((o) => String(o).replace(/\s+/g, ' ').trim().toLowerCase())).size < CHOICE_OPTIONS) return 'too few options';
       const aKey = answerKey(q);
       const oKey = optionKey(q);
       if (aKey && answers.has(aKey)) return 'same answer';
@@ -134,6 +141,8 @@
       // Two questions cut from one source sentence, or about one subject + predicate, test one fact,
       // however their wording differs.
       if (q.sourceKey && kept.some((k) => k.sourceKey === q.sourceKey)) return 'same source';
+      // A typed question and any other question cut from the same card or sentence test one fact.
+      if (sourceOf(q) && kept.some((k) => (isTyped(q) || isTyped(k)) && sourceOf(k) === sourceOf(q))) return 'same source';
       if (q.factKey && kept.some((k) => k.factKey === q.factKey)) return 'same fact';
       const words = factWords(q);
       if (facts.some((f) => sameFact(words, f))) return 'same fact words';
@@ -210,7 +219,7 @@
     return set;
   }
 
-  const api = { createSet, listFamily, fill, sameFact, factWords, answerKey, isSelfGraded };
+  const api = { createSet, listFamily, fill, sameFact, factWords, answerKey, isSelfGraded, isTyped };
   PDFStudy.quizAssembly = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

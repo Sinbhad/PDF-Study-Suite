@@ -54,6 +54,7 @@
     const wordCount = t.split(/\s+/).length;
     if (!t || t.length > HEADING_MAX_CHARS || wordCount > HEADING_MAX_WORDS) return false;
     if (/[.,;:?!]$/.test(t) || /\$/.test(t) || !/^[A-Z0-9(]/.test(t)) return false;
+    if (/[a-z][.!?]\s+[A-Z]/.test(t)) return false; // a sentence ends inside it: wrapped prose, not a heading
     if (/\/\/|\/\*|[;{}]/.test(t)) return false; // a line of a program listing ("25 // Find the largest value")
     if ((t.match(/[A-Za-z]{2,}/g) || []).length < 1) return false;
     if (LABEL_RE.test(t) && !NUMBERED_HEADING_RE.test(t)) return false;
@@ -65,7 +66,10 @@
     return ratio >= PLAIN_HEADING_RATIO || (raw.isBold && ratio >= BOLD_HEADING_RATIO);
   }
 
+  // The second line of a two-line title: an optional chapter number, then a joining word ("3 and Normalization")
+  const CONTINUED_TITLE_RE = /^(?:\d{1,2}\s+)?((?:and|of|in|for|with|to|the|from|on)\s+\S.*)$/;
   const RUN_IN_MAX_WORDS = 5;
+  const BOLD_RUN_IN_MAX_WORDS = 8;
   const SMALL_WORDS = new Set(['a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'for', 'to', 'with', 'vs']);
 
   /**
@@ -73,16 +77,24 @@
    * Case line after a finished sentence, followed by a line that starts a sentence. Without it the heading
    * is glued to the definition after it ("Surrogate Keys A surrogate key is ...").
    */
-  function runInHeading(line, prev, next) {
+  function runInHeading(line, prev, next, bold) {
     const t = plain(line);
     const words = t.split(/\s+/);
-    if (!t || words.length > RUN_IN_MAX_WORDS || /[.,;:?!$]/.test(t) || !/^[A-Z]/.test(t)) return false;
+    // A line set wholly in bold may be a little longer: "Eliminating Anomalies with BCNF"
+    if (!t || words.length > (bold ? BOLD_RUN_IN_MAX_WORDS : RUN_IN_MAX_WORDS) || /[.,;:?!$]/.test(t) || !/^[A-Z]/.test(t)) return false;
     if (!words.every((w) => SMALL_WORDS.has(w) || /^[A-Z0-9]/.test(w)) || words.length < 2) return false;
     if (LABEL_RE.test(t) || BOX_LABEL_RE.test(t) || EXAMPLE_START_RE.test(t)) return false;
     const before = plain(prev || '');
     const after = plain(next || '');
-    return /[.!?:"”)]\s*\$*$/.test(before) && /^(?:An?|The|In|When|If|Each|Every|To|This|These)\s/.test(after);
+    if (!/[.!?:"”)]\s*\$*$/.test(before)) return false;
+    // In bold, the heading's type says what it is: any sentence may follow ("However, the conditions ...")
+    if (bold) return /^[A-Z]/.test(after) && !/^[A-Z][A-Za-z_]*\s*\(/.test(t);
+    return /^(?:An?|The|In|When|If|Each|Every|To|This|These)\s/.test(after);
   }
+
+  /** Every word capitalised except the small joining words: "Basic Identities of Boolean Algebra". */
+  const titleCased = (line) => plain(line).replace(/\$[^$]*\$/g, 'X').split(/\s+/)
+    .every((w, i) => /^[A-Z0-9(“"'‘]/.test(w) || (i > 0 && SMALL_WORDS.has(w.toLowerCase())));
 
   /** Key under which a running head repeats from page to page: its letters, without page numbers. */
   const runningKey = (line) => plain(line).toLowerCase().replace(/[^a-z]+/g, '');
@@ -157,6 +169,9 @@
     const usesEndMarker = lines.some((l) => EXAMPLE_END_RE.test(l));
     const isRunningHead = runningHeads(lines, aligned);
     const tags = tagLines(lines, opts.lines);
+    // A book that numbers its sections ("5.2.1 Relational Operators") sets its other headings in Title Case:
+    // a sentence-case line in larger type there is a step or a label inside a box ("Type the skeleton")
+    const numberedBook = lines.filter((l, i) => NUMBERED_HEADING_RE.test(plain(l)) && looksLikeHeading(l.trim(), aligned[i].raw)).length >= 2;
     let page = opts.startPage || (raws[0] && raws[0].page) || null;
 
     const sections = [];
@@ -220,8 +235,19 @@
       }
       // A run-in sub-heading is read only from a laid-out page (raw lines or the extraction's line record)
       const near = (step) => { for (let k = i + step; k >= 0 && k < lines.length; k += step) if (lines[k].trim()) return lines[k]; return ''; };
-      if ((looksLikeHeading(t, raw) || ((raw || tag) && runInHeading(t, near(-1), near(1)))) && !vetoedHeading(t, tag)) {
+      // A bold row split into cells is a table's header ("Source of Anomaly | Normal Forms | ..."), not a heading
+      // and neither is a bold label set smaller than the body text (a figure's or table's own labels)
+      const wholeBold = (Boolean(raw && raw.isBold) || /^\*\*[^*]+\*\*$/.test(t)) && !(raw && (raw.cells || (raw.body && raw.fontSize < raw.body * 0.95))) && !/_/.test(t);
+      const shaped = looksLikeHeading(t, raw) || ((raw || tag) && runInHeading(t, near(-1), near(1), wholeBold));
+      if (shaped && !vetoedHeading(t, tag) && (!numberedBook || NUMBERED_HEADING_RE.test(plain(t)) || titleCased(t))) {
         region = OBJECTIVES_RE.test(t) ? 'objectives' : 'prose';
+        // A title set on two lines ("The Relational Model" / "3 and Normalization", the chapter number printed
+        // large beside the second line) is one heading: a line that goes on with a joining word continues it
+        const cont = plain(t).match(CONTINUED_TITLE_RE);
+        if (cont && section.title && !section.paragraphs.length && !(para && para.lines.length)) {
+          section.title = `${section.title} ${tidyHeading(cont[1])}`;
+          return;
+        }
         startSection(tidyHeading(t));
         return;
       }

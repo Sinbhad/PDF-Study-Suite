@@ -47,7 +47,8 @@
       const body = bodySize(p);
       for (const l of p.lines) {
         const key = norm(l.text);
-        if (key) out.push({ key, page: p.pageNumber, body, fontSize: l.fontSize || 0, isBold: !!l.isBold, isMargin: !!l.isMargin, x0: l.x0, topY: l.topY, text: plain(l.text) });
+        // cells: how many cells a table-like row splits into (0 for an ordinary line)
+        if (key) out.push({ key, page: p.pageNumber, body, fontSize: l.fontSize || 0, isBold: !!l.isBold, isMargin: !!l.isMargin, x0: l.x0, topY: l.topY, text: plain(l.text), cells: Array.isArray(l.segments) ? l.segments.length : 0 });
       }
     }
     labelBoxes(out);

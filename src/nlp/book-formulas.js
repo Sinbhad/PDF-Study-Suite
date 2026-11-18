@@ -101,6 +101,8 @@
         title: titleCase(r.caption) || 'Numbered results',
         body: r.items.slice(0, MAX_LIST).map((it) => `${it.n}. ${asFormula(it.body)}`).join('\n'),
         page: r.page,
+        // Each law as shown, by its number: book-law-table.js lays a two-column list out as the book's table
+        numbered: new Map(r.items.slice(0, MAX_LIST).map((it) => [it.n, `${it.n}. ${asFormula(it.body)}`])),
       }));
   }
 

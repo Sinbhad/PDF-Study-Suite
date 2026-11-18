@@ -166,7 +166,7 @@
       const body = deck ? deckSectionBody(sec) : bookSectionBody(sec, i);
       if (!body) return '';
       const n = itemCount(sec);
-      const where = sec.page ? `${deck ? 'Slide' : 'p.'}&nbsp;${sec.page}` : '';
+      const where = sec.page ? `${deck ? 'Slide' : 'p.'}&nbsp;${sv.escapeHtml((!deck && sv.printedPage && sv.printedPage(sec.page)) || String(sec.page))}` : '';
       return `<details class="sum-sec"${i < OPEN_SECTIONS ? ' open' : ''}>
           <summary class="sum-sec-head"><span class="sum-sec-title">${sv.rich(sec.title) || 'Untitled part'}</span><span class="sum-sec-meta">${where}${where ? ' · ' : ''}${n}&nbsp;point${n === 1 ? '' : 's'}</span></summary>
           <div class="sum-sec-body">${body}</div>

@@ -132,7 +132,7 @@
       it('O(x', 255, 194.7, 'r', 15, 27.5), it('n', 282.5, 189.1, 'r', 10, 6.3), it(')', 288.8, 194.7, 'r', 15, 6.8), it('.', 295.6, 194.7, 'r', 15, 5.4),
     ]);
     check('15pt slide polynomial & O(x^{n}). never pull ) or . into sup', /\$f \(x\) = a_\{n\}x\^\{n\}\$/.test(slidePoly[0].formattedText) &&
-      /\$O\(x\^\{n\}\)\.\$$/.test(slidePoly[0].formattedText), slidePoly[0].formattedText);
+      /\$O\(x\^\{n\}\)\$\.$/.test(slidePoly[0].formattedText), slidePoly[0].formattedText);
   }
 
   /** Complement bars drawn as short rules over letters (synthetic geometry: letters 0.65em wide). */

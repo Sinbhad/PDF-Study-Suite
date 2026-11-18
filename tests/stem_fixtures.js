@@ -117,10 +117,12 @@
   check('gradeTest blank = 0% with missed review', g0.score === 0 && g0.missed.length === test.total && Object.keys(g0.bySkill).length >= 1);
   check('generatePracticeTest alias', S.testEngine.generatePracticeTest === S.testEngine.generateTest);
   // The practice test of a scope is not its quiz over again: it asks only facts the quiz did not ask. This
-  // scope has six formula facts and the quiz asks all six, so its test is empty rather than a re-run.
+  // scope has six formula facts and the quiz asks all six, so its test is short rather than a re-run; only its
+  // Review section may come back to a quiz fact, in another form (a recall where the quiz had it typed).
   const sameScope = S.testEngine.generateTest(CALC + '\n' + CS, { maxQuestions: 10 });
   const quizFacts = new Set(quiz.map((q) => q.factKey));
-  check('practice test asks no fact the quiz of the same scope asks', sameScope.questions.every((q) => !quizFacts.has(q.factKey)),
+  const quizForms = new Map(quiz.map((q) => [q.factKey, q.type]));
+  check('practice test asks no fact the quiz of the same scope asks', sameScope.questions.every((q) => !quizFacts.has(q.factKey) || (q.review && quizForms.get(q.factKey) !== q.type)),
     `${sameScope.total} test questions`);
 
   // 6. Real-PDF regression checks (#26)
@@ -189,7 +191,7 @@
   check('slide cards: "key points" only as a last resort, never for question/example/title slides, never a clip',
     overview.length === 1 && /Why Relations Matter/.test(overview[0].front) && sCards[sCards.length - 1] === overview[0] && sCards.every((c) => !('clip' in c) && c.back && c.front));
   const sQuiz = S.quizEngine.generateQuiz(DECK, { mode: 'slides', maxQuestions: 10 });
-  const optsOk = (q) => q.type === 'reveal' ? q.options.length === 0 && q.answer.length > 0
+  const optsOk = (q) => q.type === 'reveal' || q.type === 'typed' ? q.options.length === 0 && q.answer.length > 0
     : q.options.length >= 2 && new Set(q.options.map((o) => o.toLowerCase())).size === q.options.length && q.options.includes(q.answer) && q.options.every((o) => o.trim());
   // Seven, not ten: the deck defines five terms, and a second "complete the definition" with the same four
   // conditions, or a True/False that restates the cloze beside it, is the same question asked again.
@@ -214,7 +216,7 @@
   const thm = (n, name, body, formulas = []) => ({ category: 'Theorem', title: `Theorem 1.${n} — ${name}`, body, formulas, pageNumber: 80 + n });
   const BLOCKS = [
     thm(1, 'Some Basic Limits', 'Let $b$ and $c$ be real numbers.\n1. $\\lim_{x \\to c}b = b$\n2. $\\lim_{x \\to c}x = c$\n3. $\\lim_{x \\to c}x^{n} = c^{n}$', ['\\lim_{x \\to c}b = b', '\\lim_{x \\to c}x = c', '\\lim_{x \\to c}x^{n} = c^{n}']),
-    thm(2, 'Properties of Limits', 'Let $f$ and $g$ have limits $L$ and $K.$ 1. Scalar multiple: $\\lim_{x \\to c}[b f(x)] = bL$ 2. Product: $\\lim_{x \\to c}[f(x)g(x)] = LK$ 3. Power: $\\lim_{x \\to c}[f(x)]^{n} = L^{n}$'),
+    thm(2, 'Properties of Limits', 'Let $f$ and $g$ have limits $L$ and $K.$ 1. Scalar multiple: $\\lim_{x \\to c}[b f(x)] = bL$ 2. Product: $\\lim_{x \\to c}[f(x)g(x)] = LK$ 3. Power: $\\lim_{x \\to c}[f(x)]^{n} = L^{n}$ 4. Sum: $\\lim_{x \\to c}[f(x) + g(x)] = L + K$'),
     thm(4, 'The Limit of a Function Involving a Radical', 'Let $n$ be a positive integer. $$\\lim_{x \\to c}\\sqrt[n]{x} = \\sqrt[n]{c}$$', ['\\lim_{x \\to c}\\sqrt[n]{x} = \\sqrt[n]{c}']),
     thm(8, 'The Squeeze Theorem', 'If $h(x) \\le f(x) \\le g(x)$ near $c$ and both outer limits equal $L,$ then $\\lim_{x \\to c}f(x)$ exists and is equal to $L.$'),
     { category: 'Guideline', title: 'A Strategy for Finding Limits', body: '1. Learn which limits can be evaluated by direct substitution. 2. Otherwise find a function that agrees at all but one point. 3. Use a graph to reinforce your conclusion.', pageNumber: 85 },

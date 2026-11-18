@@ -87,6 +87,13 @@ measuring a direction, not for judging a single question.
 | `bad_definition` | a definition (answer, or shown statement) that contains its own term, or leans on "this condition", "here,", "of this type" |
 | `garbled_token` | a token of the stem or answer that is not word-shaped and that the scope prints only there (recognition or table debris) |
 | `filler_subject` | case signalment ("8y/o M/N"), or a person or place named in a biography or example sentence, in a scope that is not a history text |
+| `option_count` | a choice question without exactly four options |
+| `option_kind_tell` | the options' head nouns single out the answer: every wrong option shares a head with another while the answer's is its own, or a naming stem's category ("a timing device called ____") fits one option only, or the options share their first word but name different kinds |
+| `adjective_slot` | a blank between a bare copula and a preposition ("is ____ to") offered phrases of two or more words |
+| `table_stem_unnamed` | a table question that does not name the column its row value sits in |
+| `open_stem_prompt` | a self-graded prompt that is a sentence stem ending in a modal or "has" ("A bit can …") |
+| `filler_item` | a recalled list that counts "Etc." or "..." as a point |
+| `inherited_false` | a False that sets another subject's statement under X while a slide of X says it works "per" / "same as" / "like" that subject |
 | `quiz_test_overlap` | a practice-test question whose fact the quiz of the same scope already asks (same `factKey` or source, or the `duplicate_fact` overlap); reported per document as "test overlap" |
 
 Repeats are looked for inside the quiz and inside the test separately; repeats across the two are

@@ -6,6 +6,7 @@
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
   const dep = (k, f) => PDFStudy[k] || (typeof require === 'function' ? require(f) : null);
+  const damage = () => dep('summaryDamage', './summary-damage.js');
 
   function getDeps() {
     return {
@@ -102,7 +103,22 @@
       const lead = overviewOf(outline, topK);
       // The key terms are the ones the outline links to their definitions, never words ranked from examples
       const linked = (outline.terms || []).map((t) => t.term);
-      return { sentences: lead, keyTerms: linked, didacticBlocks, keyFormulas, definitions, outline };
+      // The Summary's list of definitions holds only those that read on their own, as the outline's do: never
+      // an example passage that ends "This condition is called ..."
+      const bo = dep('bookOutline', './book-outline.js');
+      const readable = definitions
+        // a definition box (it carries its page) is the book's own; a mined sentence must read on its own
+        .filter((d) => d.page || bo.usableDefinition(d))
+        // "is said to be in the set state" names "set state", not "In the set state"
+        .map((d) => ({ ...d, term: String(d.term || '').replace(/^(?:in|into|at|on)\s+(?:the\s+|an?\s+)?/i, '').replace(/^[a-z]/, (c) => c.toUpperCase()), definition: bo.withoutAside(d.definition) }));
+      // ... and every term the outline defines under its heading
+      const key = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      for (const sec of outline.sections || []) {
+        for (const d of sec.definitions || []) {
+          if (!readable.some((r) => key(r.term) === key(d.term))) readable.push({ term: d.term, definition: d.text, page: d.page });
+        }
+      }
+      return damage().clean({ sentences: lead, keyTerms: linked, didacticBlocks, keyFormulas, definitions: readable, outline });
     }
     if (rawSentences.length <= topK) {
       return { sentences: rawSentences, keyTerms, didacticBlocks, keyFormulas, definitions, outline };
@@ -181,28 +197,44 @@
       for (let n = scope.startPage; n <= (scope.endPage || scope.startPage); n++) if (pageOf(n)) pages.push(pageOf(n));
     }
     const blocks = scope.blocks && scope.blocks.length ? scope.blocks : didacticBlocks;
-    return bo.build(text, { pages, startPage: scope.startPage, endPage: scope.endPage, didacticBlocks: blocks, tables: scope.tables, lines: scope.lines, title: scope.title });
+    // The page numbers printed in the book, for the lead line ("pages 146–168")
+    const pp = dep('printedPages', '../pdf/printed-pages.js');
+    const printed = pp && parsed ? { start: pp.printed(parsed, scope.startPage), end: pp.printed(parsed, scope.endPage) } : null;
+    return bo.build(text, { pages, startPage: scope.startPage, endPage: scope.endPage, printed, didacticBlocks: blocks, tables: scope.tables, lines: scope.lines, title: scope.title });
   }
 
   /**
    * Deck summary: the defining statements come first (one per slide before a slide's second), then ranked
    * prose from plain content slides. Worked problems, Q&A slides and tables never feed the overview.
    */
+  // A defined term is a name: a few words, never a clause ("Lameness is the 3rd most")
+  const TERM_MAX_WORDS = 5;
+  const realDefinition = (d) => {
+    const term = String(d.term || '').replace(/\*\*/g, '').trim();
+    return term && term.split(/\s+/).length <= TERM_MAX_WORDS && !/\b(?:is|are|was|were|the)\s*$|\b(?:is|are|was|were)\b/i.test(term);
+  };
+
   function summarizeSlides(slides, topK = 8) {
     const model = dep('slideModel', './slide-model.js').normalize(slides);
     const sq = dep('slideQuiz', './slide-quiz.js');
-    const definitions = model.definitions.map((d) => ({ term: d.term, definition: d.definition, page: d.page }));
+    const definitions = model.definitions.filter(realDefinition).map((d) => ({ term: d.term, definition: d.definition, page: d.page }));
     const topical = model.slides.filter((s) => (s.kind === 'content' && !s.isExample) || s.kind === 'section');
     const overview = summarizeText(sq.studyText(slides), { topK, headings: topical.map((s) => s.title), titles: topical.map((s) => s.title), definitions });
-    const firstPerSlide = model.slides.flatMap((s) => s.definitions.slice(0, 1));
-    const rest = model.slides.flatMap((s) => s.definitions.slice(1));
-    const picked = new Set([...firstPerSlide, ...rest].slice(0, topK));
-    const defining = model.definitions.filter((d) => picked.has(d)).map((d) => (/[.!?})\]]$/.test(d.statement) ? d.statement : `${d.statement}.`));
     const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const outline = dep('deckOutline', './deck-outline.js').build(slides, { model });
-    // After the defining statements, the outline's own points that read as statements (never a heading,
-    // a label or a scrap), one per slide in lecture order.
-    const extra = deckStatements(outline).filter((s) => !defining.some((d) => norm(d).includes(norm(s).slice(0, 40)) || norm(s).includes(norm(d).slice(0, 40))));
+    // One point per slide, in lecture order: the slide's defining statement when it has one, else the outline's
+    // first point that reads as a statement (never a heading, a label or a scrap). The overview then takes
+    // points spread over the whole lecture.
+    const defining = new Map();
+    model.slides.forEach((s) => {
+      const d = (s.definitions || []).find(realDefinition);
+      if (d) defining.set(s.slideNumber, /[.!?})\]]$/.test(d.statement) ? d.statement : `${d.statement}.`);
+    });
+    const points = [...defining].map(([page, text]) => ({ page, text }));
+    deckStatements(outline).forEach((p) => {
+      if (!defining.has(p.page) && !points.some((q) => norm(q.text).includes(norm(p.text).slice(0, 40)) || norm(p.text).includes(norm(q.text).slice(0, 40)))) points.push(p);
+    });
+    const lead = spread(points.sort((a, b) => a.page - b.page), topK).map((p) => p.text);
     const slideBreakdown = model.slides
       .filter((s) => s.kind !== 'title' && s.kind !== 'section' && (s.bullets.length || s.qa.length || s.table))
       .map((s) => ({
@@ -212,8 +244,9 @@
         ...(s.qa.length ? { qa: s.qa.map((q) => ({ question: q.question, answer: q.answer })) } : {}),
         ...(s.table ? { table: s.table } : {}),
       }));
-    return {
-      overviewSentences: [...defining, ...extra].slice(0, topK),
+    // A glyph the extraction could not read ("¿") is never shown: summary-damage.js
+    return damage().clean({
+      overviewSentences: lead,
       // Terms the outline links to their slides; without any, the ranked terms that are not a slide's title
       // ("Course objectives", "Mild disease" name slides, not concepts)
       keyTerms: (outline.terms || []).length
@@ -224,7 +257,7 @@
       slideBreakdown,
       didacticBlocks: [],
       outline,
-    };
+    });
   }
 
   // A point that states something: six words or more, mostly in running (lower-case) words, not a label.
@@ -238,19 +271,35 @@
     return lower / words.length >= 0.5;
   }
 
-  /** The first point of each slide in the deck outline that reads as a statement, in lecture order. */
+  /**
+   * The first point of each slide in the deck outline that reads as a statement, in lecture order. A point
+   * that does not name its subject ("Very poor absorption from the GI tract") is led by its topic's name.
+   */
   function deckStatements(outline) {
     const out = [];
+    const words = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 3);
     for (const sec of (outline && outline.sections) || []) {
       for (const tp of sec.topics || []) {
+        // The slide's name without its brand names or asides: "Epsiprantel (Cestex®)" -> "Epsiprantel"
+        const nameOf = (t) => String(t || '').replace(/\*\*/g, '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
         for (const e of tp.slides || []) {
+          const subject = nameOf(e.title || tp.title || sec.title);
           const texts = (e.bullets || []).flatMap((b) => [b.text, ...(b.children || []).map((c) => (typeof c === 'string' ? c : c.text))]);
           const first = texts.find(readsAsStatement);
-          if (first) out.push(String(first).replace(/\*\*/g, '').trim());
+          if (!first) continue;
+          const text = String(first).replace(/\*\*/g, '').trim();
+          const named = words(subject).some((w) => words(text).includes(w));
+          out.push({ page: e.slide || e.page, text: named || !subject || subject.split(' ').length > 6 ? text : `${subject} — ${text}` });
         }
       }
     }
     return out;
+  }
+
+  /** k items spread evenly over a list in order: the overview covers the whole lecture, not its first slides. */
+  function spread(list, k) {
+    if (list.length <= k) return list;
+    return Array.from({ length: k }, (_, i) => list[Math.round((i * (list.length - 1)) / Math.max(1, k - 1))]);
   }
 
   PDFStudy.summarizer = { summarizeText, summarizeSlides, scoreLuhn, scoreGraphCentrality };

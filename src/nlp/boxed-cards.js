@@ -49,7 +49,10 @@
   function ruleBoxCard(blk) {
     const kind = plain(blk.title).match(RULE_BOX_RE)[1];
     // Code is left out: listings in backticks, and statements set inline ("values[10] = 5.4; // Error").
-    const body = String(blk.text || blk.body || '').replace(/`[^`]*`/g, ' ').replace(INLINE_CODE_RE, ' ').replace(/\s+/g, ' ').trim();
+    // A code comment left outside its listing ("// Error—values has 10 elements ... 0 to 9 If your program ...")
+    // runs to the next sentence opening (a capitalised word followed by a lower-case one): it ends there.
+    const body = String(blk.text || blk.body || '').replace(/`[^`]*`/g, ' ').replace(INLINE_CODE_RE, ' ')
+      .replace(/\/\/.*?(?=\s[A-Z][a-z]+\s+[a-z]|$)/g, '. ').replace(/\s+/g, ' ').replace(/(?:\s*\.){2,}/g, '.').trim();
     // The heading runs in title case up to the capitalised word that opens the first sentence: the last capital
     // before the first lower-case word that no title would hold ("Using == to Compare Strings | If you write").
     const tokens = body.split(' ');
@@ -64,10 +67,19 @@
       .map((x) => plain(x).replace(/:\s+[A-Z].*$/, '.'))
       .filter((x) => RULE_WORD_RE.test(x) && !TOOLING_RE.test(x) && !/[{};]|\/\//.test(x) && !sc.unresolvedBack(x) && x.split(/\s+/).length >= 6);
     if (!sentences.length || TOOLING_RE.test(name)) return null;
-    // A sentence that states the rule (must / never / always ...) before one that only reports a failure.
+    // What goes wrong, then what to write instead: a sentence that names the error or the failure, and one that
+    // states the rule (must / never / always / instead). "Instead, the program will ..." continues the sentence
+    // before it and is read together with it. Without both, the strongest rule sentences as before.
+    const all = dep('tokenizer', './tokenizer.js').splitSentences(tokens.slice(opener).join(' ')).map((x) => plain(x));
+    const withLead = (x) => {
+      const at = all.indexOf(x);
+      return /^Instead,/.test(x) && at > 0 && !/[{};]|\/\//.test(all[at - 1]) ? `${all[at - 1]} ${x}` : x;
+    };
+    const problem = sentences.find((x) => PROBLEM_RE.test(x) && !STRONG_RULE_RE.test(x.replace(/\bcommon\s+error\b/i, '')));
+    const fix = sentences.find((x) => x !== problem && (STRONG_RULE_RE.test(x.replace(/\bcommon\s+error\b/i, '')) || /\binstead\b/i.test(x)));
     const strong = sentences.filter((x) => STRONG_RULE_RE.test(x));
-    const back = (strong.length ? strong : sentences).slice(0, MAX_RULE_SENTENCES).join(' ');
-    if (back.length > MAX_RULE_CHARS) return null;
+    const back = (problem && fix ? [problem, fix] : (strong.length ? strong : sentences).slice(0, MAX_RULE_SENTENCES)).map(withLead).join(' ');
+    if (back.length > MAX_RULE_CHARS || /^Instead,/.test(back)) return null;
     return { front: `${name} (${kind.toLowerCase()})`, back, category: 'Rule', kind: 'concept', sourceKind: 'key-concept', subject: name };
   }
   const RULE_BOX_RE = /^(Common\s+Error|Programming\s+Tip|Quality\s+Tip|Common\s+Pitfall|Pitfall|Caution|Warning)\s+\d+(?:\.\d+)*\b/i;
@@ -75,7 +87,10 @@
   // Sentences about the working environment, not the subject being taught.
   const TOOLING_RE = /\b(?:editors?|IDEs?|keyboard|tab\s+key|space\s+bar|cursor|mouse|menu|toolbar|shortcut|printer|screen|scrolling|tabs?)\b/i;
   const TITLE_SMALL_WORD_RE = /^(?:a|an|the|and|or|of|to|in|for|on|at|by|with|into|from|vs\.?)$/;
-  const STRONG_RULE_RE = /\b(?:must|never|always|do\s+not|don['’]t|should|avoid|common\s+error|good\s+idea)\b/i;
+  // A sentence that names what goes wrong as an error ("A common error is to ...", "... is a mistake"); a sentence
+  // that only reports a failure ("Even though both strings ..., the comparison fails") leans on the box's example.
+  const PROBLEM_RE = /\b(?:common\s+error|is\s+(?:an?\s+)?error|mistake|no\s+compiler\s+error)\b/i;
+  const STRONG_RULE_RE =/\b(?:must|never|always|do\s+not|don['’]t|should|avoid|common\s+error|good\s+idea)\b/i;
   const INLINE_CODE_RE = /\b[A-Za-z_]\w*(?:\[[^\]]*\])+\s*\$?\s*=\s*[^;]*;\s*(?:\/\/\$?)?/g;
   const MAX_RULE_SENTENCES = 2;
   const MAX_RULE_CHARS = 360;
@@ -113,18 +128,22 @@
       }
       if (SKIPPED_KINDS.has(kind)) continue;
       if (kind === 'key-concept') {
-        // A margin note may hold two statements ("X compare values. The == operator tests ..."): each is split on its
-        // own, and the first that makes a card is kept.
+        // A margin note may hold two statements ("X compare values. The == operator tests ...") or a piece of advice
+        // ("Use X to Y.", "When X, do Y. Instead, ..."): every sentence that makes a card makes one (advice-cards.js
+        // reads instructions by their shape; a statement is split at its verb by key-statements.js).
         const ks = dep('keyStatements', './key-statements.js');
-        const notes = dep('tokenizer', './tokenizer.js').splitSentences(textOf(blk));
-        const card = (notes.length ? notes : [textOf(blk)]).map((s) => ks.completion(s)).find(Boolean);
-        if (card) cards.push({ ...card, category: 'Key Concept', kind: 'concept', sourceKind: 'key-concept', page, subject: plain(blk.title) });
+        const made = dep('adviceCards', './advice-cards.js').cardsOfNote(textOf(blk), (s) => ks.completion(s));
+        for (const card of made) {
+          cards.push({ front: card.front, back: card.back, category: 'Key Concept', kind: 'concept', sourceKind: 'key-concept', page, subject: plain(blk.title), sentence: textOf(blk) });
+        }
       } else if (kind === 'self-check') {
         cards.push(...selfCheckCards(blk));
       } else if (kind === 'table') {
         cards.push(...dep('tableCards', './table-cards.js').rowCards(blk, { subject: plain(blk.title) }).map((c) => ({ ...c, page })));
       } else if (kind === 'syntax') {
         if (plain(blk.title) && textOf(blk) && !isCalloutDiagram(textOf(blk))) cards.push({ front: `${plain(blk.title)} — syntax`, back: textOf(blk), category: 'Formula', kind: 'formula', sourceKind: 'formula', page });
+        // A callout diagram still prints its templates plainly ("To construct an array: new typeName[length]")
+        else for (const c of dep('syntaxCards', './syntax-cards.js').fromBox(blk.text || blk.body || '')) cards.push({ ...c, category: 'Syntax', kind: 'concept', sourceKind: 'formula', page });
       } else if (isBareNumber(blk.title)) {
         // "Definition 1" as a title names nothing: the card is the term the box defines, or none.
         const m = plain(blk.title).match(BOX_HEAD_RE);

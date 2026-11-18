@@ -15,9 +15,10 @@
  * the set borrowed for a False is not asked again about its own subject, and a statement the quiz offered as
  * a wrong option is not borrowed for a False of the practice test.
  *
- * Choice questions are drawn first. Then a recall round (recall-questions.js) asks, self-graded, the facts and
- * cards no choice form could ask with options that are false for the subject, in every slot the choice
- * questions left: a set is short only when the scope has no more to ask.
+ * Choice questions are drawn first. Then a typed round (typed-round.js) asks, with an answer the student types and
+ * the app checks, the definitions, blanks, table cells, numbers and worked answers where one short answer is right.
+ * Then a recall round (recall-questions.js) asks, self-graded, the facts and cards no choice or typed form could ask,
+ * in every slot left: a set is short only when the scope has no more to ask.
  *
  * generateQuiz(input, { maxQuestions, mode, didacticBlocks, seedOffset, variant, excludeSources, avoid, cards, reviewOf })
  *   cards           the flashcards the app shows for the scope; they are what the quiz asks (mined when absent)
@@ -53,16 +54,22 @@
       keys: dep('studyKeys', './study-keys.js'),
       recall: dep('recallQuestions', './recall-questions.js'),
       table: dep('tableQuestions', './table-questions.js'),
+      worked: dep('workedQuestions', './worked-questions.js'),
+      typedRound: dep('typedRound', './typed-round.js'),
     };
   }
 
-  // The order in which the families take turns; structured and fact questions get two turns per round.
+  // The order in which the families take turns; structured and fact questions get two turns per round, and
+  // worked questions (a rule of the section applied, the key computed) three, first. A family with nothing to
+  // ask gives its turn away, so a scope without checkable rules is drawn exactly as before.
   // A sentence can often be asked either as a cloze or as a naming True/False, and whichever family
   // comes first takes it: the quiz lets cloze go first, the practice test lets naming go first.
   const TURNS = [
-    ['structured', 'fact', 'formula', 'table', 'structured', 'cloze', 'fact', 'naming'],
-    ['structured', 'fact', 'table', 'formula', 'structured', 'naming', 'fact', 'cloze'],
+    ['worked', 'structured', 'fact', 'formula', 'worked', 'table', 'structured', 'cloze', 'worked', 'fact', 'naming'],
+    ['worked', 'structured', 'fact', 'table', 'worked', 'formula', 'structured', 'naming', 'worked', 'fact', 'cloze'],
   ];
+  // Worked questions fill at most this share of a set: the section's terms and facts are asked too.
+  const MAX_WORKED_SHARE = 0.5;
   const FACT_FORMS = ['name', 'describe', 'trueFalse'];
   const CLOZE_REDRAWS = 2;
   const OPTION_REDRAWS = 2; // other draws of a fact's nearest siblings when its options were offered already
@@ -165,6 +172,7 @@
           variant,
           forms,
           kinds: scope.kinds,
+          text: scope.text, // a blank before a noun only takes terms the text writes before that noun
           // What the scope defines each term as (facts and definition cards): a cloze option defined as a kind of
           // the answer is not offered (cloze-questions.js).
           definitions: [...scope.facts.filter((f) => f.kind === 'definition').map((f) => ({ term: f.term, statement: f.statement })),
@@ -221,6 +229,15 @@
       table: D.assembly.listFamily(set, D.table.candidates(scope.allCards, { seed: seedOffset + variant, factOf: (source) => factBySource.get(source) })),
       fact: nextFact,
     };
+    // Worked questions come from the rule cards the student sees (opts.cards; mined cards otherwise), each kind in
+    // turn; the variant and seed choose other instances for the practice test and for "New quiz".
+    // (A card that is itself a rule carries `rule`; a definition card that also states one carries `teaches`.)
+    const ruleCards = (Array.isArray(options.cards) ? options.cards : scope.allCards).filter((c) => c && (c.rule || c.teaches));
+    const workedList = D.worked && ruleCards.length ? D.worked.build(ruleCards, { seed: seedOffset, variant }) : [];
+    const workedRoom = Math.ceil(maxQuestions * MAX_WORKED_SHARE);
+    const nextWorked = D.assembly.listFamily(set, workedList);
+    let workedTaken = 0;
+    fromSlidesOrCards.worked = () => workedTaken < workedRoom && nextWorked() && ++workedTaken > 0;
     const fromSentences = { cloze: nextCloze, naming: nextNaming };
     if (scope.isDeck) {
       // A deck's own definitions, questions and points are asked first; its few running sentences
@@ -229,6 +246,11 @@
       D.assembly.fill(set, fromSentences, turns);
     } else {
       D.assembly.fill(set, { ...fromSlidesOrCards, ...fromSentences }, turns);
+    }
+
+    // Typed round (typed-round.js): what the choice forms left is asked with an answer the app checks.
+    if (D.typedRound) {
+      D.typedRound.fill(set, { scope, ctx: sentenceWork(), placed, ruleCards, factOf: (source) => factBySource.get(source), seed: seedOffset, variant });
     }
 
     // Recall round: what no choice form could ask honestly is asked self-graded. The choice families have run

@@ -9,6 +9,8 @@
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
   const T = () => PDFStudy.mathTex || (typeof require === 'function' ? require('./math-tex.js') : null);
+  // Where a formula inside a prose row starts and ends: math-runs.js
+  const mathRuns = () => PDFStudy.mathRuns || (typeof require === 'function' ? require('./math-runs.js') : null);
 
   const STRONG_MATH_RE = /[=<>≤≥≠≈≡→⇒⇔∈∉⊂⊆∪∩∀∃∫∑∏√∞∂∇±×÷⋅′″α-ωΑ-Ω‖⌊⌋⌈⌉⟨⟩]/;
   const TALL_DELIM_RE = /^[|‖()[\]{}∫∑∏√⎧⎨⎩⎪⎫⎬⎭]+$/;
@@ -17,6 +19,7 @@
   const OPERATOR_END_RE = /[=<>≤≥≠≈+\-−×÷⋅·/^_]$/;
   const SENTENCE_GLUE_RE = /\b([a-z]{3,}[.!?])([A-Z][a-z]{2,})/g;
   const OPERATOR_START_RE = /^[=<>≤≥≠≈+\-−×÷⋅·/^_)\]]/;
+  const SUB_DIGITS = { 0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄', 5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉' };
   // End-of-example / end-of-proof marks set larger and lower than the line: never its base size
   const END_MARK_RE = /^[◂◃◀∎□■▪]$/;
 
@@ -79,12 +82,16 @@
   }
 
   function isProse(s) {
-    if (s.tex || s.__scriptBase) return false;
+    if (s.tex || s.__scriptBase || s.__operand) return false;
     const text = (s.text || '').trim();
+    // An operator set in the program font ("==" in "the == operator") is code in a sentence, not a formula
+    if (s.isCode && !s.isMath) return true;
     const isFn = (w) => T().FUNC_RE.test(w);
     if (s.isItalic || s.isMath) {
       const real = (text.match(PROSE_WORD_RE) || []).filter((w) => !isFn(w) && !(s.isMath && w.length <= 3));
-      return real.length > 0 && !/^[A-Za-z]{1,2}[.,;:)]?$/.test(text);
+      // An italic phrase of short words ("it is in 2NF") is emphasis in a sentence, not a product of variables
+      const phrase = !s.isMath && (text.match(/(?:^|\s)[A-Za-z]{2,}(?=[\s,.;:]|$)/g) || []).length >= 2 && !STRONG_MATH_RE.test(text);
+      return (real.length > 0 || phrase) && !/^[A-Za-z]{1,2}[.,;:)]?$/.test(text);
     }
     const words = text.match(/[A-Za-z]+/g) || [];
     return words.some((w) => !isFn(w) && !/^(?:d[a-z]|[A-Za-z])$/.test(w)) || /^(?:a|A|I)$/.test(text);
@@ -113,7 +120,7 @@
     const s = spans[i];
     const next = spans[i + 1];
     const t = (s.text || '').trim();
-    if (!next || next.tex || s.tex) return false;
+    if (!next || next.tex || s.tex || s.__operand) return false;
     const n = (next.text || '').trim();
     if (/^[A-Za-z]$/.test(t)) return next.x0 - s.x1 < s.fontSize * 0.15 && /^[a-z]{2,}/.test(n);
     return /^[A-Z]\.$/.test(t) && s.isItalic && next.isItalic && /^[a-z]{3,}\b/.test(n) && next.x0 - s.x1 < s.fontSize * 0.6;
@@ -161,6 +168,11 @@
     return sorted
       .map((s, i) => {
         const t = (s.plain || s.text || '').trim();
+        // Plain text a student reads as typed: "C₆" (a numeric subscript after a letter), "5th"; other scripts
+        // keep the ^( ) / _( ) notation
+        const prevText = i ? String(sorted[i - 1].plain || sorted[i - 1].text || '') : '';
+        if (role[i] === 'sup' && /^(?:st|nd|rd|th)$/.test(t) && /\d$/.test(prevText)) return t;
+        if (role[i] === 'sub' && /^\d{1,3}$/.test(t) && /[A-Za-z]$/.test(prevText)) return [...t].map((c) => SUB_DIGITS[c] || c).join('');
         if (role[i] === 'sup') return t.length > 1 ? `^(${t})` : `^${t}`;
         if (role[i] === 'sub') return t.length > 1 ? `_(${t})` : `_${t}`;
         return (i && sorted[i - 1].x1 < s.x0 - s.fontSize * 0.15 ? ' ' : '') + t;
@@ -189,9 +201,10 @@
       const text = rawSpans.map((s, i) => (i && s.x0 - rawSpans[i - 1].x1 > s.fontSize * 0.1 ? ' ' : '') + s.text).join('').replace(/\s+/g, ' ').trim();
       return { text, formattedText: text ? `\`${text.replace(/`/g, "'")}\`` : '', isBold: false, hasMath: false, isCode: true };
     }
-    const spans = detachScriptBases(rawSpans);
+    const MR = mathRuns();
+    const spans = detachScriptBases(MR ? MR.splitOperands(rawSpans) : rawSpans);
     const role = roles(spans);
-    const pieces = [];
+    let pieces = [];
     spans.forEach((s, i) => {
       const scripted = role[i + 1] && role[i + 1] !== 'base' && spans[i + 1].x0 - s.x1 < s.fontSize * 0.4 &&
         (s.__scriptBase || /^[A-Za-z0-9()]+$/.test((s.text || '').trim()));
@@ -202,10 +215,17 @@
         last.roles.push(role[i]);
       } else pieces.push({ math: !prose, spans: [s], roles: [role[i]] });
     });
+    if (MR) pieces = MR.balance(pieces);
     const out = [];
     for (const p of pieces) {
-      if (p.math && runIsMath(p.spans, p.roles)) {
-        out.push({ first: p.spans[0], last: p.spans[p.spans.length - 1], text: spansToPlain(p.spans), fmt: `$${spansToTex(p.spans)}$`, bold: false, math: true });
+      const opText = p.math && MR ? MR.operatorOnly(p.spans) : null;
+      // A lone operator between words ("**SKU** → **Price**", "the == operator") reads as text
+      const lone = opText && pieces.length > 1;
+      if (p.math && !lone && runIsMath(p.spans, p.roles)) {
+        const { tex, tail } = MR ? MR.outerPunct(spansToTex(p.spans)) : { tex: spansToTex(p.spans), tail: '' };
+        out.push({ first: p.spans[0], last: p.spans[p.spans.length - 1], text: spansToPlain(p.spans), fmt: `$${tex}$${tail}`, bold: false, math: true });
+      } else if (lone) {
+        out.push({ first: p.spans[0], last: p.spans[p.spans.length - 1], text: opText, fmt: null, bold: false, math: false });
       } else {
         for (const s of p.spans) {
           const text = String(s.plain || s.text).replace(SENTENCE_GLUE_RE, '$1 $2'); // "strokes.This": the PDF dropped the space

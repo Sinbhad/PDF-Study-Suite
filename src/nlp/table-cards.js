@@ -15,7 +15,7 @@
  * named with it ("saginata (Taenia spp.)"). A cell holding a web address is left empty.
  *
  * rowCards(table, { subject, max }) -> [{ front, back, category, kind, subject, sourceKind, table }]
- *   table: { entity, column, columnIndex, key } so a question can offer the same column of other rows
+ *   table: { entity, column, columnIndex, key, header, row } so a question can offer the same column of other rows
  * isComparison(table) -> boolean
  */
 (function (root) {
@@ -130,9 +130,13 @@
         const bare = subject && /\d/.test(entity) && entity.split(/\s+/).length <= 2;
         const about = qualify(entity) && !bare && !entity.toLowerCase().includes(subject.toLowerCase()) ? `${entity} (${subject})` : entity;
         const named = bare ? `${subject} ${entity}` : about;
+        // A row named by a symbol (">", "!=") is no cue alone: its column header says what the symbol is.
+        const cue = !wordy(named) && header[0] ? `${header[0]} ${named}` : named;
         out.push({
-          front: `${named} — ${column}`, back: cell, category: 'Comparison', kind: 'concept', subject: entity, sourceKind: 'table',
-          table: { entity: named, column, columnIndex: i + 1, key },
+          front: `${cue} — ${column}`, back: cell, category: 'Comparison', kind: 'concept', subject: entity, sourceKind: 'table',
+          // The whole row and the header ride along: a question asked down a column checks every cell of the other
+          // rows and names the column its stem value sits in (table-questions.js).
+          table: { entity: named, column, columnIndex: i + 1, key, header: [...header], row: [...row] },
         });
       });
     }

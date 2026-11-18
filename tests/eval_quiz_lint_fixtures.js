@@ -178,6 +178,31 @@ const overlap = L.lintQuizTestOverlap(QUIZ_SET, [claim('Drug Alpha', 'Given by m
 check('quiz_test_overlap flags a test question that re-asks a quiz fact, and only that one',
   overlap[0] && overlap[0].lint === 'quiz_test_overlap' && overlap[1] === null, JSON.stringify(overlap));
 
+// Fourth-review lints (synthetic stems)
+pair(L.lintOptionCount, 'option_count', cloze('Water crosses a membrane toward the higher solute concentration by ________.', TERMS.slice(0, 3), 'osmosis'), GOOD_CLOZE);
+pair(L.lintOptionKindTell, 'option_kind_tell',
+  cloze('Steady ticks are produced by a timing device called a(n) ________ inside the console.', ['beat skew', 'beat gating', 'beat generator', 'beat drift'], 'beat generator'),
+  cloze('Steady ticks are produced by a timing device called a(n) ________ inside the console.', ['pulse generator', 'beat generator', 'ramp generator', 'noise generator'], 'beat generator'));
+pair(L.lintOptionKindTell, 'option_kind_tell',
+  cloze('A record that names the row of another table is called a(n) ________.', ['link key', 'shadow table', 'mirror table', 'ghost table'], 'link key'),
+  cloze('A record that names the row of another table is called a(n) ________.', ['link key', 'spare key', 'shadow key', 'ghost key'], 'link key'));
+pair(L.lintAdjectiveSlot, 'adjective_slot',
+  cloze('Two layouts are ________ to each other when every cell lines up.', ['congruent', 'grid line', 'cell border', 'row header'], 'congruent'),
+  cloze('Two layouts are ________ to each other when every cell lines up.', ['congruent', 'disjoint', 'adjacent', 'orthogonal'], 'congruent'));
+const tableQ = (question) => ({ type: 'multiple_choice', badge: 'Multiple Choice • Table', question, options: ['Alpha', 'Beta', 'Gamma', 'Delta'], answer: 'Alpha' });
+pair(L.lintTableStemUnnamed, 'table_stem_unnamed', tableQ('What is the strain for "goats"?'), tableQ('In the row where Main host is "goats", what is the Strain?'));
+const reveal = (question, answer) => ({ type: 'reveal', question, answer, options: [] });
+pair(L.lintOpenStemPrompt, 'open_stem_prompt', reveal('Complete: "A token can …"', 'be passed between two stations'),
+  reveal('What is a token?', 'a short frame that grants the right to send'));
+pair(L.lintFillerItem, 'filler_item', reveal('Recall the 3 points of "Pump repairs".', '• Seal swap\n• Bearing swap\n• Etc.'),
+  reveal('Recall the 2 points of "Pump repairs".', '• Seal swap\n• Bearing swap'));
+const SLIDES = 'Drug Gamma\nBinds the worm surface\n\nDrug Delta\nPD: per drug gamma\nPoorly absorbed from the gut\n\nDrug Epsilon\nStops glucose uptake';
+const perFalse = (asked, owner, statement) => ({ type: 'true_false', answer: 'False', options: ['True', 'False'], construction: 'sibling_swap',
+  question: `True or False: the following is true of "${asked}".\n"${statement}"`, explanation: `False. This is true of "${owner}", not of "${asked}". ${owner}: ${statement}` });
+const fourth = L.buildFourthIndex(SLIDES);
+pair(L.lintInheritedFalse, 'inherited_false', perFalse('Drug Delta', 'Drug Gamma', 'Binds the worm surface'),
+  perFalse('Drug Epsilon', 'Drug Gamma', 'Binds the worm surface'), fourth);
+
 // lintSet: every finding carries a known lint name, and a clean question yields none
 const findings = L.lintSet([first, GOOD_CLOZE, tf('Fermentation is an anaerobic pathway that regenerates NAD+ so that glycolysis can continue.', 'True')], SOURCE);
 check('lintSet returns one findings list per question', findings.length === 3 && findings[1].length === 0 &&
@@ -194,6 +219,24 @@ check('solver: picks the only capitalised option for a blank that opens the stat
   solver.guess(cloze('________ gives each process a fixed slice of CPU time.', ['Round robin', 'waiting time', 'ready queue', 'time quantum'], 'Round robin')).pick === 'Round robin');
 check('solver: no tell means no guess, scored at chance', solver.guess(GOOD_CLOZE) === null &&
   Math.abs(solver.score([GOOD_CLOZE]).expected - 0.25) < 1e-9);
+
+// Typed answers (an answer the student types and the app checks)
+const typed = (question, answer, form = 'term') => ({ type: 'typed', question, answer, form, options: [], accept: [], others: [] });
+pair(L.lintTypedAnswerInPrompt, 'typed_answer_in_prompt',
+  typed('Type the missing term:\n"A pressure gauge is called a ________ when it reads pressure with a column of liquid."', 'pressure gauge'),
+  typed('Type the missing term:\n"An instrument that reads pressure with a column of liquid is called a ________."', 'manometer'));
+pair(L.lintTypedAnswerTooLong, 'typed_answer_too_long',
+  typed('Which term is defined as:\n"A loop that returns its fluid to the pump."', 'closed loop of the pump circuit'),
+  typed('Which term is defined as:\n"A loop that returns its fluid to the pump."', 'closed loop'));
+pair(L.lintTypedAmbiguousBlank, 'typed_ambiguous_blank',
+  typed('Type the missing term:\n"Pumps, ________ and turbines add or take energy from a fluid."', 'compressors'),
+  typed('Type the missing term:\n"A machine that raises the pressure of a gas by reducing its volume is called a ________."', 'compressor'));
+check('typed_ambiguous_blank flags a hedged prompt',
+  (L.lintTypedAmbiguousBlank(typed('Type the missing term:\n"A small pressure device is often called a ________."', 'gauge')) || {}).lint === 'typed_ambiguous_blank');
+check('typed_answer_too_long: a number answer must hold a number',
+  (L.lintTypedAnswerTooLong(typed('Pump — Speed: type the value with its unit.', 'fast', 'number')) || {}).lint === 'typed_answer_too_long' &&
+  L.lintTypedAnswerTooLong(typed('Pump — Speed: type the value with its unit.', '1500 rpm', 'number')) === null);
+check('solver: a typed question is left out (nothing to guess)', solver.score([typed('Which term is defined as:\n"A machine that moves fluid."', 'pump')]).n === 0);
 
 // Baseline gate
 const rec = (defectPct) => ({ total: { defectPct, lints: { answer_leak: 3 } } });

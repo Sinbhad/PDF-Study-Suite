@@ -27,13 +27,25 @@
     return t.html ? `<${tag} class="${cls}" title="${escapeHtml(t.full)}">${t.html}</${tag}>` : '';
   }
 
-  /** "View p. 12" for a book, "Slide 12" for a deck (a deck's page is its slide). */
+  /**
+   * "View p. 12" for a book, "Slide 12" for a deck (a deck's page is its slide). A book shows the page number
+   * printed on the page ("View p. 146") when it differs from the PDF's own page, which the button still opens.
+   */
   function pageJump(page, label) {
     const n = parseInt(page, 10);
     if (!(n > 0)) return '';
-    const deck = Boolean(PDFStudy.main && PDFStudy.main.appState && PDFStudy.main.appState.activeMode === 'slide_deck');
-    const text = deck && !label ? `Slide&nbsp;${n}` : `${label || 'View'} p.&nbsp;${n}`;
-    return `<button class="page-jump" type="button" data-jump-page="${n}">${text}</button>`;
+    const st = PDFStudy.main && PDFStudy.main.appState;
+    const deck = Boolean(st && st.activeMode === 'slide_deck');
+    if (deck && !label) return `<button class="page-jump" type="button" data-jump-page="${n}">Slide&nbsp;${n}</button>`;
+    const shown = printedPage(n);
+    const hint = shown ? ` title="PDF page ${n}" aria-label="${escapeHtml(`${label || 'View'} p. ${shown} (PDF page ${n})`)}"` : '';
+    return `<button class="page-jump" type="button" data-jump-page="${n}"${hint}>${label || 'View'} p.&nbsp;${escapeHtml(shown || String(n))}</button>`;
+  }
+
+  /** The number printed on PDF page n ("146"), or '' when it is unknown or the same (printed-pages.js). */
+  function printedPage(n) {
+    const st = PDFStudy.main && PDFStudy.main.appState;
+    return PDFStudy.printedPages && st && st.parsedPdf ? PDFStudy.printedPages.printed(st.parsedPdf, n) : '';
   }
 
   /**
@@ -86,7 +98,7 @@
   const delegate = (mod, fn) => (...args) => (PDFStudy[mod] && PDFStudy[mod][fn] ? PDFStudy[mod][fn](...args) : undefined);
 
   PDFStudy.studyViews = {
-    escapeHtml, rich, block, titled, pageJump, viewHead, emptyState, whyEmpty, chip, bindPageJumps,
+    escapeHtml, rich, block, titled, pageJump, printedPage, viewHead, emptyState, whyEmpty, chip, bindPageJumps,
     renderSummaryView: delegate('summaryView', 'renderSummaryView'),
     renderFlashcardsView: delegate('flashcardView', 'renderFlashcardsView'),
     renderQuizView: delegate('quizView', 'renderQuizView'),

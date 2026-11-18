@@ -15,8 +15,10 @@
     Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π', Sigma: 'Σ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω', infty: '∞', partial: '∂',
     nabla: '∇', ldots: '…', cdots: '⋯', dots: '…', ell: 'ℓ', langle: '⟨', rangle: '⟩', lfloor: '⌊', rfloor: '⌋',
     lceil: '⌈', rceil: '⌉', emptyset: '∅', lbrace: '{', rbrace: '}', '{': '{', '}': '}', '|': '‖', '%': '%', '$': '$',
-    '#': '#', '&': '&', prime: '′', circ: '∘', deg: '°', neg: '¬', angle: '∠', triangle: '△', hbar: 'ℏ' };
+    '#': '#', '&': '&', prime: '′', circ: '∘', deg: '°', neg: '¬', angle: '∠', triangle: '△', hbar: 'ℏ',
+    varsigma: 'ς', Upsilon: 'Υ', aleph: 'ℵ' };
   const OPS = { to: '→', rightarrow: '→', leftarrow: '←', Rightarrow: '⇒', Leftarrow: '⇐', Leftrightarrow: '⇔',
+    leftrightarrow: '↔', therefore: '∴',
     iff: '⇔', implies: '⇒', mapsto: '↦', le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', approx: '≈',
     equiv: '≡', sim: '∼', cong: '≅', propto: '∝', pm: '±', mp: '∓', cdot: '·', times: '×', div: '÷', in: '∈',
     notin: '∉', ni: '∋', subset: '⊂', subseteq: '⊆', supset: '⊃', supseteq: '⊇', cup: '∪', cap: '∩', setminus: '∖',

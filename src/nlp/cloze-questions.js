@@ -22,6 +22,8 @@
   const os = () => dep('optionSets', './option-sets.js');
   const qf = () => dep('quizFacts', './quiz-facts.js');
   const marked = () => dep('markedTerms', './marked-terms.js');
+  const kinds = () => dep('termKinds', './term-kinds.js');
+  const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const shuffle = (...a) => dep('stemDistractors', './stem-distractors.js').deterministicShuffle(...a);
 
   const BLANK = '________';
@@ -101,19 +103,35 @@
     const own = (ctx.definitions || []).find((d) => os().termKey(d.term) === os().termKey(option));
     const genus = own ? words(own.statement).slice(0, DEFINITION_GENUS_WORDS).map((w) => os().lemma(w.toLowerCase().replace(/[^a-z]/g, ''))) : [];
     if (!NAMING_STEM_RE.test(stem) && genus.includes(headWord(answer))) return true;
+    return saidOf(option, stem, source, ctx);
+  }
+
+  /**
+   * Does another sentence of the scope say most of this stem's predicate about `option` itself? With ctx.sameMath (a
+   * typed question, which has no options to compare) a stem's formulas count too: "The ____ of p and q, denoted by
+   * $p \wedge q$" is not said of the disjunction by a sentence that writes $p \vee q$.
+   */
+  function saidOf(option, stem, source, ctx) {
     const want = new Set(qf().contentStems(stem));
     if (want.size < MIN_SAID_WORDS) return false;
     const re = new RegExp(`(?<![A-Za-z])${option.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:e?s)?(?![A-Za-z])`, 'i');
+    const formulas = ctx.sameMath ? formulasOf(stem) : [];
     return (ctx.sentences || []).some((s) => s !== source && re.test(s) &&
-      qf().contentStems(s).filter((w) => want.has(w)).length / want.size >= SAID_OF_SHARE);
+      qf().contentStems(s).filter((w) => want.has(w)).length / want.size >= SAID_OF_SHARE &&
+      formulas.every((f) => formulasOf(s).includes(f)));
   }
+  const formulasOf = (text) => (mt().mask(String(text || '')).spans || []).map((sp) => String(sp && (sp.text || sp.raw || sp)).replace(/\s+/g, ''));
 
   // A law, theorem or rule names a statement, not a thing: offered beside "logic gates" it is the wrong category.
   const STATEMENT_HEAD_RE = /\b(?:laws?|theorems?|rules?|principles?|postulates?|axioms?|identit(?:y|ies)|lemmas?|corollar(?:y|ies))$/i;
   const isStatementName = (t) => STATEMENT_HEAD_RE.test(String(t).trim());
   const COMPLEMENT_RE = /\bcomplement|\bnegat|\binver[st]|\boverbar|\bprimed?\b/i;
 
-  function forSentence(sentence, ctx) {
+  /**
+   * The places a sentence may be blanked, in turn order: every marked term whose cut leaves a question standing.
+   * -> { clean, spans, absent, list: [{ term, hit, cut }] } or null when the sentence cannot be completed at all.
+   */
+  function slots(sentence, ctx) {
     const clean = tok().cleanMarkdown(sentence);
     // "Ataxia, circling, seizures, etc. 'Old dog ...'": a list run into another line is no sentence to complete.
     if (sn().hasUnresolvedReference(clean) || /\betc\.\s+\S/.test(clean)) return null;
@@ -127,15 +145,45 @@
     // is not blanked at the same place as in the quiz.
     const turn = present.length ? (ctx.variant || 0) % present.length : 0;
     const inTurn = [...present.slice(turn), ...present.slice(0, turn)];
-
+    const list = [];
     for (const { term, hit } of inTurn) {
       if (hit[0].length < 3 || hit[0].length > clean.length * MAX_TERM_SHARE || (ctx.skip && ctx.skip(term.text))) continue;
       const cut = blankAt(masked, hit, term);
       if (!cut) continue;
+      // "... is ________ to ...": the slot wants an adjective, and a noun answer there is a word cut from a phrase.
+      if (kinds().slotWants(cut.before, cut.after) === 'adjective' && !dep('phraseShape', './phrase-shape.js').isAdjectival(hit[0])) continue;
+      list.push({ term, hit, cut });
+    }
+    return { clean, spans, absent, list };
+  }
+
+  function forSentence(sentence, ctx) {
+    const found = slots(sentence, ctx);
+    if (!found) return null;
+    const { clean, spans, absent } = found;
+    for (const { term, hit, cut } of found.list) {
+      // Every option must be the same kind of thing as the answer (term-kinds.js): one head noun or one genus in the
+      // scope's definitions, or the category the stem itself names before the blank ("a timing device called ...").
+      const category = kinds().stemCategory(cut.before);
+      const answerKinds = kinds().kindsOf(hit[0], ctx.definitions);
+      const ofKind = (t) => {
+        const own = kinds().kindsOf(t, ctx.definitions);
+        return [...own].some((k) => answerKinds.has(k)) || (Boolean(category) && own.has(category));
+      };
       // A term the scope calls a kind of the answer ("candidate key" beside "primary key") may complete it as well.
+      // "the ________ operator": a blank that modifies the next noun takes only terms the scope writes before that
+      // noun ("conjunction operator"), never one that reads as nonsense there ("compound proposition operator").
+      // A wrong option that repeats a word the stem already uses ("biconditional" in a list naming the biconditional
+      // operator) is told apart by that word.
+      const modified = (cut.after.match(/^\s+([a-z]{3,})\b/) || [])[1];
+      const fitsBefore = (t) => !modified || tok().PHRASE_BREAK_WORDS.has(modified) || !ctx.text ||
+        new RegExp(`(?<![A-Za-z])${escapeRe(t)}\\s+${modified}`, 'i').test(ctx.text);
+      const stemWords = new Set(qf().contentStems(cut.rest));
+      const answerWords = new Set(qf().contentStems(hit[0]));
+      const echoesStem = (t) => qf().contentStems(t).some((w) => stemWords.has(w) && !answerWords.has(w));
       const others = marked().nearest(absent, term, ctx.seed).map((t) => t.text)
-        .filter((t) => !(ctx.kinds && ctx.kinds.related(hit[0], t)) && !alsoCompletes(t, hit[0], cut.rest, clean, ctx) &&
-          isStatementName(t) === isStatementName(hit[0]));
+        .filter((t) => ofKind(t) && fitsBefore(t) && !echoesStem(t) && !(ctx.kinds && ctx.kinds.related(hit[0], t)) &&
+          !alsoCompletes(t, hit[0], cut.rest, clean, ctx) && isStatementName(t) === isStatementName(hit[0]));
       const set = os().termSet(hit[0], others, {
         stem: cut.rest,
         position: cut.before.trim() ? 'inside' : 'start',
@@ -157,7 +205,7 @@
     return null;
   }
 
-  const api = { forSentence, demandedNumber, BLANK };
+  const api = { forSentence, slots, alsoCompletes, saidOf, informativeWords, demandedNumber, BLANK, NAMING_STEM_RE, MIN_CONTENT_WORDS };
   PDFStudy.clozeQuestions = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

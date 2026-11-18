@@ -28,7 +28,7 @@
 
   function mcq(badge, question, answer, distractors, extra, seed) {
     const ds = uniq(distractors).filter((d) => d && key(d) !== key(answer)).slice(0, 3);
-    if (ds.length < 2) return null;
+    if (ds.length < 3) return null; // four options or no choice question
     return { type: 'multiple_choice', badge, question, options: shuffle([answer, ...ds], question, seed), answer, ...extra };
   }
   const reveal = (badge, question, answer, extra) => ({ type: 'reveal', badge, question, options: [], answer, ...extra });
@@ -81,6 +81,19 @@
   const fmtList = (items) => (items.length <= 1 ? items.join('') : items.length === 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`);
   const splitList = (s) => String(s || '').split(/\s*,\s*(?:and\s+)?|\s+and\s+/).map((x) => x.trim()).filter(Boolean);
 
+  /** Index sets of size k from 0..n-1, in order ([0,1], [0,2], ...); at most MAX_SUBSETS of them. */
+  const MAX_SUBSETS = 12;
+  function subsets(n, k) {
+    const out = [];
+    const walk = (start, picked) => {
+      if (out.length >= MAX_SUBSETS) return;
+      if (picked.length === k) { out.push(picked); return; }
+      for (let i = start; i < n; i++) walk(i + 1, [...picked, i]);
+    };
+    if (k > 0 && k < n) walk(0, []);
+    return out;
+  }
+
   /** "R_3 and R_5" where every item is one of the labelled candidates listed on the slide. */
   function labelAnswer(q) {
     const labels = q.context.map((b) => (b.match(LABEL_AT_START_RE) || [])[1]).filter(Boolean);
@@ -107,7 +120,9 @@
         const idx = la.items.map((x) => la.labels.indexOf(x));
         const sib = all.filter((o) => o !== q).map(labelAnswer).filter((o) => o && o.labels.join() === la.labels.join()).map((o) => fmtList(o.items));
         const rotated = [1, 2, 3].map((k) => fmtList(idx.map((n) => (n + k) % la.labels.length).sort((a, b) => a - b).map((n) => la.labels[n])));
-        const item = mcq('Lecture Question', question, fmtList(la.items), [...shuffle(uniq(sib), q.question, seed), ...rotated], extra, seed);
+        // Then every other subset of the same size: each is a wrong answer, since the slide reveals exactly one.
+        const others = subsets(la.labels.length, la.items.length).map((s) => fmtList(s.map((n) => la.labels[n])));
+        const item = mcq('Lecture Question', question, fmtList(la.items), [...shuffle(uniq(sib), q.question, seed), ...rotated, ...others], extra, seed);
         if (item) { out.push(item); continue; }
       }
       const len = q.answer.length;

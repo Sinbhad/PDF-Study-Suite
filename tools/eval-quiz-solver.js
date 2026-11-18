@@ -48,7 +48,8 @@ function guess(q) {
 }
 
 /**
- * Scores the solver over a list of questions. Reveal-style questions (no options) are left out.
+ * Scores the solver over a list of questions. Questions without options (self-graded reveals, and typed answers the
+ * app checks) are left out: there is nothing to pick from, so nothing to guess.
  * -> { n, expected, chance, tells }: `expected` is the number the solver gets right (a question without a
  * tell counts 1/options), `chance` what blind guessing gets, `tells` how many questions had a tell.
  */
