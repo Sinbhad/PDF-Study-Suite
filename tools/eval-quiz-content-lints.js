@@ -209,7 +209,8 @@ const EDGE_PUNCT_RE = /^[("“'‘[{]+|[)"”'’\]}.,;:!?]+$/g;
 
 /** garbled_token: a token of the stem or answer that is not word-shaped and that the scope prints only there. */
 function lintGarbledToken(q, ctx) {
-  const text = T.stripMath(`${T.stemBody(q)} ${q.type === 'true_false' ? '' : q.answer || ''}`);
+  // (Inline code, `values[2]` or `if (x > 3) { ... }`, is a program's text, not prose debris.)
+  const text = T.stripMath(`${T.stemBody(q)} ${q.type === 'true_false' ? '' : q.answer || ''}`).replace(/`[^`]*`/g, ' ');
   // A cloze's neutral article and trademark signs are the engine's and the publisher's, not debris.
   const plain = text.replace(/\b[Aa]\(n\)/g, 'a').replace(/[®™©…]/g, ' ').replace(/[—–]/g, ' ');
   for (const raw of plain.match(/\S+/g) || []) {

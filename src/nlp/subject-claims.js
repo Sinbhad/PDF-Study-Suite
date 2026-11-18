@@ -22,6 +22,9 @@
  *   index.inherits(subjectKey, name)         does a line about the subject point to `name` as its model ("per X",
  *                                            "same as X")? What is said of X may then hold for the subject too.
  *   overlap(a, b)                            share of a's content stems that b also has (0..1)
+ *   family(word)                             a word's inflection family ("die", "dying", "dead", "death" are one):
+ *                                            a borrowed claim whose words are the asked subject's in another form
+ *                                            is not offered as false of it
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
@@ -44,6 +47,18 @@
   // Content stems plus two-letter acronyms ("PO", "IV"), which carry meaning in a claim but are too
   // short for the content-word rules.
   const stems = (text) => new Set([...qf().contentStems(text), ...(String(text || '').match(/\b[A-Z]{2}\b/g) || []).map((a) => a.toLowerCase())]);
+
+  /**
+   * A word's inflection family: its ending ("-ing", "-ed", "-s", "-th") dropped, and a short root reduced to its
+   * consonants around its vowels, so "die", "dies", "died", "dying", "dead" and "death" are one family. Two words of
+   * one family may be unrelated ("day"): a family match only ever refuses a wrong option, never makes one.
+   */
+  function family(word) {
+    const w = String(word || '').toLowerCase();
+    const root = w.length > 4 ? w.replace(/(?:ing|ed|es|th|s)$/, '') : w.replace(/(?:ing|ed|th|s)$/, '');
+    if (root.length > 4 || root.length < 2) return root;
+    return root.replace(/[aeiouy]+/g, 'V').replace(/Vd$/, 'V');
+  }
 
   function overlap(a, b) {
     if (!a.size) return 0;
@@ -93,7 +108,10 @@
       // cats, the claim may hold for it as well ("all tapeworms in dogs and cats").
       const label = String(text).match(LABEL_RE);
       if (label && [...stems(label[1])].every((w) => own.has(w))) return false;
-      const fresh = [...s].filter((w) => !own.has(w)).length;
+      // "Parasites DIE prior to elimination" against a subject whose slide shows "Dead tapeworms": a word of the
+      // same family (another inflection of it) is the subject's own word too.
+      const ownFamilies = new Set([...own].map(family));
+      const fresh = [...s].filter((w) => !own.has(w) && !ownFamilies.has(family(w))).length;
       return fresh >= MIN_OWN_WORDS && 1 - fresh / s.size <= MAX_SHARED_SHARE;
     }
 
@@ -189,7 +207,7 @@
     return index;
   }
 
-  const api = { create, fromScope, overlap };
+  const api = { create, fromScope, overlap, family };
   PDFStudy.subjectClaims = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

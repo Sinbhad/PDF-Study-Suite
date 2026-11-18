@@ -203,6 +203,32 @@ const fourth = L.buildFourthIndex(SLIDES);
 pair(L.lintInheritedFalse, 'inherited_false', perFalse('Drug Delta', 'Drug Gamma', 'Binds the worm surface'),
   perFalse('Drug Epsilon', 'Drug Gamma', 'Binds the worm surface'), fourth);
 
+// Fifth-review lints (synthetic stems)
+pair(L.lintDescriptorLabel, 'descriptor_label', reveal('Explain: Pond fever — a gram-negative rod.', 'A gram-negative rod: Spreads through shared nets'),
+  reveal('Explain: Pond fever — treatment.', 'Treatment: Salt baths for three days'));
+pair(L.lintDescriptorLabel, 'descriptor_label', reveal('Explain: Gill rot — caused by a water mould.', 'Caused by a water mould: Seen in warm ponds'),
+  reveal('Explain: Gill rot — signs.', 'Signs: Grey patches on the gills'));
+pair(L.lintIncompleteSet, 'incomplete_set', reveal('Recall: "Net injury — Possible wounds".', 'Torn fin'),
+  reveal('Recall: "Net injury — Possible wounds".', 'Torn fins, scale loss and bruised gills'));
+pair(L.lintIncompleteSet, 'incomplete_set', reveal('Recall: "Gill wash".', 'Can be taken through the mouth'),
+  reveal('Recall: "Gill wash — Route".', 'Through the mouth'));
+pair(L.lintOpenIsStem, 'open_is_stem', reveal('Complete: "Spare tanks are …"', 'used when the main tank is cleaned'),
+  reveal('Complete: "Spare tanks are …"', 'a second set of tanks kept ready for quarantine'));
+pair(L.lintAttributeDefinition, 'attribute_definition', reveal('Define "Gill cysts".', 'Large, round and pale'),
+  reveal('Define "Gill cysts".', 'Fluid-filled sacs that form on damaged gill tissue'));
+pair(L.lintTruncatedKindTerm, 'truncated_kind_term', reveal('Define "Fin rot type".', 'Slow fraying of the fin edge'),
+  reveal('Define "Fin rot type 2".', 'Slow fraying of the fin edge'));
+pair(L.lintFusedNames, 'fused_names', reveal('Recall the 2 points of "Pond agents — Aerobes".', '• Vibrio anguillarum Aeromonas spp.\n• Yersinia ruckeri'),
+  reveal('Recall the 2 points of "Pond agents — Aerobes".', '• Vibrio anguillarum\n• Aeromonas spp.'));
+pair(L.lintYesNoReveal, 'yes_no_reveal', reveal('Can you see the gills move?', 'Thin fish show fast gill movement at rest.'),
+  reveal('Can you see the gills move?', 'Yes, in thin fish they move fast at rest.'));
+pair(L.lintOperatorRow, 'operator_row', tableQ('In the row where Symbol is ">", what is the Meaning?'), tableQ('In the row where Pump is "Rotor", what is the Speed?'));
+const valueQ = (options, answer) => ({ type: 'multiple_choice', question: 'Which value completes this line under "Pond — Quarantine"?\n"Isolate new fish for ________"', options, answer });
+pair(L.lintNumericOptionNear, 'numeric_option_near', valueQ(['3-4 weeks', '4 weeks', '10 days', '9 weeks'], '3-4 weeks'),
+  valueQ(['3-4 weeks', '1 week', '9 weeks', '12 weeks'], '3-4 weeks'));
+const traceQ = (answer) => ({ type: 'multiple_choice', question: 'The sum loop of section 2.4 (p. 41) runs on the array { 3, 8, 5, 6, 2 }. What is the total afterwards?', options: ['24', '22', '21', '16'], answer });
+pair(L.lintTraceKey, 'trace_key', traceQ('22'), traceQ('24'));
+
 // lintSet: every finding carries a known lint name, and a clean question yields none
 const findings = L.lintSet([first, GOOD_CLOZE, tf('Fermentation is an anaerobic pathway that regenerates NAD+ so that glycolysis can continue.', 'True')], SOURCE);
 check('lintSet returns one findings list per question', findings.length === 3 && findings[1].length === 0 &&

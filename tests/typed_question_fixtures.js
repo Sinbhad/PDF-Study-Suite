@@ -12,6 +12,7 @@ const nlp = (f) => require(path.join(__dirname, '..', 'src', 'nlp', f));
   'flashcard-engine', 'quiz-gate', 'quiz-options', 'stem-distractors', 'stem-questions', 'quiz-engine', 'test-engine'].forEach((m) => nlp(`${m}.js`));
 const S = globalThis.PDFStudy;
 const tv = nlp('typed-values.js');
+const tt = nlp('typed-tables.js');
 const shape = nlp('typed-shape.js');
 const tc = nlp('typed-check.js');
 
@@ -38,20 +39,52 @@ const table = (entity, column, columnIndex, back, row) => ({
 });
 const rows = [['Brine', 'Vat', '108 °C'], ['Glycol', 'Drum', '197 °C'], ['Ethanol', 'Bottle, Flask', '78 °C'], ['Water', 'Tank', '100 °C']];
 const cards = rows.flatMap((r) => [table(r[0], 'Container', 1, r[1], r), table(r[0], 'Boils at', 2, r[2], r)]);
-const tables = tv.tables(cards, {});
+const tables = tt.tables(cards, {});
 const brine = tables.find((q) => q.answer === 'Vat');
 check('table: a single cell is asked with both headers', brine && brine.question === 'In the row where Fluid is "Brine", what is the Container?' && brine.form === 'term', show(tables));
 check('table: a list cell is not asked typed', !tables.some((q) => /Bottle/.test(q.answer)), show(tables));
 check('table: the other rows of the column are terms a student may not give', brine && brine.others.includes('Drum') && !brine.others.includes('Vat'));
 check('table: another row\'s value is "another term"', brine && tc.check(brine, 'drum').verdict === 'other');
 
+// A cell is asked only when its right answers can be stated by rule.
+const grid = (key, header, list) => list.flatMap((r) => r.slice(1).map((v, i) => ({
+  front: `${r[0]} — ${header[i + 1]}`, back: v, sourceKind: 'table', page: 7,
+  table: { key, header, column: header[i + 1], columnIndex: i + 1, entity: r[0], row: r },
+})));
+const asked = (list) => tt.tables(list, {}).map((q) => `${q.subject}|${q.answer}`);
+const probes = grid('probes', ['Probe', 'Specimen', 'Reads'], [
+  ['Smear', 'Dried swab', 'Stained bodies'], ['Titer', 'Plasma/heparin', 'Carrier antibodies'], ['Amplify', 'Swab (nasal)', 'Microbial RNA'],
+  ['Grow', 'Fresh swab', 'Microbes'], ['Stain', 'Knee cartilage', 'Microbial protein'],
+]);
+const probeQs = asked(probes);
+check('table: no cell of a column that gives alternatives ("Plasma/heparin", "Swab (nasal)")', !probeQs.some((x) => /Specimen|swab|cartilage/i.test(x)), probeQs.join(' / '));
+check('table: the generic whole beside its parts ("Microbes" beside "Microbial RNA") is not asked', !probeQs.includes('Grow|Microbes'), probeQs.join(' / '));
+check('table: a shared modifier leaves the head to ask, and the head alone is right', probeQs.includes('Amplify|Microbial RNA') &&
+  tt.tables(probes, {}).find((q) => q.answer === 'Microbial RNA').accept.includes('rna'), probeQs.join(' / '));
+check('table: modifier and head both its own ("Carrier antibodies", "Stained bodies") are not asked', !probeQs.includes('Titer|Carrier antibodies') && !probeQs.includes('Smear|Stained bodies'), probeQs.join(' / '));
+const hostsQs = asked(grid('hosts', ['Worm', 'Final host', 'First host'], [
+  ['Tapeworm alpha', 'Grazers', 'Beetle'], ['Tapeworm beta', 'Goats, Sheep, Deer', 'Beetle'], ['Fluke gamma', 'Dogs, Cats', 'Snail'],
+  ['beta (Taeniidae)', 'Pigs, Boars', 'Mite'],
+]));
+check('table: a plural class where the column lists members is not asked', !hostsQs.includes('Tapeworm alpha|Grazers'), hostsQs.join(' / '));
+check('table: a singular value beside lists is asked', hostsQs.includes('Fluke gamma|Snail'), hostsQs.join(' / '));
+check('table: a row named by a fragment ("beta (Taeniidae)") is not asked', !hostsQs.some((x) => /^beta/.test(x)), hostsQs.join(' / '));
+const bones = asked(grid('bones', ['Site', 'Tissue'], [['Shaft', 'Compact bone'], ['End', 'Spongy bone'], ['Joint', 'Hyaline cartilage']]));
+check('table: a shared head leaves the modifier to ask ("Compact bone")', bones.includes('Shaft|Compact bone'), bones.join(' / '));
+
+// "Defined" questions: a generic head the definition does not name is the student's to choose.
+check('generic head: a head the scope uses for many things', shape.genericHead('limit error', 'A limit error stops the run. A parse error and a type error do not. Errors are reported.') === 'error' &&
+  shape.genericHead('limit error', 'A limit error stops the run.') === '');
+check('near words: real words of the scope one letter from the answer', JSON.stringify(shape.nearWords('Station', 'The stations and the statin differ.')) === JSON.stringify(['statin']));
+check('alternatives in the answer itself are each right', JSON.stringify(shape.make({ question: 'q', answer: 'Inlet/intake' }).accept) === JSON.stringify(['Inlet', 'intake']));
+
 // ---------------------------------------------------------------- numbers with their unit and subject
 const doseCard = { front: 'Sedative X (doses)', back: '• Goats: 4-5 mg/kg\n• Cows: 8 mg/kg\n• Sheep: closer to cows', sourceKind: 'list', page: 4 };
 const lineCard = { front: 'Pathogen Y — Survival', back: '• Survives 4-6 weeks in standing water\n• Dies within hours on dry steel\n• Lives about 3 days on soil', sourceKind: 'list', page: 5 };
 const layout = rows.map((r) => ({ ...table(r[0], 'Row', 1, r[1], r), table: { ...table(r[0], 'Row', 1, r[1], r).table, key: 'layout', header: ['Fluid', 'Row'] } }));
-check('table: a header naming a part of a table is not asked typed', tv.tables(layout, {}).length === 0);
+check('table: a header naming a part of a table is not asked typed', tt.tables(layout, {}).length === 0);
 const clipped = rows.map((r) => ({ ...table(r[0], 'Cont.', 1, r[1], r), table: { ...table(r[0], 'Cont.', 1, r[1], r).table, key: 'clipped', header: ['Fluid', 'Cont.'] } }));
-check('table: a clipped header is not asked typed', tv.tables(clipped, {}).length === 0);
+check('table: a clipped header is not asked typed', tt.tables(clipped, {}).length === 0);
 const vagueCard = { front: 'Epidural — Small ruminants', back: '• Goats: 1 ml / 15 lb', sourceKind: 'list', page: 4 };
 check('number: a labelled value under a front that names no quantity is not asked', tv.numbers([vagueCard], { specific: () => true }).length === 0);
 const numbers = tv.numbers([doseCard, lineCard], { specific: () => true });

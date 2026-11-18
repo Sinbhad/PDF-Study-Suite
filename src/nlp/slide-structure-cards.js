@@ -37,6 +37,7 @@
   const GENERAL_HEAD_RE = /\b(?:disease|disorder|signs|syndrome|failure|infection|lesions?|findings|form)$/i;
   const MIN_INLINE_VALUE_WORDS = 3;
   const MIN_DEFINING_WORDS = 2;
+  const ATTRIBUTE_RUN_RE = /^(?:very\s+)?[a-z]+,\s+[a-z]/i;
 
   const tidy = (s) => String(s || '').replace(/\s+/g, ' ').trim();
   // "Infrequently progressive and fatal:" leads into the lines after it: no "; " after its colon.
@@ -84,7 +85,9 @@
       const value = tidy(m[2]).replace(/\s+[A-Za-z-]+:\s.*$/, '');
       const numberedKind = NUMBERED_KIND_RE.test(label);
       if ((!numberedKind && stemNoise().isLabelTerm(label)) || /^(?:https?|www)$/i.test(label) || CAPTION_RE.test(label) || CAPTION_NOTE_RE.test(value)) continue;
-      if (DISCOURSE_LABEL_RE.test(label)) continue;
+      // ("Streptococcus pneumonia Klebsiella spp: Guarded prognosis": two names of a list read across its columns,
+      // so the value may belong to either.)
+      if (DISCOURSE_LABEL_RE.test(label) || shapes().fusedNames(label)) continue;
       if (!quality().readable(value) || !quality().readable(label) || GLUED_LABEL_RE.test(value)) continue;
       if (/!\s*$/.test(value) && wordCount(value) <= 3) continue; // "Before any surgical procedure: Anesthesia!" is a cheer
       // "Urine collection: zoonotic": one lower-case word is a note on the line, not an answer to it.
@@ -129,6 +132,9 @@
         out.push({ front: `${ctx.entity} — ${tidy(m[1])}`, back: value, category: 'Slide Fact', kind: 'concept', subject: ctx.subject });
         continue;
       }
+      // "Fungal spherules – large, marked size variation": a run of attributes (a word and a comma) describes the
+      // thing on the slide's picture; it is not what the term means.
+      if (ATTRIBUTE_RUN_RE.test(value)) continue;
       out.push({ front: tidy(m[1]), back: definition, category: 'Slide Term', kind: 'concept', subject: tidy(m[1]) });
     }
     return out;
@@ -218,7 +224,11 @@
     const named = (p) => shapes().isNameOnly(p.replace(/\s+[A-Z]{4,}$/, ''));
     if (found.every(named)) return [];
     const stated = found.filter((p) => wordCount(p) >= 5);
-    const points = stated.length >= 2 ? found.filter((p) => !named(p)) : found;
+    // ("Arctic fox" beside "Bats pose the biggest risk in the US": a map's label, two words among a slide of
+    // statements, is not a point. Short lines on a slide of short lines, "Loosen tourniquet", are its points.)
+    const mostlyStated = stated.length * 2 > found.length;
+    const label = (p) => named(p) || (mostlyStated && wordCount(p) <= 2 && /^[A-Z]/.test(p) && !/[\d:;,]/.test(p));
+    const points = stated.length >= 2 ? found.filter((p) => !label(p)) : found;
     const subject = slide.subject || entity;
     if (points.length === 1) {
       // "Types of inflammation" -> "Type of inflammation can help hint at the cause" mostly repeats the title.

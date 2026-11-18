@@ -52,6 +52,7 @@ body.rail-collapsed .rail { display: none; }
 .tree-range[open] summary::before { transform: translateY(-2px) rotate(45deg); }
 .tree-range summary:hover { background: var(--hover); color: var(--text); }
 .tree-range-row { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); font-size: var(--fs-sm); color: var(--text-muted); }
+.tree-range-note { margin: var(--sp-1) 0 0; font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .tree-row { position: relative; display: flex; align-items: stretch; border-radius: var(--r-sm); border-left: 2px solid transparent; }
 .tree-row:hover { background: var(--hover); }
 .tree-row.is-selected { background: var(--primary-soft); border-left-color: var(--primary); border-radius: 0 var(--r-sm) var(--r-sm) 0; }

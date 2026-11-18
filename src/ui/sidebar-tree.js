@@ -12,6 +12,14 @@
   let scopes = new Map(); // row key -> { scope, page }
 
   const range = (a, b) => (b > a ? `${a}–${b}` : `${a}`);
+  // A chapter's pages as the book prints them ("p. 146–168"); its PDF pages stay what a click opens.
+  const pagesMeta = (a, b) => PDFStudy.studyViews.pageRangeLabel(a, b);
+  const pdfHint = (a, b) => (printedOf(a, b) ? `PDF ${b > a ? 'pages' : 'page'} ${range(a, b)}` : '');
+  /** The printed pages of a PDF page range, or '' (no printed numbers known). */
+  const printedOf = (a, b) => {
+    const st = PDFStudy.main && PDFStudy.main.appState;
+    return st && st.activeMode !== 'slide_deck' && PDFStudy.printedPages && st.parsedPdf ? PDFStudy.printedPages.printedRange(st.parsedPdf, a, b) : '';
+  };
 
   /** The outline row to mark: a "next 25 pages" window keeps its chapter or section selected. */
   function selectedId(appState) {
@@ -27,7 +35,7 @@
     const t = PDFStudy.richBlocks.title(o.label, 120);
     const cls = ['tree-row', sel ? 'is-selected' : '', o.sub ? 'tree-sub' : '', o.cls || ''].filter(Boolean).join(' ');
     return `<div class="${cls}">
-        <button class="tree-main" type="button" data-key="${sv.escapeHtml(key)}" title="${sv.escapeHtml(t.full)}" ${sel ? 'aria-current="true"' : ''}>
+        <button class="tree-main" type="button" data-key="${sv.escapeHtml(key)}" title="${sv.escapeHtml(o.hint ? `${t.full} · ${o.hint}` : t.full)}" ${sel ? 'aria-current="true"' : ''}>
           ${o.num ? `<span class="tree-num">${o.num}</span>` : ''}<span class="tree-label">${t.html || 'Untitled'}</span>
           ${o.tag ? `<span class="tag">${o.tag}</span>` : ''}${o.meta ? `<span class="tree-meta">${o.meta}</span>` : ''}
         </button>
@@ -68,23 +76,26 @@
     const ch = { ...rawCh, title: calm(rawCh.title) };
     const selId = selectedId(appState);
     const chScope = { id: ch.id, type: 'chapter', title: ch.title, startPage: ch.startPage, endPage: ch.endPage };
-    const meta = `p. ${range(ch.startPage, ch.endPage)}`;
+    const meta = pagesMeta(ch.startPage, ch.endPage);
+    const hint = pdfHint(ch.startPage, ch.endPage);
     const secs = ch.sections || [];
-    if (!secs.length) return row(`c${ch.id}`, chScope, ch.startPage, { label: ch.title, meta, cls: 'is-strong' });
+    if (!secs.length) return row(`c${ch.id}`, chScope, ch.startPage, { label: ch.title, meta, hint, cls: 'is-strong' });
     const hasSel = selId === ch.id || secs.some((s) => s.id === selId);
     const t = PDFStudy.richBlocks.title(ch.title, 120);
     const esc = PDFStudy.studyViews.escapeHtml;
     return `<details class="tree-group" ${forceOpen || hasSel ? 'open' : ''}>
-        <summary class="tree-row tree-summary${hasSel ? ' has-selected' : ''}" title="${esc(t.full)}">
+        <summary class="tree-row tree-summary${hasSel ? ' has-selected' : ''}" title="${esc(hint ? `${t.full} · ${hint}` : t.full)}">
           <span class="tree-main"><span class="tree-label">${t.html}</span><span class="tree-meta">${meta}</span></span>
         </summary>
-        ${row(`c${ch.id}`, chScope, ch.startPage, { label: 'Whole chapter', meta, sub: true })}
+        ${row(`c${ch.id}`, chScope, ch.startPage, { label: 'Whole chapter', meta, hint, sub: true })}
         ${secs.map((sec) => sectionRow(ch, sec, true)).join('')}
       </details>`;
   }
   function sectionRow(ch, sec, sub) {
     const scope = { id: sec.id, type: 'section', title: `${sec.title} (${ch.title})`, label: sec.title, context: ch.title, startPage: sec.startPage, endPage: sec.endPage };
-    return row(`x${sec.id}`, scope, sec.startPage, { label: sec.title, meta: `p. ${range(sec.startPage, sec.endPage)}`, sub, tag: sec.isExercises ? 'Exercises' : '' });
+    return row(`x${sec.id}`, scope, sec.startPage, {
+      label: sec.title, meta: pagesMeta(sec.startPage, sec.endPage), hint: pdfHint(sec.startPage, sec.endPage), sub, tag: sec.isExercises ? 'Exercises' : '',
+    });
   }
 
   function bookTree(appState, q) {
@@ -122,6 +133,10 @@
     const isSlides = appState.activeMode === 'slide_deck';
     const q = searchQuery.trim().toLowerCase();
     const openRange = appState.selectedScope.type === 'custom_range' && !appState.selectedScope.parent;
+    // A book with printed page numbers: the boxes take PDF pages and say so, and the note gives the printed pages.
+    const known = (n) => Boolean(printedOf(n, n));
+    const pdfPages = !isSlides && (known(appState.selectedScope.startPage) || known(total));
+    const fromLabel = pdfPages ? '<label for="customStartPage">PDF page</label>' : '<label class="sr-only" for="customStartPage">From page</label>';
     scopes = new Map();
     const refocus = focusedControl(treeEl);
     if (headingEl) headingEl.textContent = isSlides ? 'Slides' : 'Contents';
@@ -137,12 +152,13 @@
         <details class="tree-range" ${openRange ? 'open' : ''}>
           <summary>Study a page range</summary>
           <form class="tree-range-row" id="customRangeForm">
-            <label class="sr-only" for="customStartPage">From page</label>
-            <input type="number" id="customStartPage" min="1" max="${total}" value="${appState.selectedScope.startPage}" class="input input-num" />
+            ${fromLabel}
+            <input type="number" id="customStartPage" min="1" max="${total}" value="${appState.selectedScope.startPage}" class="input input-num" aria-describedby="customRangePrinted" />
             <label for="customEndPage">to</label>
-            <input type="number" id="customEndPage" min="1" max="${total}" value="${Math.min(total, appState.selectedScope.endPage)}" class="input input-num" />
+            <input type="number" id="customEndPage" min="1" max="${total}" value="${Math.min(total, appState.selectedScope.endPage)}" class="input input-num" aria-describedby="customRangePrinted" />
             <button class="btn btn-secondary btn-sm" id="applyCustomRangeBtn" type="submit">Study</button>
           </form>
+          <p class="tree-range-note" id="customRangePrinted" aria-live="polite"></p>
         </details>
       </div>
       <nav id="chapterTreeList" aria-label="${isSlides ? 'Slides' : 'Contents'}">${isSlides ? slideTree(appState, q) : bookTree(appState, q)}</nav>`;
@@ -156,11 +172,25 @@
       if (next) { next.focus(); next.setSelectionRange(pos, pos); }
     };
     // A form, so Enter in either page box studies the range as well as the Study button.
+    const typedRange = () => {
+      const s = Math.max(1, Math.min(total, parseInt(treeEl.querySelector('#customStartPage').value, 10) || 1));
+      return [s, Math.max(s, Math.min(total, parseInt(treeEl.querySelector('#customEndPage').value, 10) || s))];
+    };
+    const note = treeEl.querySelector('#customRangePrinted');
+    const showPrinted = () => {
+      const [s, e] = typedRange();
+      const printed = isSlides ? '' : printedOf(s, e);
+      note.textContent = printed ? `Printed ${printed}` : '';
+      note.hidden = !printed;
+    };
+    showPrinted();
+    treeEl.querySelector('#customRangeForm').oninput = showPrinted;
     treeEl.querySelector('#customRangeForm').onsubmit = (ev) => {
       ev.preventDefault();
-      const s = Math.max(1, Math.min(total, parseInt(treeEl.querySelector('#customStartPage').value, 10) || 1));
-      const e = Math.max(s, Math.min(total, parseInt(treeEl.querySelector('#customEndPage').value, 10) || s));
-      onSelectScope({ id: `custom-${s}-${e}`, type: 'custom_range', title: `Pages ${range(s, e)}`, startPage: s, endPage: e }, s);
+      const [s, e] = typedRange();
+      const printed = isSlides ? '' : printedOf(s, e);
+      const title = printed ? `Pages ${printed.replace(/^p\. /, '')} (PDF ${range(s, e)})` : `Pages ${range(s, e)}`;
+      onSelectScope({ id: `custom-${s}-${e}`, type: 'custom_range', title, startPage: s, endPage: e }, s);
     };
     treeEl.querySelectorAll('button[data-key]').forEach((btn) => {
       btn.onclick = () => {

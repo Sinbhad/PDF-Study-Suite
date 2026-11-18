@@ -171,6 +171,11 @@
   // "the variable element", "the parameter x": a name from the example program on the page.
   const EXAMPLE_NAME_RE = /\bthe\s+(?:variable|parameter|field)\s+[a-z_]\w*\b|\bthe\s+(?:array|list|string|object)\s+[a-z_]\w*$/i;
   const TAUTOLOGY_SHARE = 0.6;
+  const EXAMPLE_WALK_RE = /^[A-Z][a-z]+ing\s[^,]{2,60},\s/;
+  const EXAMPLE_BACK_RE = /\bthe\s+other\s+(?:two|three|four|five|\d+)\b|\bas\s+well$/i;
+  // "No single skill is …": a negated subject sets up a comparison, not a fact about a thing.
+  const NONE_SUBJECT_RE = /^(?:no|none\s+of)\s/i;
+  const OPEN_PROPERTY_RE = /^(?:[a-z]+(?:ed|en)|[a-z]+)\s+(?:when|whenever|if|unless|only\s+if|as\s+long\s+as)\b/i;
   // The split fell inside a clause that is still open: "In a flip-flop, before an output can | change, ...".
   const OPEN_SUBORDINATE_RE = /\b(?:before|after|when|whenever|if|unless|until|while|because|since|once|although)\b[^,]*$/i;
 
@@ -195,6 +200,11 @@
     }
     if (TRIVIAL_BACK_RE.test(back) || (words(back).length === 1 && !ADJECTIVE_RE.test(back))) return null;
     if (EXAMPLE_NAME_RE.test(`${front} ${back}`)) return null;
+    // "Examining the data, (A, B) determines … the other two columns as well": the book walking through its example.
+    if (EXAMPLE_WALK_RE.test(head) || EXAMPLE_BACK_RE.test(back) || NONE_SUBJECT_RE.test(subject)) return null;
+    // "Surrogate keys are … used when ...", "A disjunction is … true when ...": one property among several the subject
+    // has, under a condition; the front asks nothing that one answer settles.
+    if (/\s(?:is|are)$/i.test(head) && OPEN_PROPERTY_RE.test(back)) return null;
     const stop = dep('tokenizer', './tokenizer.js').STOPWORDS;
     const content = (s) => words(s).map((w) => w.replace(/[^A-Za-z-]/g, '').toLowerCase()).filter((w) => w.length >= 3 && !stop.has(w)).map(stem);
     const own = new Set(content(front));

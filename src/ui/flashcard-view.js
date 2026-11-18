@@ -231,10 +231,13 @@
       }
     }
 
-    function exportDeck(activeDeck, kind) {
+    function exportDeck(shownDeck, kind) {
       const X = PDFStudy.deckExport;
       const store = PDFStudy.storage;
       const stem = X.fileStem(docName);
+      // The file cites the book's printed pages, as the cards on screen do.
+      const pt = PDFStudy.studyViews.pageText;
+      const activeDeck = shownDeck.map((c) => ({ ...c, front: pt(c.front), back: pt(c.back), context: pt(c.context) }));
       if (kind === 'anki') store.downloadFile(`${stem}_anki_cards.tsv`, X.ankiTsv(activeDeck, { docName }), 'text/tab-separated-values;charset=utf-8');
       else store.downloadFile(`${stem}_quizlet.csv`, X.quizletCsv(activeDeck, { plain: F.plain }), 'text/csv;charset=utf-8');
       const n = `${activeDeck.length} card${activeDeck.length === 1 ? '' : 's'}`;

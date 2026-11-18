@@ -1,9 +1,5 @@
 /**
  * Typed Questions (values): short answers the student types and the app checks (typed-check.js), from
- *   table     one cell of a comparison table, under the table rules of table-questions.js (both headers named, the
- *             row value picks out one row); only a single value (no list, no remark) of 1-4 words or a number, never
- *             under a clipped header ("Maint.") or one that names a part of a table ("Row"); a cell's head noun alone
- *             is right too when no other value of its column ends in it ("DNA" for "Bacterial DNA")
  *   number    a labelled line that is nothing but a number with its unit ("Goats: 4-5 mg/kg" under "Lidocaine (toxic
  *             doses)", the front naming the quantity), or one number with its unit blanked in its own line ("Survives
  *             ________ in water"); the unit must be one the checker knows, and the front must name a specific subject
@@ -11,25 +7,19 @@
  *             a bitwise operation on two bit strings, a 2^n count, the truth value of a two-operator expression
  * The typed instances never repeat a choice instance of the same rule (other bit strings, other sizes).
  *
- * tables(cards, ctx) / numbers(cards, ctx) / worked(cards, ctx) -> [question]
- *   ctx: { factOf(source), specific(subject), isDeck, seed, variant }
+ * Table cells asked typed: typed-tables.js.
+ * numbers(cards, ctx) / worked(cards, ctx) -> [question]
+ *   ctx: { specific(subject), isDeck, seed, variant }
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
   const dep = (k, f) => PDFStudy[k] || (typeof require === 'function' ? require(f) : null);
-  const tq = () => dep('tableQuestions', './table-questions.js');
   const tc = () => dep('typedCheck', './typed-check.js');
   const shape = () => dep('typedShape', './typed-shape.js');
   const le = () => dep('logicEval', './logic-eval.js');
   const sn = () => dep('stemNoise', './stem-noise.js');
 
-  const MAX_ANSWER_WORDS = 4;
   const MAX_LABEL_WORDS = 4;
-  const LIST_CELL_RE = /[,;/()]|\band\b|\bor\b|&/i;
-  const TERM_CELL_RE = /^[A-Za-z][A-Za-z0-9 '’.-]*$/;
-  const ABBREVIATED_HEADER_RE = /^[A-Z][a-z]{0,8}\.(?:\s|$)|\s\.\?*$|\.$/;
-  const MIN_HEAD_CHARS = 3;
-  const TABLE_WORD_RE = /^(?:tables?|rows?|columns?|cells?|entry|entries|items?|values?)$/i;
   // What a number is: the card's front must say it ("toxic doses", "Incubation period"), or the value means nothing.
   const QUANTITY_RE = /\b(?:doses?|dosages?|dosing|volumes?|rates?|durations?|times?|intervals?|half-?li(?:fe|ves)|temperatures?|concentrations?|counts?|numbers?|lengths?|weights?|ages?|periods?|incubation|frequenc(?:y|ies)|levels?|amounts?)\b/i;
   const VALUE_RE = /^(?:~\s*)?\d+(?:\.\d+)?(?:\s*(?:-|–|to)\s*\d+(?:\.\d+)?)?\s*(\S.*)$/;
@@ -44,39 +34,6 @@
     const t = String(text || '').replace(/[.;]\s*$/, '').trim();
     const m = t.match(VALUE_RE);
     return Boolean(m) && tc().knownUnit(m[1]) && Boolean(tc().parseNumber(t));
-  }
-
-  function tables(cards, ctx = {}) {
-    const out = [];
-    for (const card of cards || []) {
-      if (!card || !card.table || card.sourceKind !== 'table' || !tq().isAskableColumn(card)) continue;
-      const answer = String(card.back || '').trim();
-      const question = tq().stemFor(card);
-      if (!question || !answer || !tq().rowIsUnique(card, cards)) continue;
-      // "In the row where Maint. is ..., what is the Incident.?": with no options to lean on, a clipped header leaves
-      // the student guessing what is asked.
-      if ([card.table.header[0], card.table.column].some((h) => ABBREVIATED_HEADER_RE.test(String(h || '').trim()))) continue;
-      // A header that is itself a word for part of a table ("In the row where Table is "File", what is the Row?") reads
-      // as a question about the table's layout.
-      if ([card.table.header[0], card.table.column].some((h) => TABLE_WORD_RE.test(String(h || '').trim()))) continue;
-      const isNumber = numberWithUnit(answer) || /^\d+(?:\.\d+)?$/.test(answer);
-      // A term is words only: "2-3d → abx" is a note, "Dogs, Cats" a list.
-      if (!isNumber && (LIST_CELL_RE.test(answer) || words(answer).length > MAX_ANSWER_WORDS || !TERM_CELL_RE.test(answer))) continue;
-      const others = tq().columnValues(card, cards).filter((v) => norm(v) !== norm(answer));
-      // A value another row also holds is fine (several flukes share a host); one the column never varies in asks nothing.
-      if (!others.length || others.every((v) => norm(v) === norm(answer))) continue;
-      const source = `${card.front}: ${answer}`;
-      const fact = ctx.factOf ? ctx.factOf(source) : null;
-      // "Bacterial DNA": its head noun alone ("DNA") names the cell too, when no other value of the column ends in it.
-      const head = words(answer).length > 1 ? words(answer).pop() : '';
-      const headOk = !isNumber && head.length >= MIN_HEAD_CHARS && !others.some((v) => norm(v).split(' ').includes(norm(head)));
-      out.push(shape().make({
-        badge: 'Type the Answer • Table', question, answer, form: isNumber ? 'number' : 'term', others, accept: headOk ? [head] : [],
-        explanation: `${card.table.entity} — ${card.table.column}: ${answer}`, subject: card.table.entity, source,
-        factKey: fact ? fact.identity : `t|${norm(source)}`, page: pageOf(card),
-      }));
-    }
-    return out;
   }
 
   /** The labelled number lines of a card: [{ label, value }]; the whole back counts as one line without a label. */
@@ -243,7 +200,7 @@
     ].filter(Boolean);
   }
 
-  const api = { tables, numbers, worked, numberWithUnit };
+  const api = { numbers, worked, numberWithUnit };
   PDFStudy.typedValues = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

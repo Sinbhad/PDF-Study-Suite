@@ -149,6 +149,20 @@ check('pages: a page label from the PDF is the printed number', PP.printed({ pag
 const folio = (n, num) => ({ pageNumber: n, height: 800, lines: [{ text: `${num}`, topY: 20 }, { text: 'Pumps move water.', topY: 300 }] });
 const parsed = { pageCache: new Map([[20, folio(20, 12)], [21, folio(21, 13)], [22, folio(22, 14)]]) };
 check('pages: folios that agree give every page its printed number', PP.printed(parsed, 30) === '22', PP.printed(parsed, 30));
+const cited = PP.relabel(parsed, 'Pumps (p. 21) and valves (p. 22); see also (p. 95).', [20, 30]);
+check('pages: the app\'s own citations inside the pages studied read in printed numbers', cited === 'Pumps (p. 13) and valves (p. 14); see also (p. 95).', cited);
+check('pages: a printed range for a PDF range', PP.printedRange(parsed, 20, 22) === 'p. 12–14' && PP.printedRange(parsed, 21, 21) === 'p. 13' && PP.printedRange({ pages: [] }, 3, 4) === '', PP.printedRange(parsed, 20, 22));
+check('pages: no mapping leaves the citation as it is', PP.relabel({ pages: [] }, 'Gauge (p. 8)', [1, 9]) === 'Gauge (p. 8)');
+// A card cites the page its own sentence is on, not an earlier page that prints its short back too.
+['math-text', 'stem-noise', 'tokenizer', 'noise-filter', 'bold-terms', 'keywords', 'summarizer', 'stem-cards', 'slide-cards', 'flashcard-engine']
+  .forEach((m) => require(`../src/nlp/${m}.js`));
+const pageLines = [
+  [11, ['Valve Basics', 'A gate valve has a wedge that slides across the flow.', 'A motor turns the impeller and the shaft at high speed.']],
+  [12, ['Pump Housings', 'The pump housing holds the impeller and the shaft.', 'A worn housing leaks water at the joints.']],
+].flatMap(([n, ls]) => ls.map((text) => ({ text, pageNumber: n })));
+const placedCards = globalThis.PDFStudy.flashcardEngine.extractBookFlashcards(pageLines.map((l) => l.text).join('\n'), 'Pumps', [], { lines: pageLines });
+const housing = placedCards.find((c) => /pump housing holds/.test(c.front));
+check('pages: a card cites the page of its own sentence', housing && housing.pageNumber === 12, JSON.stringify(placedCards.map((c) => [c.pageNumber, c.front])));
 
 console.log(`${failed ? 'FAIL' : 'PASS'}  summary shape fixtures: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

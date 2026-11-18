@@ -46,11 +46,12 @@
 
   function faces(card) {
     const sv = PDFStudy.studyViews;
-    const ctx = `<span class="fc-context">${sv.rich(card.context) || ''}</span>`;
+    // The app's own page citations ("(p. 368)") read in the book's printed numbers (study-views.js pageText).
+    const ctx = `<span class="fc-context">${sv.rich(sv.pageText(card.context)) || ''}</span>`;
     const frontLen = plain(card.front).length;
     const backLen = plain(card.back).length;
-    const front = sv.block(card.front, frontLen > 110 ? 'is-long' : '');
-    const back = sv.block(card.back, backLen < 60 && !/\n/.test(String(card.back || '').trim()) ? 'is-short' : '');
+    const front = sv.block(sv.pageText(card.front), frontLen > 110 ? 'is-long' : '');
+    const back = sv.block(sv.pageText(card.back), backLen < 60 && !/\n/.test(String(card.back || '').trim()) ? 'is-short' : '');
     return `
       <div class="fc-face fc-front">
         <div class="fc-top">${badge(card)}${ctx}</div>

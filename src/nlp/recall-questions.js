@@ -9,14 +9,15 @@
  *   theorem         State "De Morgan's laws".
  *   lecture Q&A     the lecturer's or the book's own question, as written
  *   table cell      What is the sample for "PCR"?
- *   labelled point  Explain: Praziquantel — adverse effects.
+ *   labelled point  Explain: Praziquantel — adverse effects.   (recall-labels.js words labelled and list cards)
  *   list            Name the 4 key points about "Leptospira spp. (Transmission)".   (or a contrast card's own question)
  *   key concept     Complete: "An array cannot …"
  * Only material that already passed its own gates is used: a quiz fact (quiz-facts.js), or a card the content
  * gate accepts whose answer holds no recognition debris. A point without a label is not asked this way:
  * "Explain: Benzimidazoles" has no single answer. Nor is a completion that does not pin one answer down
- * ("Some editors even have …", "… until a match is …" -> "found") or a "Define" whose answer is a bare name
- * or a piece of advice ("Do not fall into a common trap.").
+ * ("Some editors even have …", "… until a match is …" -> "found", "Surrogate keys are …" -> "used when ..."), or a
+ * "Define" whose answer is a bare name, a piece of advice ("Do not fall into a common trap.") or a run of
+ * attributes ("Large, marked size variation"), or whose term lost its number ("Hansen's type").
  *
  * candidates(scope) -> [question] best first (facts in the scope's order, then cards that gave no fact)
  *   question: { type: 'reveal', badge: 'Recall', skill: 'recall', selfGraded: true, question, answer, options: [],
@@ -29,20 +30,16 @@
   const subjects = () => dep('quizSubjects', './quiz-subjects.js');
   const statements = () => dep('factStatements', './fact-statements.js');
   const mt = () => dep('mathText', './math-text.js');
+  const labels = () => dep('recallLabels', './recall-labels.js');
 
   const MAX_ANSWER_CHARS = 600; // a longer answer is a whole slide, not one thing to recall
-  const MAX_LABEL_WORDS = 6; // "Praziquantel — Adverse effects"; a longer label is a sentence cut in two
-  const MIN_LIST_ITEMS = 2;
-  const MAX_LIST_ITEMS = 8;
+  const MAX_LABEL_WORDS = 6; // a longer name is a sentence, not a term or a theorem's name
   const NAMED_RESULT_RE = /^(?:Theorem|Lemma|Corollary|Proposition)\s+[A-Z0-9]/;
   const KEY_POINTS_RE = /^What are the key points of\s+"([^"]+)"/;
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const words = (s) => String(s || '').split(/\s+/).filter(Boolean);
   const quoted = (t) => (NAMED_RESULT_RE.test(t) ? t : `"${t}"`);
-  /** "Adverse Effects" -> "adverse effects"; an acronym or a name keeps its capitals ("PCR", "Taenia"). */
-  const lower = (s) => String(s || '').replace(/\b([A-Z])([a-z]+)\b/g, (w, a, b) => a.toLowerCase() + b);
-  const lowerFirst = (s) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 
   function question(prompt, answer, from) {
     return {
@@ -78,8 +75,24 @@
 
   const OTHER_SUBJECT_RE = /^([A-Z][\w-]*(?:\s+[A-Z0-9][\w-]*){0,2})\s+(?:is|are|was|were|has|have|requires?|contains?|causes?|uses?|includes?)\b/;
 
+  // "Hansen's type 2": a kind word and its number name one thing; without the number the name is cut short.
+  const KIND_NUMBER_RE = /\b(?:type|class|grade|stage|phase|degree|group|level|order)\s+(?:\d+|[IVX]{1,4})$/i;
+  const BARE_KIND_RE = /\b(?:type|class|grade|stage|phase|degree|group|level)$/i;
+
+  /** The term as its card names it, when tidying dropped the number of a numbered kind ("Hansen's type 2"). */
+  function fullTerm(term, card) {
+    const named = String((card && (card.subject || card.front)) || '').split(/\s+[—–]\s+/)[0].trim();
+    if (KIND_NUMBER_RE.test(named) && norm(named).startsWith(norm(term))) return named;
+    return term;
+  }
+
+  // "Large, marked size variation", "very thin and porous": attributes of the thing, not what it is.
+  const ATTRIBUTES_RE = /^(?:very\s+|quite\s+|highly\s+)?[A-Za-z-]+,\s|^(?:very|quite|highly|extremely|relatively|rather)\s/i;
+
   /** Definition prompt: "Define X." or, when the definition names X, the term recalled from it. */
   function definitionPrompt(term, statement) {
+    // A name cut before its number ("Hansen's type") cannot be defined: it could be either kind.
+    if (BARE_KIND_RE.test(String(term).trim()) || ATTRIBUTES_RE.test(String(statement).trim())) return '';
     const recalled = termRecall(statement, term);
     if (recalled.prompt) return recalled;
     // A definition that names its term more than once cannot be blanked, but it can still be revealed for "Define X";
@@ -95,8 +108,8 @@
   const YES_NO_A_RE = /^(?:yes|no|not|never|always|only|none|usually|rarely)\b/i;
 
   /** The prompt for one quiz fact, or '' when the fact has no single answer to recall. */
-  function factPrompt(fact) {
-    const subject = fact.subject || fact.term;
+  function factPrompt(fact, card) {
+    const subject = fullTerm(fact.subject || fact.term, card);
     // "Can you hear air everywhere?" is answered by a yes or a no; a statement after it is the slide's next point.
     if (fact.kind === 'qa') return YES_NO_Q_RE.test(fact.term) && !YES_NO_A_RE.test(String(fact.statement || '').trim()) ? '' : fact.term;
     if (fact.kind === 'definition') return definitionPrompt(subject, fact.statement);
@@ -105,22 +118,12 @@
     return '';
   }
 
-  /** The prompt for a point fact that came from a labelled card ("Praziquantel — Adverse Effects"). */
-  function pointPrompt(fact, card) {
-    if (!card) return '';
-    // A table cell is asked with both of its headers named (table-questions.js), or not at all.
-    if (card.table && card.table.column) return dep('tableQuestions', './table-questions.js').stemFor(card);
-    const parts = String(card.front || '').split(/\s+[—–]\s+/);
-    const tail = parts.length > 1 ? parts[parts.length - 1].trim() : '';
-    if (!tail || words(tail).length > MAX_LABEL_WORDS || /[.!?…]$/.test(tail)) return '';
-    return `Explain: ${fact.subject} — ${lower(tail)}.`;
-  }
-
   // "Some editors even have …", "Many important discrete structures are …": a quantified subject has no one answer.
   // ("Each column has …": one bare noun after "each" or "every" says nothing of which kind of thing is meant.)
   const QUANTIFIED_START_RE = /^(?:some|most|many|several|few|certain|other|various|lots|all|any)\b|^(?:each|every)\s+\S+\s+\S+\s*…?$/i;
   const MIN_COMPLETION_WORDS = 2;
-  const LEAD_CLAUSE_RE = /^(?:when|if|in|at|for|after|before|once|while|with)\s[^,…]{3,60},\s+\S/i;
+  // ("To compare strings, …": a purpose clause says which task the rule is for, just as a "When ..." clause does.)
+  const LEAD_CLAUSE_RE = /^(?:when|if|in|at|for|after|before|once|while|with|to\s+[a-z]+)\s[^,…]{3,60},\s+\S/i;
 
   /**
    * Does a key-concept completion ("An array cannot …") pin down one answer a student can recall? Not when the
@@ -152,7 +155,10 @@
     const m = front.match(IS_FRONT_RE);
     // ("Logic gates are …" => "electronic circuits that operate ...": a plural noun phrase with its qualifier.)
     const nounPhrase = NOUN_PHRASE_BACK_RE.test(back) || (m && m[2] === 'are' && PLURAL_PHRASE_BACK_RE.test(back));
-    if (!m || !nounPhrase) return `Complete: "${front}"`;
+    // "Surrogate keys are …", "A disjunction is …" => "used when ...", "true when ...": an open stem that any true
+    // property of the subject completes; only a defining noun phrase ("a circuit that ...") pins one answer.
+    if (m && !nounPhrase) return '';
+    if (!m) return `Complete: "${front}"`;
     const subject = /^(?:The|A|An)\s/.test(m[1]) ? m[1][0].toLowerCase() + m[1].slice(1) : m[1];
     return `What ${m[2]} ${subject}?`;
   }
@@ -170,59 +176,39 @@
     const back = String(card.back || '').trim();
     // A slide's short list ("What are the key points of X?") is a whole slide, so no fact; recalled, it is one question.
     const shortList = card.sourceKind === 'list' && content().cardIsContent({ ...card, category: 'Concept' });
+    // A rule card (rule-cards.js and its siblings) is written from checked notation: its own question is asked as it is
+    // where its worked question is not (the set refuses a second question from one card). A code card is only studied.
+    if (front && card.rule) return card.rule.kind !== 'code' && /\?$/.test(front) && !/```/.test(front) ? front : '';
     if (!front || !(content().cardIsContent(card) || shortList)) return '';
     if (card.sourceKind === 'qa' || card.sourceKind === 'self-check') return /\?\s*$/.test(front) ? front : '';
     if (card.sourceKind === 'list') {
       if (/how do they differ\?$/.test(front)) return front;
       const items = back.split('\n').filter((l) => l.trim());
       const m = front.match(KEY_POINTS_RE);
-      if (!m || items.length < MIN_LIST_ITEMS || items.length > MAX_LIST_ITEMS) return '';
-      return `Name the ${items.length} key points about "${m[1]}".`;
+      return m ? labels().listPrompt(card, items, scope, m[1]) : '';
     }
     if (card.sourceKind === 'key-concept' && /…$/.test(front)) return pinsOneAnswer(front, back, scope) ? completionPrompt(front, back) : '';
     // A margin note's advice asked as a question ("When should you use the enhanced for loop?", advice-cards.js) or a
-    // syntax box's template ("How do you construct an array?", syntax-cards.js): the card's own question. A rule
-    // card is asked by working its rule out (worked-questions.js), a code card is only studied.
-    if (!card.rule && (card.sourceKind === 'key-concept' || card.category === 'Syntax') && /^(?:When|How|What|Which|Why)\b[^?]{8,}\?$/.test(front)) return front;
+    // syntax box's template ("How do you construct an array?", syntax-cards.js): the card's own question.
+    if ((card.sourceKind === 'key-concept' || card.category === 'Syntax') && /^(?:When|How|What|Which|Why)\b[^?]{8,}\?$/.test(front)) return front;
     // A common-error or tip box (boxed-cards.js): its heading names the pitfall, the answer is the book's rule for it
     const box = card.category === 'Rule' && !card.rule ? front.match(RULE_BOX_FRONT_RE) : null;
     if (box) return `${box[1]} (${box[2]}): what goes wrong, and what should you do instead?`;
     if (card.kind === 'theorem' && front && words(front).length <= MAX_LABEL_WORDS) return `State ${quoted(front)}.`;
     if ((card.sourceKind === 'definition' || card.category === 'Definition') && statements().isDefinitionText(back)) {
-      const term = card.subject ? subjects().tidySubject(card.subject) : front;
+      const term = fullTerm(card.subject ? subjects().tidySubject(card.subject) : front, card);
       const named = Boolean(term) && words(term).length <= MAX_LABEL_WORDS && Boolean(subjects().specificOf(term, scope.ctx || {}));
       return named ? definitionPrompt(term, back) : '';
     }
     if (card.table && card.table.column) return dep('tableQuestions', './table-questions.js').stemFor(card);
-    return LABELLED_KINDS.has(card.sourceKind) ? labelledPrompt(card, scope) : '';
+    return LABELLED_KINDS.has(card.sourceKind) ? labels().labelledPrompt(card, scope) : '';
   }
 
   // "Using == to Compare Strings (common error)": a rule box's card front
   const RULE_BOX_FRONT_RE = /^(.{6,80}?)\s+\((common error|programming tip|quality tip|common pitfall|pitfall|caution|warning)\)$/i;
-  // Cards that print a subject and what the material lists or says under it: asked front -> back as printed.
+  // Cards that print a subject and what the material lists or says under it: asked front -> back as printed
+  // (recall-labels.js words the prompt).
   const LABELLED_KINDS = new Set(['label', 'table', 'list']);
-  const ARROW_PROMPT_RE = /→\s*\?\s*$/;
-
-  /**
-   * A labelled card asked as the student sees it: its front names the subject and the label ("Lidocaine — Toxic
-   * doses", "Rabies: Human exposure → ?"), the back is what to recall. Not when the front names no specific
-   * subject ("Notes", a generic heading alone) or the back is a bare echo of the front.
-   */
-  function labelledPrompt(card, scope) {
-    const front = String(card.front || '').trim();
-    const back = String(card.back || '').trim();
-    const parts = front.replace(ARROW_PROMPT_RE, '').split(/\s+[—–]\s+|:\s+/).map((p) => p.trim()).filter(Boolean);
-    if (!parts.length || !parts.some((p) => subjects().specificOf(p, scope.ctx || {}))) return '';
-    if (subjects().isGenericHeading(parts[parts.length - 1], scope.ctx || {}) && parts.length < 2) return '';
-    if (norm(back) === norm(front) || norm(front).includes(norm(back))) return '';
-    // "... — increased time in the GI" => "increased absorption": a sub-bullet cut in two, not a label and its point.
-    if (parts.length > 1 && /^[a-z]/.test(parts[parts.length - 1]) && !ARROW_PROMPT_RE.test(front)) return '';
-    if (ARROW_PROMPT_RE.test(front)) return `What follows? ${front}`;
-    const items = back.split('\n').filter((l) => l.trim());
-    if (items.length > MAX_LIST_ITEMS) return '';
-    const subject = front.replace(/\s*[.:]\s*$/, '');
-    return items.length >= MIN_LIST_ITEMS ? `Recall the ${items.length} points of "${subject}".` : `Recall: "${subject}".`;
-  }
 
   function candidates(scope) {
     const out = [];
@@ -235,7 +221,7 @@
     const front = (card) => String(card.front || '').replace(/\s*…$/, '');
     for (const fact of scope.facts || []) {
       const card = cardBySource.get(fact.source);
-      const asked = fact.kind === 'point' ? pointPrompt(fact, card) : factPrompt(fact);
+      const asked = fact.kind === 'point' ? labels().pointPrompt(fact, card, scope) : factPrompt(fact, card);
       const prompt = typeof asked === 'string' ? asked : asked.prompt;
       if (!prompt) continue;
       const answer = typeof asked === 'string' ? (card && card.sourceKind === 'table' ? card.back : fact.statement) : asked.answer;
@@ -249,7 +235,9 @@
       if (usedSources.has(norm(source))) continue;
       const asked = cardPrompt(card, scope);
       const prompt = typeof asked === 'string' ? asked : asked.prompt;
-      if (!prompt || !answerOk(back, scope) || !answerOk(prompt, scope)) continue;
+      // (A rule card's code and notation, "`if (floor > 13) ...`", is checked notation, not recognition debris.)
+      const fits = (t) => (card.rule ? String(t).length <= MAX_ANSWER_CHARS : answerOk(t, scope));
+      if (!prompt || !fits(back) || !fits(prompt)) continue;
       usedSources.add(norm(source));
       const subject = card.subject || card.front;
       out.push(question(prompt, typeof asked === 'string' ? back : asked.answer, { subject, source, factKey: `r|${norm(source)}`, page: card.pageNumber || card.page || placeOf(back, front(card)) }));

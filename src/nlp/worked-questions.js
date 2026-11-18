@@ -10,7 +10,10 @@
  *     bitwise   "What is the bitwise XOR of 101101 and 011100?"                (the other operations' results as options)
  *     count     "How many rows does the truth table of a function of 4 variables have?" / power-set size (2^n rule)
  *     identity, derived, law name: worked-algebra.js; relational expressions: worked-expressions.js;
- *     converse / contrapositive / inverse and precedence: worked-forms.js; subsets and power sets: worked-sets.js
+ *     converse / contrapositive / inverse and precedence: worked-forms.js; subsets and power sets: worked-sets.js;
+ *     array algorithms traced on a literal array (sum, largest, linear search, remove, insert, swap): worked-arrays.js;
+ *     an if / else if / else sequence or a two-way if / else run on a value: worked-branches.js; which of the
+ *     section's logic gates gives an output for given input bits: worked-gates.js
  * A question carries the rule card's text as `source` (a flag on it removes every question of that rule),
  * `factKey` w|<kind>|<instance>, `worked: true`, `skill: 'worked'` and the rule's page.
  */
@@ -258,7 +261,13 @@
     const algebra = dep('workedAlgebra', './worked-algebra.js');
     const expressions = dep('workedExpressions', './worked-expressions.js');
     const forms = dep('workedForms', './worked-forms.js');
+    const arrays = dep('workedArrays', './worked-arrays.js');
+    const branches = dep('workedBranches', './worked-branches.js');
+    const gates = dep('workedGates', './worked-gates.js');
     const groups = [
+      arrays ? arrays.build(ruled('array'), { seed, variant, question }) : [],
+      branches ? branches.build(ruled('branch'), { seed, variant, question }) : [],
+      gates ? gates.build(ruled('gates'), { seed, variant, question }) : [],
       operatorQuestions(ruled('operator'), seed, variant),
       forms ? forms.build([...ruled('form'), ...ruled('precedence')], { seed, variant, question }) : [],
       bitwiseQuestions(ruled('bitwise'), seed, variant),

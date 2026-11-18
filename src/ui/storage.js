@@ -102,7 +102,10 @@
       ),
     ];
     const safeName = (docName || 'study-guide').replace(/[^a-z0-9-_]/gi, '_');
-    downloadFile(`${safeName}_study_guide.md`, lines.join('\n'), 'text/markdown;charset=utf-8');
+    // The guide cites the book's printed pages, as the screens do (study-views.js pageText).
+    const sv = PDFStudy.studyViews;
+    const cite = sv && sv.pageText ? sv.pageText : (t) => t;
+    downloadFile(`${safeName}_study_guide.md`, lines.map(cite).join('\n'), 'text/markdown;charset=utf-8');
   }
 
   PDFStudy.storage = {

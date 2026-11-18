@@ -133,7 +133,7 @@
       const thm = fClean.match(/^theorem\s+[A-Z0-9]+\.\d+/i);
       const key = thm ? thm[0].toLowerCase() : boldTerms ? boldTerms.termKey(fClean) : fClean.toLowerCase();
       if (seen.has(key)) return false;
-      if (category === 'Key Term' && (quality.restatesFront(bClean, fClean) || quality.leansBack(bClean))) return false;
+      if (category === 'Key Term' && (quality.restatesFront(bClean, fClean) || quality.leansBack(bClean) || quality.narrates(bClean))) return false;
       // A sentence that only mentions the term ("... formed using logical operators") does not say what it is.
       if (category === 'Key Term' && !boxed && dep('cardAnswers', './card-answers.js').mentionsOnly(fClean, bClean)) return false;
       // A prop of a worked example (the scale an example program measures with) is not a term of the section.
@@ -202,6 +202,15 @@
     dep('ruleCards', './rule-cards.js').fromRules(dep('sectionRules', './section-rules.js').read(ruleInput)).forEach(addRuleCard);
     // A family of short listings under numbered headings ("7.3.2 Sum and Average Value"): which algorithm is this?
     dep('codeCards', './code-cards.js').fromScope(ruleInput).forEach(addRuleCard);
+    // The standard array algorithms the section's listings carry out (sum, maximum, search, remove, insert, swap).
+    const arrays = dep('arrayRules', './array-rules.js');
+    arrays.cards(arrays.read(ruleInput)).forEach(addRuleCard);
+    // Decisions it prints as code (an if / else if / else sequence, a two-way if / else), to be run on a value.
+    const branches = dep('branchRules', './branch-rules.js');
+    branches.cards(branches.read(ruleInput)).forEach(addRuleCard);
+    // The two-input gates it defines in its own sentences (AND, OR, NAND, NOR, XOR, XNOR).
+    const gates = dep('gateRules', './gate-rules.js');
+    gates.cards(gates.read(ruleInput)).forEach(addRuleCard);
 
     // 1d. Line-shaped notes ("term - definition", arrows, headings over bullets) have no sentences to mine.
     const notes = dep('notePatterns', './note-patterns.js');
@@ -279,9 +288,11 @@
     function finishBook() {
       const contrasts = dep('contrastCards', './contrast-cards.js').fromCards(cards);
       const fields = dep('cardFields', './card-fields.js');
-      // A card mined from running text gets the page its back is printed on (extraction's scope.lines).
+      // A card mined from running text gets the page its sentence is printed on (extraction's scope.lines): front and
+      // back read together first, since a short back ("a foreign key") is also printed pages earlier.
       const pageOf = fields.pageLocator(opts.lines);
-      const placed = (c) => (c.page || c.pageNumber ? c : { ...c, pageNumber: pageOf(c.back) || pageOf(c.front) || null });
+      const whole = (c) => `${String(c.front || '').replace(/\s*…\s*$/, '')} ${c.back || ''}`;
+      const placed = (c) => (c.page || c.pageNumber ? c : { ...c, pageNumber: pageOf(whole(c)) || pageOf(c.front) || pageOf(c.back) || null });
       // Rule cards were keyed as written when added; the word-based repeat check would merge "X + X" with "X ⋅ X".
       // A back that does not answer its front (card-answers.js) is dropped before repeats are judged.
       const all = [...cards, ...contrasts].map(dep('cardAnswers', './card-answers.js').answered).filter(Boolean);

@@ -14,6 +14,8 @@
  *   eval-quiz-fourth-lints.js   the fourth review's: option count and kind, adjective slots, unnamed table columns,
  *                               open stems, filler list items, Falses about a subject that works "per" another
  *   eval-quiz-typed-lints.js    typed answers: the answer printed in its prompt, an answer too long, an ambiguous blank
+ *   eval-quiz-fifth-lints.js    the fifth review's: descriptor labels, incomplete sets, open is/are stems, attribute
+ *                               definitions, fused names, yes/no reveals, operator rows, near numeric options, trace keys
  *
  * All of it is heuristic: closed word lists and suffix rules from eval-quiz-text.js, no parser. The lints
  * are meant to move in the right direction when generation improves, not to be right on every question.
@@ -26,6 +28,7 @@ const reviewLints = require('./eval-quiz-review-lints.js');
 const thirdLints = require('./eval-quiz-third-lints.js');
 const fourthLints = require('./eval-quiz-fourth-lints.js');
 const typedLints = require('./eval-quiz-typed-lints.js');
+const fifthLints = require('./eval-quiz-fifth-lints.js');
 
 const found = (lint, detail) => ({ lint, detail });
 
@@ -141,7 +144,8 @@ function lintWholeBlockStem(q) {
   const body = T.stemBody(q);
   if (body.length > MAX_STEM_CHARS) return found('whole_block_stem', `${body.length} characters`);
   if (BULLET_RE.test(body)) return found('whole_block_stem', 'contains a bullet glyph');
-  const seps = (T.stripMath(body).match(NOTE_SEPARATOR_RE) || []).length;
+  // (Inline code, `if (x > 3) { y = x - 1; }`, is one program line, not notes run together.)
+  const seps = (T.stripMath(body).replace(/`[^`]*`/g, ' ').match(NOTE_SEPARATOR_RE) || []).length;
   return seps >= 2 ? found('whole_block_stem', `${seps} note separators run together`) : null;
 }
 
@@ -156,7 +160,7 @@ const LINT_NAMES = ['unresolved_reference', 'cloze_leading_blank', 'thin_stem', 
   'option_number_mix', 'option_article_mismatch', 'answer_length_tell', 'answer_leak', 'tf_copied_true', 'tf_antonym_swap',
   'tf_double_antonym', 'malformed_math', 'duplicate_fact', 'reused_option_set', 'whole_block_stem',
   ...contentLints.CONTENT_LINT_NAMES, ...reviewLints.REVIEW_LINT_NAMES, ...thirdLints.THIRD_LINT_NAMES,
-  ...fourthLints.FOURTH_LINT_NAMES, ...typedLints.TYPED_LINT_NAMES, 'quiz_test_overlap'];
+  ...fourthLints.FOURTH_LINT_NAMES, ...typedLints.TYPED_LINT_NAMES, ...fifthLints.FIFTH_LINT_NAMES, 'quiz_test_overlap'];
 
 /**
  * All findings for one question. `source` is the scope text (or a prebuilt index); `earlier` the questions
@@ -177,6 +181,7 @@ function lintQuestion(q, source, earlier = [], content = null, review = null) {
     ...thirdLints.THIRD_LINTS.map((lint) => lint(q, tctx)),
     ...fourthLints.FOURTH_LINTS.map((lint) => lint(q, fctx)),
     ...typedLints.TYPED_LINTS.map((lint) => lint(q)),
+    ...fifthLints.FIFTH_LINTS.map((lint) => lint(q)),
   ].filter(Boolean);
 }
 
@@ -206,7 +211,7 @@ function lintQuizTestOverlap(quiz, test) {
 }
 
 module.exports = {
-  lintQuizTestOverlap, ...contentLints, ...reviewLints, ...thirdLints, ...fourthLints, ...typedLints,
+  lintQuizTestOverlap, ...contentLints, ...reviewLints, ...thirdLints, ...fourthLints, ...typedLints, ...fifthLints,
   lintUnresolvedReference, lintClozeLeadingBlank, lintThinStem, lintAnswerLeak, lintWholeBlockStem,
   ...optionLints, ...setLints, LINT_NAMES, lintQuestion, lintSet,
 };

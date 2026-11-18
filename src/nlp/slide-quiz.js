@@ -102,6 +102,9 @@
     return { labels, items };
   }
 
+  const YES_NO_Q_RE = /^(?:can|is|are|do|does|did|was|were|will|would|should|could|has|have)\b/i;
+  const YES_NO_A_RE = /^(?:yes|no|not|never|always|only|none|usually|rarely)\b/i;
+
   function qaQuestions(slides, seed) {
     const out = [];
     const all = slides.flatMap((s) => s.qa.map((q) => ({ ...q, slide: s })));
@@ -114,6 +117,9 @@
         out.push({ type: 'true_false', badge: 'Lecture Question', question, options: yn, answer: yn.find((o) => o.toLowerCase() === q.answer.toLowerCase().replace(/\W+$/, '')) || q.answer, ...extra });
         continue;
       }
+      // "Can you hear air everywhere?" is answered by a yes or a no: a line after it that says neither is the
+      // slide's next point, not the answer ("Skinny horses ... have harsh air moving normally").
+      if (YES_NO_Q_RE.test(question) && !YES_NO_A_RE.test(String(q.answer).trim())) continue;
       const la = labelAnswer(q);
       if (la) {
         // Same candidate set: other revealed answers first, then rotated subsets of the same size.

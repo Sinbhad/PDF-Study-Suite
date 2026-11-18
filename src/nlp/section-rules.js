@@ -48,7 +48,8 @@
         if (parts.length < 2) continue;
         body = parts[parts.length - 1];
       }
-      for (const s of tok.splitSentences(body)) out.push({ text: plain(s), raw: s, page: b.pageNumber || b.page || pageOf(s) });
+      // A block may run over several pages: the sentence's own page first, the block's first page when it is not found.
+      for (const s of tok.splitSentences(body)) out.push({ text: plain(s), raw: s, page: pageOf(s) || b.pageNumber || b.page });
     }
     // "$$ If a set has ..." after a display that closed the example: the stray delimiter is not the sentence's
     return out.map((s) => ({ ...s, text: s.text.replace(/^\$\$\s*/, '') })).filter((s) => s.text && !DAMAGED_RE.test(s.text));

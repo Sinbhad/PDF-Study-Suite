@@ -20,7 +20,11 @@
       pageInput.max = String(total);
       pageInput.value = String(pageNum);
     }
-    if (totalSpan) totalSpan.textContent = `/ ${total}`;
+    // A book with printed page numbers: the box takes the PDF page and says so; the printed page follows the total.
+    const printed = appState.activeMode !== 'slide_deck' && PDFStudy.studyViews ? PDFStudy.studyViews.printedPage(pageNum) : '';
+    const pageLabel = document.querySelector('label[for="readerPageInput"]');
+    if (pageLabel) pageLabel.textContent = printed ? 'PDF page' : 'Page';
+    if (totalSpan) totalSpan.textContent = printed ? `/ ${total} · p. ${printed}` : `/ ${total}`;
     if (scrubber) {
       scrubber.max = String(total);
       scrubber.value = String(pageNum);

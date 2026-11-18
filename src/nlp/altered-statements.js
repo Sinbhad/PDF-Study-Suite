@@ -3,7 +3,8 @@
  * student must know the fact itself rather than which slide or paragraph it sits on:
  *   number     one quantity with its unit, moved well outside what the statement says ("5-7 days" -> "15-21 days",
  *              "~25%" -> "~65%")
- *   direction  one word of a closed pair of opposites ("increased" -> "decreased", "lateral" -> "medial")
+ *   direction  one word of a closed pair of opposites ("increased" -> "decreased", "lateral" -> "medial"), only when
+ *              a line of the scope sets the two against each other about something the statement names
  * A statement is left alone when the change would be unclear or could still be true: more than one quantity,
  * a number that is a name or a code ("L1", "type III", a year), both words of a pair, or an altered wording the
  * scope itself prints.
@@ -68,6 +69,14 @@
     return { statement: altered, change: 'number', from: m[0].trim(), to: to.trim() };
   }
 
+  /** Does a line of the scope print both words of the pair and another content word of the statement? */
+  function contrasted(word, opposite, statement, text) {
+    const has = (line, w) => new RegExp(`(?<![A-Za-z-])${w}(?![A-Za-z-])`, 'i').test(line);
+    const others = (String(statement).toLowerCase().match(/[a-z]{4,}/g) || []).filter((w) => w !== word.toLowerCase());
+    return String(text || '').split(/\n|(?<=[.!?;])\s+/).some((line) => has(line, word) && has(line, opposite) &&
+      others.some((w) => has(line, w.replace(/s$/, '')) || has(line, w)));
+  }
+
   function alterDirection(statement, text) {
     const words = statement.match(/[A-Za-z-]+/g) || [];
     const found = words.filter((w) => OPPOSITE.has(w.toLowerCase()));
@@ -79,6 +88,10 @@
     // The opposite already in the statement in either number ("gram negatives") would print it twice.
     const one = (w) => w.toLowerCase().replace(/s$/, '');
     if (words.some((w) => one(w) === one(opposite))) return null;
+    // "upper respiratory" -> "lower respiratory": a disease of one tract may well touch the other. The swap is only a
+    // clear False when the scope itself sets the two words against each other on one line ("Front: medial claw >
+    // lateral; Hind: lateral > medial") about something the statement names too.
+    if (!contrasted(word, opposite, statement, text)) return null;
     const to = /^[A-Z]/.test(word) ? opposite[0].toUpperCase() + opposite.slice(1) : opposite;
     const altered = statement.replace(new RegExp(`(?<![A-Za-z-])${word}(?![A-Za-z-])`), to);
     // The scope saying the altered phrase (the opposite with the word after it) would make it true somewhere.
@@ -95,7 +108,28 @@
     return alterNumber(s, text) || alterDirection(s, text);
   }
 
-  const api = { alter };
+  /**
+   * The one quantity a statement commits to, or null: { text, lo, hi, unit, index } for "Survives 4-6 weeks in water".
+   * Null when it holds more than one, when another number in it is a name or a code, or when it states a bound.
+   */
+  function soleQuantity(statement) {
+    const s = String(statement || '');
+    if (BOUND_RE.test(s)) return null;
+    const hits = [...s.matchAll(QUANTITY_RE)];
+    const digits = (s.match(/\d+(?:\.\d+)?/g) || []).length;
+    if (hits.length !== 1) return null;
+    const m = hits[0];
+    if (digits !== (m[3] ? 2 : 1)) return null;
+    const lead = (m[0].match(/^\s+/) || [''])[0].length;
+    return { text: m[0].trim(), lo: Number(m[2]), hi: m[3] ? Number(m[3]) : null, unit: m[4], index: m.index + lead, prefix: m[1] || '' };
+  }
+
+  /** Every quantity a text prints, as soleQuantity describes one. */
+  function quantities(text) {
+    return [...String(text || '').matchAll(QUANTITY_RE)].map((m) => ({ text: m[0].trim(), lo: Number(m[2]), hi: m[3] ? Number(m[3]) : null, unit: m[4], prefix: m[1] || '' }));
+  }
+
+  const api = { alter, soleQuantity, quantities };
   PDFStudy.alteredStatements = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

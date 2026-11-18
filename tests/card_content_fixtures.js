@@ -178,10 +178,13 @@
       { kind: 'self-check', title: 'Self Check 3', items: [{ question: 'What is the index of the first element of an array?', answer: 'Zero.' }] },
       { kind: 'example', title: 'Example 7', body: 'Toronto is the capital of Canada.' },
       { kind: 'table', title: 'Operators', header: ['Operator', 'Meaning'], rows: [['==', 'equal to'], ['!=', 'not equal to']] },
+      { kind: 'table', title: 'Searches', header: ['Search', 'Needs'], rows: [['Linear search', 'any array'], ['Binary search', 'a sorted array']] },
     ]);
     check('tagged self-check -> ready-made Q&A card; tagged example -> nothing', tagged.some((c) => c.sourceKind === 'self-check' && c.back === 'Zero.') &&
       !tagged.some((c) => /Toronto/.test(c.back)), show(tagged));
-    check('tagged table -> cell cards', tagged.some((c) => c.sourceKind === 'table' && c.front === 'Operator == — Meaning' && c.back === 'equal to'), show(tagged));
+    check('tagged table -> cell cards', tagged.some((c) => c.sourceKind === 'table' && c.front === 'Binary search — Needs' && c.back === 'a sorted array'), show(tagged));
+    // A row named by a symbol only says what the symbol is called ("== — Meaning" => "equal to"): no card.
+    check('tagged operator table -> no symbol-row cards', !tagged.some((c) => c.sourceKind === 'table' && /==|!=/.test(c.front)), show(tagged));
     // A numbered box the extraction tagged ("Definition 2" as its title) is asked by its term, never its number.
     const boxed = S.flashcardEngine.extractBookFlashcards('Plain text that defines nothing at all here.', 'Sets', [
       { kind: 'definition', category: 'Definition', title: 'Definition 2', body: 'A set with exactly one element is called a singleton set.', pageNumber: 12 },

@@ -126,10 +126,16 @@
   // distinctive(word), when given, says whether a long word is the owner's alone; without it any long word counts.
   const SPECIFIC_RE = /\d|\s[A-Z][A-Za-z]*[A-Z0-9]|\s[A-Z][a-z]{2,}/;
   const LONG_WORD_RE = /\b[a-z]{10,}\b/g;
+  // "Neuronal dysfunction → clinical signs and death": a long abstract noun ("dysfunction", "inflammation",
+  // "management") names a kind of process any subject can have, not something one subject owns.
+  const ABSTRACT_NOUN_RE = /(?:tion|sion|ment|ness|ity|ance|ence|ing)s?$/;
+  // "Parasites DIE prior to elimination": a common word set in capitals for emphasis (two or more vowels, unlike
+  // "PCR" or "CNS") is no acronym; read in lower case it names nothing only one subject owns.
+  const SHOUTED_RE = /\b(?=[A-Z]*[AEIOUY][A-Z]*[AEIOUY])[A-Z]{3,}\b/g;
   const isSpecificClaim = (text, distinctive) => {
-    const t = String(text || '').replace(/\([^)]*\)/g, ' ');
+    const t = String(text || '').replace(/\([^)]*\)/g, ' ').replace(SHOUTED_RE, (w) => w.toLowerCase());
     if (SPECIFIC_RE.test(t)) return true;
-    const long = t.match(LONG_WORD_RE) || [];
+    const long = (t.match(LONG_WORD_RE) || []).filter((w) => !ABSTRACT_NOUN_RE.test(w));
     return typeof distinctive === 'function' ? long.some(distinctive) : long.length > 0;
   };
 

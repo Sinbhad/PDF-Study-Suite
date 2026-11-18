@@ -141,8 +141,10 @@
       // Two questions cut from one source sentence, or about one subject + predicate, test one fact,
       // however their wording differs.
       if (q.sourceKey && kept.some((k) => k.sourceKey === q.sourceKey)) return 'same source';
-      // A typed question and any other question cut from the same card or sentence test one fact.
-      if (sourceOf(q) && kept.some((k) => (isTyped(q) || isTyped(k)) && sourceOf(k) === sourceOf(q))) return 'same source';
+      // A typed or recall question and any other question cut from the same card or sentence test one fact (a rule
+      // worked out on values, then the same rule card recalled, is the card twice).
+      const once = (x) => isTyped(x) || isSelfGraded(x);
+      if (sourceOf(q) && kept.some((k) => (once(q) || once(k)) && sourceOf(k) === sourceOf(q))) return 'same source';
       if (q.factKey && kept.some((k) => k.factKey === q.factKey)) return 'same fact';
       const words = factWords(q);
       if (facts.some((f) => sameFact(words, f))) return 'same fact words';

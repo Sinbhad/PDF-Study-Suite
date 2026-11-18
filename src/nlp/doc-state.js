@@ -20,7 +20,7 @@
   const MIN_SOURCE_MATCH = 25; // shorter source texts must match exactly, not by containment
   const QUESTION_FIELDS = ['id', 'type', 'question', 'options', 'answer', 'answerIndex', 'explanation', 'badge', 'skill', 'category', 'pageNumber', 'page'];
   // A typed question needs what its check reads (typed-check.js) to be asked again after a reload.
-  const TYPED_FIELDS = ['accept', 'form', 'others', 'shown', 'symbols', 'source'];
+  const TYPED_FIELDS = ['accept', 'form', 'others', 'shown', 'symbols', 'source', 'checks'];
   const OVERRIDES_KEPT = 100;
 
   const empty = () => ({ v: VERSION, cards: {}, userCards: [], flags: {}, attempts: [], overrides: [], view: null });

@@ -211,5 +211,28 @@ const dsText = ds.pages.flatMap((p) => p.lines.map((l) => l.text)).join(' ');
 const dbText = db.pages.flatMap((p) => p.lines.map((l) => l.text)).join(' ');
 check('demo STEM content', ds.numPages === 4 && db.numPages === 4 && dsText.includes('O(n \\log n)') && dbText.includes('\\frac'), '');
 
+const tyNum = { ...ty, id: 't9', form: 'number', answer: '6 weeks', question: 'Course — Length: type the missing value with its unit.\n"Runs for ________"' };
+const tyNumHtml = qc.questionCard(tyNum, 1, { picked: { typed: '6' }, reveal: true, locked: true });
+check('typed number: a missing unit is named in the verdict', /The number is right, but this answer needs its unit/.test(tyNumHtml), tyNumHtml);
+
+// 11. A book with printed page numbers: cards and questions cite them, the buttons still open the PDF page.
+require(path.join(__dirname, '..', 'src', 'pdf', 'printed-pages.js'));
+const P = globalThis.PDFStudy;
+const folioPage = (n) => ({ pageNumber: n, height: 800, lines: [{ text: `${n - 40}`, topY: 20 }, { text: 'Pumps move water.', topY: 300 }] });
+const keepMain = P.main;
+P.main = { appState: { activeMode: 'book', parsedPdf: { numPages: 90, pageCache: new Map([[60, folioPage(60)], [61, folioPage(61)], [62, folioPage(62)]]) },
+  selectedScope: { startPage: 55, endPage: 70 } } };
+const bookCard = ff.faces({ front: 'Impeller', back: 'The rotating part of a pump.', category: 'Key Term', context: 'Pumps (p. 61)', pageNumber: 61 });
+check('book card: the context cites the printed page', /Pumps \(p\. 21\)/.test(bookCard) && !/p\. 61\)/.test(bookCard), bookCard);
+const jump = sv.pageJump(61);
+check('book page button: the printed page, the PDF page in its name, the PDF page opened', /data-jump-page="61" title="PDF page 61" aria-label="View p\. 21 \(PDF page 61\)">View p\.&nbsp;21</.test(jump), jump);
+const bookQ = { ...ty, explanation: 'Bit by bit the rule gives 1010. The rule (p. 62)', page: 62, pageNumber: 62 };
+const bookQHtml = qc.questionCard(bookQ, 1, { picked: { typed: 'impeller' }, reveal: true, locked: true });
+check('book question: the explanation cites the printed page', /The rule \(p\. 22\)/.test(bookQHtml) && /View p\.&nbsp;22/.test(bookQHtml), bookQHtml);
+check('book range label', sv.pageRangeLabel(60, 62) === 'p. 20–22' && sv.pageRangeLabel(5, 6) === 'p. 5–6', sv.pageRangeLabel(60, 62));
+P.main.appState.activeMode = 'slide_deck';
+check('deck: slides keep their numbers', sv.pageText('Pumps (p. 61)') === 'Pumps (p. 61)');
+P.main = keepMain;
+
 console.log(`ui_render_fixtures: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

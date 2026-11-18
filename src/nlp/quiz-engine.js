@@ -4,7 +4,10 @@
  *   structured  slide definitions / lecture Q&A / worked problems (slide-quiz.js) or textbook theorem and
  *               definition blocks (block-quiz.js)
  *   formula     name -> expression for formula and complexity cards (stem-questions.js)
- *   table       a comparison table asked down one column, other rows' values as options (table-questions.js)
+ *   table       a comparison table asked down one column, other rows' values as options (table-questions.js), and
+ *               its remarks column row by row (table-notes.js)
+ *   list        a labelled list asked by membership against its sibling lists (list-questions.js)
+ *   number      a fact's one quantity among the scope's other values of that unit (number-questions.js)
  *   fact        every good flashcard, defining sentence and lecture point, asked subject -> statement,
  *               statement -> subject or as a True/False whose False half borrows a sibling subject's
  *               statement that is false of this one (fact-questions.js)
@@ -56,6 +59,9 @@
       table: dep('tableQuestions', './table-questions.js'),
       worked: dep('workedQuestions', './worked-questions.js'),
       typedRound: dep('typedRound', './typed-round.js'),
+      tableNotes: dep('tableNotes', './table-notes.js'),
+      lists: dep('listQuestions', './list-questions.js'),
+      numbers: dep('numberQuestions', './number-questions.js'),
     };
   }
 
@@ -64,9 +70,11 @@
   // ask gives its turn away, so a scope without checkable rules is drawn exactly as before.
   // A sentence can often be asked either as a cloze or as a naming True/False, and whichever family
   // comes first takes it: the quiz lets cloze go first, the practice test lets naming go first.
+  // A labelled list asked by membership and a single quantity asked among the scope's other values of its unit take a
+  // turn after the table family (list-questions.js, number-questions.js).
   const TURNS = [
-    ['worked', 'structured', 'fact', 'formula', 'worked', 'table', 'structured', 'cloze', 'worked', 'fact', 'naming'],
-    ['worked', 'structured', 'fact', 'table', 'worked', 'formula', 'structured', 'naming', 'worked', 'fact', 'cloze'],
+    ['worked', 'structured', 'fact', 'formula', 'worked', 'table', 'list', 'structured', 'cloze', 'number', 'worked', 'fact', 'naming'],
+    ['worked', 'structured', 'fact', 'table', 'number', 'worked', 'formula', 'list', 'structured', 'naming', 'worked', 'fact', 'cloze'],
   ];
   // Worked questions fill at most this share of a set: the section's terms and facts are asked too.
   const MAX_WORKED_SHARE = 0.5;
@@ -226,7 +234,12 @@
     const fromSlidesOrCards = {
       structured: D.assembly.listFamily(set, structured.filter((q) => !D.assembly.isSelfGraded(q))),
       formula: D.assembly.listFamily(set, formulaQuestions),
-      table: D.assembly.listFamily(set, D.table.candidates(scope.allCards, { seed: seedOffset + variant, factOf: (source) => factBySource.get(source) })),
+      table: D.assembly.listFamily(set, [
+        ...D.table.candidates(scope.allCards, { seed: seedOffset + variant, factOf: (source) => factBySource.get(source) }),
+        ...(D.tableNotes ? D.tableNotes.candidates(scope.allCards, { seed: seedOffset + variant, isDeck: scope.isDeck }) : []),
+      ]),
+      list: D.assembly.listFamily(set, D.lists ? D.lists.candidates(scope.allCards, { seed: seedOffset + variant }) : []),
+      number: D.assembly.listFamily(set, D.numbers ? D.numbers.candidates(scope, { seed: seedOffset + variant }) : []),
       fact: nextFact,
     };
     // Worked questions come from the rule cards the student sees (opts.cards; mined cards otherwise), each kind in

@@ -10,11 +10,12 @@
  * Questions share the quizEngine shape plus `skill` ('formula'|'theorem'|'definition'|'complexity'|'recall'),
  * `section`, `pageNumber`. Every question comes from quizEngine.generateQuiz, drawn as the test variant
  * (see TEST_VARIANT below) and refusing the facts the quiz asks: another fact about the same subject is fine.
- * Like the quiz, it asks self-graded recall questions (a card's front shown, its back revealed) in the slots
- * its choice questions leave; when it must be cut down, recall questions go before choice ones.
- * When the scope has no other facts left, a short "Review" section asks quiz facts again, each in another
- * form than the quiz used (a True/False where the quiz had a choice, a recall where it had a cloze), with
- * `review: true` and a "Review" badge so the student knows it is a second look.
+ * Keyed questions (choice, True/False, typed) are drawn first: the sections' own, then, when those run out, a
+ * "Review" section that asks quiz facts again, each in another form than the quiz used (a True/False where the
+ * quiz had a choice), with `review: true` and a "Review" badge so the student knows it is a second look. Only
+ * then do self-graded recall questions (a card's front shown, its back revealed) fill the slots left, the
+ * sections' own first, then quiz facts recalled in another form; when the test must be cut down, recall
+ * questions go before choice ones.
  * gradeTest(test, answers) scores it ('got' / 'missed' for a self-graded question).
  */
 (function (root) {
@@ -35,6 +36,7 @@
   const TEST_VARIANT = 1;
   const DEFAULT_QUIZ_LENGTH = 10;
   const REVIEW_SECTION = 'Review';
+  const SPARE = 4;
   // A typed question has no options but is checked by the app (typed-check.js): it is not self-graded.
   const isSelfGraded = (q) => q.type === 'reveal' || (q.type !== 'typed' && (!Array.isArray(q.options) || q.options.length < 2));
 
@@ -52,8 +54,11 @@
     });
   }
 
-  /** avoid: the questions asked already (the quiz, and the sections built before this one). */
-  function buildSection(name, input, opts, budget, avoid) {
+  /**
+   * avoid: the questions asked already (the quiz, and the sections built before this one). maxSelfGraded: how many
+   * recall questions the section may hold (0 while the keyed rounds run; the room left when recall tops it up).
+   */
+  function buildSection(name, input, opts, budget, avoid, maxSelfGraded) {
     const { mode = 'book', didacticBlocks = [], seedOffset = 0, excludeSources, cards, lines } = opts;
     const questions = qe().generateQuiz(input, {
       maxQuestions: budget,
@@ -65,6 +70,7 @@
       avoid,
       cards,
       lines,
+      ...(Number.isFinite(maxSelfGraded) ? { maxSelfGraded } : {}),
     });
     return { name, questions: questions.map((q) => ({ skill: 'definition', ...q, section: name })) };
   }
@@ -158,22 +164,42 @@
       seen.add(key);
       return true;
     };
-    const built = specs.map((s) => {
-      const cards = sectionCards(options.cards, s.input, specs.length === 1);
-      const sec = buildSection(s.name, s.input, { ...options, cards, didacticBlocks: s.blocks || [] }, per, [...asked]);
+    const sectionOpts = specs.map((s) => ({ ...options, cards: sectionCards(options.cards, s.input, specs.length === 1), didacticBlocks: s.blocks || [] }));
+    const count = () => built.reduce((n, s) => n + s.questions.length, 0);
+    // Keyed questions come first, recall only fills what they leave (the slots a scope with few facts has):
+    //   1. each section's choice and typed questions;
+    //   2. quiz facts asked again in another keyed form ("Review"), when the sections ran out of them;
+    //   3. recall questions of each section;
+    //   4. quiz facts recalled in another form.
+    const built = specs.map((s, i) => {
+      const sec = buildSection(s.name, s.input, sectionOpts[i], per, [...asked], 0);
       asked.push(...sec.questions);
       sec.questions = interleave(sec.questions).filter(keep);
       return sec;
     });
+    trimTo(built, maxQuestions);
+    const review = { name: REVIEW_SECTION, questions: [] };
+    // The test's own gate may still refuse a few of a round's questions (a True too many, an option set seen),
+    // so each round draws SPARE more than the room it fills; trimTo cuts what runs over.
+    const roomLeft = () => maxQuestions - count() - review.questions.length;
+    const addReview = (maxSelfGraded) => {
+      const room = roomLeft();
+      if (room <= 0) return;
+      const more = buildReview(input, options, room + SPARE, [...built.flatMap((s) => s.questions), ...review.questions], quiz, maxSelfGraded === null ? room + SPARE : maxSelfGraded);
+      for (const q of more.questions) if (roomLeft() > 0 && keep(q)) review.questions.push(q);
+    };
+    addReview(0);
+    specs.forEach((s, i) => {
+      const room = roomLeft();
+      if (room <= 0) return;
+      const sec = buildSection(s.name, s.input, sectionOpts[i], room + SPARE, [...asked, ...review.questions], room + SPARE);
+      asked.push(...sec.questions);
+      for (const q of sec.questions) if (roomLeft() > 0 && keep(q)) built[i].questions.push(q);
+    });
+    addReview(null);
+    if (review.questions.length) built.push(review);
     // Trim to maxQuestions, then number questions t-1..t-N across the whole test.
     trimTo(built, maxQuestions);
-    const sofar = built.flatMap((s) => s.questions);
-    if (sofar.length < maxQuestions) {
-      const room = maxQuestions - sofar.length;
-      const review = buildReview(input, options, room, sofar, quiz, room);
-      review.questions = review.questions.filter(keep);
-      built.push(review);
-    }
     let n = 0;
     for (const s of built) s.questions = s.questions.map((q) => ({ ...q, id: `t-${++n}` }));
     const sectionsOut = built.filter((s) => s.questions.length);

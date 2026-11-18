@@ -20,7 +20,8 @@
     const assembly = dep('quizAssembly', './quiz-assembly.js');
     const terms = dep('typedQuestions', './typed-questions.js');
     const values = dep('typedValues', './typed-values.js');
-    if (!terms || !values || set.isFull()) return set;
+    const cells = dep('typedTables', './typed-tables.js');
+    if (!terms || !values || !cells || set.isFull()) return set;
     const { scope, ctx, placed } = parts;
     const subjects = dep('quizSubjects', './quiz-subjects.js');
     const specific = (s) => Boolean(subjects && subjects.specificOf(s, scope.ctx || {}));
@@ -37,7 +38,7 @@
     const nextWorked = assembly.listFamily(set, values.worked(parts.ruleCards || [], { seed: parts.seed, variant: parts.variant }));
     return assembly.fill(set, {
       defined: assembly.listFamily(set, terms.candidates(scope, ctx)),
-      table: assembly.listFamily(set, values.tables(scope.allCards, { factOf: parts.factOf })),
+      table: assembly.listFamily(set, cells.tables(scope.allCards, { factOf: parts.factOf })),
       cloze: nextCloze,
       number: assembly.listFamily(set, values.numbers(scope.allCards, { specific, isDeck: scope.isDeck })),
       worked: () => workedTaken < MAX_TYPED_WORKED && nextWorked() && ++workedTaken > 0,

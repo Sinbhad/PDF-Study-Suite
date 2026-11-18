@@ -71,8 +71,8 @@
     }
     const grade = (val, label) => `<button class="btn btn-secondary btn-sm btn-${val}" type="button" data-qid="${esc(q.id)}" data-grade="${val}"
         aria-pressed="${state.picked === val}" ${state.locked ? 'disabled' : ''}>${label}</button>`;
-    const source = repeatsAnswer(q) ? '' : sv.block(q.explanation);
-    return `<div class="answer"><span class="label">Answer</span>${sv.block(q.answer)}${source}${sv.pageJump(q.pageNumber || q.page)}</div>
+    const source = repeatsAnswer(q) ? '' : sv.block(sv.pageText(q.explanation));
+    return `<div class="answer"><span class="label">Answer</span>${sv.block(sv.pageText(q.answer))}${source}${sv.pageJump(q.pageNumber || q.page)}</div>
       <div class="q-grade" role="group" aria-label="Grade yourself">
         <span class="label">${state.reveal && !graded ? 'Not graded' : 'How did you do?'}</span>${grade('got', 'I got it')}${grade('missed', 'I missed it')}
       </div>`;
@@ -99,7 +99,7 @@
     const answerLine = right ? '' : `<div class="prose"><p>The answer is ${ci >= 0 ? `<strong>${LETTERS[ci]}</strong>: ${sv.rich(q.options[ci])}` : sv.rich(q.answer)}</p></div>`;
     return `<div class="q-options">${options}</div>
       <div class="q-feedback${right ? ' is-ok' : ''}">
-        <p class="q-verdict">${verdict}</p>${answerLine}${sv.block(q.explanation)}${sv.pageJump(q.pageNumber || q.page)}
+        <p class="q-verdict">${verdict}</p>${answerLine}${sv.block(sv.pageText(q.explanation))}${sv.pageJump(q.pageNumber || q.page)}
       </div>`;
   }
 
@@ -116,7 +116,7 @@
     return `
       <article class="q-card" data-qcard="${esc(q.id)}">
         <div class="q-head"><span class="label q-num">Question ${num}</span><span class="badge">${esc(badgeOf(q))}</span>${flagBtn}</div>
-        ${sv.block(q.question, 'q-prompt')}
+        ${sv.block(sv.pageText(q.question), 'q-prompt')}
         ${body}
       </article>`;
   }

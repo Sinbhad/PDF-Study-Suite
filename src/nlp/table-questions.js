@@ -170,7 +170,7 @@
   /** A column a question may ask down: not remarks, not two headers read as one. */
   const isAskableColumn = (card) => !REMARKS_COLUMN_RE.test(String(card.table.column || '').trim()) && !GLUED_HEADER_RE.test(card.table.column || '');
 
-  const api = { candidates, overlaps, stemFor, rowIsUnique, columnValues, isAskableColumn };
+  const api = { candidates, overlaps, stemFor, rowIsUnique, columnValues, isAskableColumn, usableHeader };
   PDFStudy.tableQuestions = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

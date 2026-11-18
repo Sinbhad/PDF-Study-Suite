@@ -5,6 +5,8 @@
  * printed number and index, every page in the document gets its number from that offset.
  *   labelsOf(pdfDoc)      -> Promise<string[] | null>  (PDF.js getPageLabels)
  *   printed(parsed, n)    -> '146' | ''   ('' when unknown or when it is the index itself)
+ *   relabel(parsed, text, range)       -> the app's "(p. N)" citations in text with printed numbers
+ *   printedRange(parsed, first, last)  -> 'p. 146–168' | ''
  * DOM-free.
  */
 (function (root) {
@@ -75,7 +77,33 @@
     return String(index + offset);
   }
 
-  const api = { labelsOf, printed, folioOf };
+  // A page the app cites in its own text: " (p. 228)" after a card's context or a worked answer's explanation.
+  const CITED_RE = /\(p\.\s?(\d{1,4})\)/g;
+
+  /**
+   * The app's own page citations in a text, with the printed number: "Arrays (p. 368)" -> "Arrays (p. 232)". Only pages
+   * inside `range` ([first, last] PDF pages of the material shown) are the app's: the book's own cross-references
+   * ("see p. 45") already print its numbers and point elsewhere. A page with no printed number keeps its index.
+   */
+  function relabel(parsed, text, range) {
+    if (text == null) return text;
+    return String(text).replace(CITED_RE, (all, n) => {
+      const i = Number(n);
+      if (Array.isArray(range) && (i < range[0] || i > range[1])) return all;
+      const p = printed(parsed, i);
+      return p ? `(p. ${p})` : all;
+    });
+  }
+
+  /** "p. 146–168" for PDF pages 188–210 when both ends have printed numbers; '' otherwise. */
+  function printedRange(parsed, first, last) {
+    const a = printed(parsed, first);
+    const b = printed(parsed, last);
+    if (!a || !b) return '';
+    return Number(last) > Number(first) ? `p. ${a}–${b}` : `p. ${a}`;
+  }
+
+  const api = { labelsOf, printed, folioOf, relabel, printedRange };
   PDFStudy.printedPages = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

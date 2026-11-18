@@ -11,6 +11,8 @@
  *     is a data row whose real header was lost)
  *   - its cells are mostly words: a grid of numbers, T/F or 0/1 values asks nothing of a name
  *   - every row names its entity: a word or a short symbol, not a sentence, a caption or an empty cell
+ * A row named by a symbol (an operator table: ">" | "Greater than") still makes the table one, but gives no card:
+ * the cell only names the symbol.
  * A row whose other cells are all empty is a group label ("Taenia spp."): the lower-case rows under it are
  * named with it ("saginata (Taenia spp.)"). A cell holding a web address is left empty.
  *
@@ -121,6 +123,9 @@
     const qualify = (entity) => Boolean(subject && ambiguous && ambiguous.has(entity.toLowerCase()) && words(subject).length <= MAX_SUBJECT_WORDS);
     for (const row of body) {
       const entity = row[0];
+      // A row named by a symbol (">", "!=") only says what the symbol is called ("Greater than"): one cell of an
+      // operator table, which the section's rule card (rule-cards.js) shows whole and worked questions apply.
+      if (!wordy(entity)) continue;
       const own = entity.replace(/\s*\(.*\)$/, '').toLowerCase();
       header.slice(1).forEach((column, i) => {
         const cell = row[i + 1] || '';
@@ -130,10 +135,8 @@
         const bare = subject && /\d/.test(entity) && entity.split(/\s+/).length <= 2;
         const about = qualify(entity) && !bare && !entity.toLowerCase().includes(subject.toLowerCase()) ? `${entity} (${subject})` : entity;
         const named = bare ? `${subject} ${entity}` : about;
-        // A row named by a symbol (">", "!=") is no cue alone: its column header says what the symbol is.
-        const cue = !wordy(named) && header[0] ? `${header[0]} ${named}` : named;
         out.push({
-          front: `${cue} — ${column}`, back: cell, category: 'Comparison', kind: 'concept', subject: entity, sourceKind: 'table',
+          front: `${named} — ${column}`, back: cell, category: 'Comparison', kind: 'concept', subject: entity, sourceKind: 'table',
           // The whole row and the header ride along: a question asked down a column checks every cell of the other
           // rows and names the column its stem value sits in (table-questions.js).
           table: { entity: named, column, columnIndex: i + 1, key, header: [...header], row: [...row] },

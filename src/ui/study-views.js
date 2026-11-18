@@ -48,6 +48,31 @@
     return PDFStudy.printedPages && st && st.parsedPdf ? PDFStudy.printedPages.printed(st.parsedPdf, n) : '';
   }
 
+  /** A book open with printed page numbers known: the app state, else null (a deck cites slides). */
+  function bookState() {
+    const st = PDFStudy.main && PDFStudy.main.appState;
+    return st && st.parsedPdf && st.activeMode !== 'slide_deck' && PDFStudy.printedPages ? st : null;
+  }
+
+  /**
+   * A card's or question's own text with the app's page citations in printed numbers ("Arrays (p. 368)" ->
+   * "Arrays (p. 232)"); the book's own cross-references, which point outside the pages studied, stay as printed.
+   */
+  function pageText(text) {
+    const st = bookState();
+    if (!st || text == null) return text;
+    const s = st.selectedScope;
+    const range = s && s.startPage ? [s.startPage, s.endPage || s.startPage] : [1, st.parsedPdf.numPages];
+    return PDFStudy.printedPages.relabel(st.parsedPdf, text, range);
+  }
+
+  /** "p. 146–168" for a book's PDF pages 188–210 when printed numbers are known, else "p. 188–210". */
+  function pageRangeLabel(first, last) {
+    const st = bookState();
+    const printed = st ? PDFStudy.printedPages.printedRange(st.parsedPdf, first, last) : '';
+    return printed || (Number(last) > Number(first) ? `p. ${first}–${last}` : `p. ${first}`);
+  }
+
   /**
    * Shared header: eyebrow (view name), scope title, optional meta line, then the selection notes
    * from scope-notes.js (which pages of a long selection are showing, why a quiz is short).
@@ -98,7 +123,7 @@
   const delegate = (mod, fn) => (...args) => (PDFStudy[mod] && PDFStudy[mod][fn] ? PDFStudy[mod][fn](...args) : undefined);
 
   PDFStudy.studyViews = {
-    escapeHtml, rich, block, titled, pageJump, printedPage, viewHead, emptyState, whyEmpty, chip, bindPageJumps,
+    escapeHtml, rich, block, titled, pageJump, printedPage, pageText, pageRangeLabel, viewHead, emptyState, whyEmpty, chip, bindPageJumps,
     renderSummaryView: delegate('summaryView', 'renderSummaryView'),
     renderFlashcardsView: delegate('flashcardView', 'renderFlashcardsView'),
     renderQuizView: delegate('quizView', 'renderQuizView'),

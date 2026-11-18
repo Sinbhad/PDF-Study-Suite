@@ -8,6 +8,8 @@
  *   goodHead / goodItems  a heading and its children that make a question and its answer
  *   isDebris(line)        a broken piece of the slide: a wrap, glued columns, overlapping text layers, a caption
  *   isNameOnly(text)      capitalised words only, as the labels of a diagram are
+ *   isDescription(text)   a line that describes the subject ("A gram-positive coccus", "Caused by ...") rather than names
+ *   fusedNames(text)      two Latin binomials run together: a list read across its columns into one line
  *   definingWords(value)  words of a value that are not units ("1 ml / 15 lb" has none)
  */
 (function (root) {
@@ -99,8 +101,27 @@
     if (!/^[A-Z0-9“"‘']/.test(h) || wordCount(core) > MAX_LABEL_HEAD_WORDS || PREDICATE_START_RE.test(h)) return false;
     // "Complications change prognosis- 60% survival vs. 92%": a line that states a figure is a claim, not a label.
     if (FIGURE_CLAIM_RE.test(core)) return false;
+    // "A gram-positive coccus", "Caused by a herpesvirus", "Diagnostic as well as therapeutic": a description of the
+    // slide's subject, not a heading; the line under it is another fact about the subject, not its answer.
+    if (isDescription(core)) return false;
     return !STATEMENT_VERB_RE.test(core) && !CLAUSE_WORD_RE.test(core) && !INSTRUCTION_RE.test(h);
   }
+
+  /**
+   * A line that describes rather than names: an indefinite article ("A gram-positive coccus"), a participle and
+   * its agent ("Caused by a herpesvirus"), adjectives alone ("Diagnostic as well as therapeutic"), or a label with
+   * a sentence glued on ("Anaerobes- These carry a worse prognosis").
+   */
+  function isDescription(text) {
+    const t = tidy(text);
+    if (DESCRIPTION_START_RE.test(t) || PARTICIPLE_AGENT_RE.test(t) || GLUED_SENTENCE_RE.test(t)) return true;
+    const words = t.toLowerCase().split(/\s+/).filter((w) => !/^(?:and|or|but|as|well|not|very|also|both)$/.test(w));
+    return words.length >= 2 && words.length < wordCount(t) && words.every((w) => ADJECTIVE_END_RE.test(w.replace(/[^a-z-]/g, '')));
+  }
+  const DESCRIPTION_START_RE = /^(?:an?)\s+\S/i;
+  const PARTICIPLE_AGENT_RE = /^[A-Za-z]+(?:ed|en)\s+(?:by|with|from|via|through)\s/i;
+  const GLUED_SENTENCE_RE = /[A-Za-z]-\s+(?:These|This|They|It|Which|There)\s+[a-z]/;
+  const ADJECTIVE_END_RE = /(?:ic|al|ive|ous|ful|less|able|ible|ary|ory|ant|ent)$/;
 
   /** Capitalised words only ("Frontal Ridge (aka Frontal Crest)"): a name, as diagram labels are. */
   function isNameOnly(text) {
@@ -112,7 +133,7 @@
   function goodHead(head, itemCount, items) {
     if (!head || !hasLetters(head) || /\?\s*$/.test(head) || LABEL_RE.test(head) || CAPTION_RE.test(head)) return false;
     if (wordCount(head) > 10 || (wordCount(head) > 6 && itemCount < 2)) return false;
-    if (/^(?:or|and|of|to|in|with|but|by|for)\b/.test(head) || !quality().readable(head) || hasOverlappingLayers(head)) return false;
+    if (/^(?:or|and|of|to|in|with|but|by|for)\b/.test(head) || !quality().readable(head) || hasOverlappingLayers(head) || fusedNames(head)) return false;
     if (/\b(?:can|will|may|must|should|could|would|has|have|had|does|do|did|not)$/i.test(head)) return false; // a line that wraps mid-clause
     return isLabelHead(head, items) && !quality().endsMidPhrase(head.replace(/(?:…|\.\.\.)$/, ''));
   }
@@ -129,8 +150,23 @@
   function isDebris(x) {
     return !quality().readable(x) || CAPTION_NOTE_RE.test(x) || /\)\s*\/\s*\(/.test(x) || GLUED_LABEL_RE.test(x) ||
       GLUED_WORDS_RE.test(x) || REPEATED_RUN_RE.test(x) || LEADING_FUNCTION_WORD_RE.test(x) || quality().endsMidPhrase(x) ||
-      BROKEN_LINE_RE.test(x) || !balanced(x) || hasOverlappingLayers(x) || LEADING_NOTE_RE.test(x) || isAside(x) || isLabelRun(x);
+      BROKEN_LINE_RE.test(x) || !balanced(x) || hasOverlappingLayers(x) || LEADING_NOTE_RE.test(x) || isAside(x) || isLabelRun(x) ||
+      fusedNames(x);
   }
+
+  /**
+   * "Streptococcus equi zooepidemicus Staphylococcus spp.": two Latin binomials with nothing between them are two
+   * items of a list read across its columns into one line; what follows them may belong to either.
+   */
+  function fusedNames(x) {
+    const found = [...tidy(x).matchAll(BINOMIAL_RE)];
+    for (let i = 1; i < found.length; i++) {
+      const between = tidy(x).slice(found[i - 1].index + found[i - 1][0].length, found[i].index);
+      if (!/[,;:()/&]|\b(?:and|or|vs|versus|than|with|to|in|of)\b/i.test(between) && between.split(/\s+/).filter(Boolean).length <= 1) return true;
+    }
+    return false;
+  }
+  const BINOMIAL_RE = /\b[A-Z][a-z]{3,}\s+(?:spp?\.?|[a-z]{3,}(?:us|is|a|ae|i|um|es|ii|ens|ensis|ica|ans|alis|ides))(?=[\s.,;:]|$)/g;
 
   /** "Reality: No division exists!": the lecturer's aside, not a point of the slide. */
   // ("“save a vein to euthanize”": a saying set in quotes is the lecturer's aside too.)
@@ -169,6 +205,12 @@
     // ("Anesthesia" over "Regional intravenous anesthesia") is a question its one line answers, and "Tick vectors"
     // over "Ixodes spp." a label and its value.
     if (items.length === 1 && !needsEntity(head) && isShortName(head) && isShortName(items[0]) && sharesWord(head, items[0])) return false;
+    // "Granulomatous meningoencephalitis" over "Fungal spherules – large, size variation": a lone child that is a term
+    // and its own description is the slide's next point, not what the heading names.
+    if (items.length === 1 && !needsEntity(head) && (LABEL_RE.test(items[0]) || /^[A-Z][\w\s-]{2,40}?\s+[–—]\s+\S/.test(items[0]))) return false;
+    // "Metacercariae" over "Immature flukes", "penetrates the gut ...", "migrate through ...": a name followed by
+    // lower-case predicates is a sibling heading with its own lines, nested one level too deep by the extraction.
+    if (items.length >= 2 && isShortName(items[0]) && /^[A-Z]/.test(items[0]) && items.slice(1).every((x) => /^[a-z]/.test(x))) return false;
     if (items.length === 1) return wordCount(items[0]) >= 2 || items[0].length >= 6;
     const words = items.reduce((n, x) => n + wordCount(x), 0) / items.length;
     const lowercase = /^[a-z]/.test(head) || items.some((x) => /^[a-z]/.test(x));
@@ -178,6 +220,7 @@
   const api = {
     LABEL_RE, EQUALS_RE, DASH_RE, CAPTION_RE, CAPTION_NOTE_RE, DISCOURSE_LABEL_RE, GLUED_LABEL_RE, GLUED_WORDS_RE,
     MAX_ITEMS, MAX_ITEM_CHARS, needsEntity, isLabelHead, isNameOnly, goodHead, goodItems, isDebris, definingWords, balanced,
+    isDescription, fusedNames,
   };
   PDFStudy.slideLineShapes = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

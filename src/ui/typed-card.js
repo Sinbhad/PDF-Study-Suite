@@ -57,7 +57,9 @@
     const typed = textOf(state.picked).trim();
     // A right answer in another spelling, form or unit says how the material writes it.
     const ownWords = r.correct && r.verdict !== 'override' && r.message !== 'Correct.';
-    const verdict = ownWords ? r.message.replace(/\.$/, '') : VERDICT[r.verdict] || VERDICT.wrong;
+    // A unit verdict says what is missing ("needs its unit") rather than only that something is.
+    const said = ownWords || (r.verdict === 'unit' && r.message);
+    const verdict = said ? r.message.replace(/\.$/, '') : VERDICT[r.verdict] || VERDICT.wrong;
     const exact = r.correct && r.verdict !== 'override';
     const overrideBtn = !r.correct && typed
       ? `<button class="btn btn-secondary btn-sm q-typed-override" type="button" data-override-qid="${esc(q.id)}">I was right</button>` : '';
@@ -66,7 +68,7 @@
       <div class="q-feedback${r.correct ? ' is-ok' : ''}">
         <p class="q-verdict">${esc(verdict)}</p>
         ${exact ? '' : `<div class="prose"><p>The answer is <strong>${sv.rich(q.answer)}</strong></p></div>`}
-        ${sv.block(q.explanation)}${sv.pageJump(q.pageNumber || q.page)}
+        ${sv.block(sv.pageText(q.explanation))}${sv.pageJump(q.pageNumber || q.page)}
         ${overrideBtn ? `<div class="q-grade">${overrideBtn}</div>` : note}
       </div>`;
   }

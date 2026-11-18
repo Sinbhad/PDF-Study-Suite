@@ -9,6 +9,9 @@
  * Never when the sentence is hedged or about an example, when a word of the answer (or its initials) stays in the
  * prompt, when the term is not one the scope marks (quizScope.clozeTerms: never the topic word), or when another
  * term of the scope could fill the blank as well (the scope says the same of it, or calls one a kind of the other).
+ * A "defined" question is not asked for a term whose head is a category the scope uses for many things ("bounds error"
+ * where the section names many errors) unless the definition itself names that category: the student could name it
+ * otherwise. Every question carries the checker's extra facts (typed-shape.js checksOf).
  * Table cells, numbers and worked answers: typed-values.js.
  *
  * candidates(scope, ctx)      -> [question] from the scope's definition facts, best first
@@ -32,6 +35,7 @@
   const make = (fields) => shape().make(fields);
   const aliasesOf = (term, text) => shape().aliasesOf(term, text);
   const shownAfter = (after) => shape().shownAfter(after);
+  const checksOf = (answer, ctx) => shape().checksOf(answer, ctx.text);
 
   const BLANK = '________';
   const MAX_ANSWER_WORDS = 4;
@@ -83,6 +87,15 @@
     return own.filter((w) => w !== head && stems.has(w));
   }
 
+  /**
+   * "Insertion anomaly" asked from a text that never says "anomaly", in a section of many anomalies: the category word
+   * is the student's to choose ("insert problem", "out-of-bounds exception"), so the typed answer cannot be pinned down.
+   */
+  function headUnnamed(answer, text, ctx) {
+    const head = shape().genericHead(answer, ctx.text);
+    return Boolean(head) && !qf().contentStems(text).some((w) => qf().contentStems(head).includes(w));
+  }
+
   /** Why the blank may not be asked typed ('' when it may). minWords: content words the stem must keep. */
   function blankRefusal(answer, before, after, source, ctx, minWords) {
     const rest = `${before} ${after}`;
@@ -90,6 +103,7 @@
     if (sn().isExampleTalk(source) || sn().hasUnresolvedReference(`${before}${BLANK}${after}`)) return 'example or reference';
     if (cloze().informativeWords(mt().mask(rest).text) < minWords) return 'thin stem';
     if (leakedWords(answer, rest).length) return 'answer word in stem';
+    if (headUnnamed(answer, rest, ctx)) return 'generic head not in the sentence';
     const initials = words(answer).length >= 2 ? words(answer).map((w) => w[0]).join('').toUpperCase() : '';
     if (initials && new RegExp(`(?<![A-Za-z])${initials}s?(?![A-Za-z])`).test(rest)) return 'initials in stem';
     const sibling = siblingFits(answer, rest, source, ctx, before);
@@ -132,7 +146,7 @@
       const blanked = os().neutralArticle(mt().unmask(`${cut.before}${BLANK}${cut.after}`, found.spans));
       return make({
         question: `Type the missing term:\n"${blanked}"`, answer: tidyTerm(answer, ctx), accept: aliasesOf(answer, ctx.text),
-        others: otherTerms(ctx), shown: shownAfter(cut.after), explanation: `Source statement: "${found.clean}"`,
+        others: otherTerms(ctx), shown: shownAfter(cut.after), explanation: `Source statement: "${found.clean}"`, checks: checksOf(answer, ctx),
       });
     }
     return null;
@@ -158,7 +172,7 @@
     const blanked = os().neutralArticle(`${before}${BLANK}${after}`);
     return make({
       question: `Type the missing term:\n"${blanked}"`, answer: tidyTerm(hit[0], ctx), accept: aliasesOf(fact.term, ctx.text),
-      others: otherTerms(ctx), shown: shownAfter(after), explanation: `Source statement: "${statement}"`,
+      others: otherTerms(ctx), shown: shownAfter(after), explanation: `Source statement: "${statement}"`, checks: checksOf(fact.term, ctx),
     });
   }
 
@@ -181,6 +195,7 @@
     if (LEADING_PRONOUN_RE.test(def) || sn().hasUnresolvedReference(def)) return 'leans on another sentence';
     if (HEDGE_RE.test(def)) return 'hedged';
     if (!statements().isDefinitionText(def)) return 'not a definition';
+    if (headUnnamed(fact.term, def, ctx)) return 'generic head not in the definition';
     // "Strepvax II requires a series of injections" under "Killed vaccine": a sentence about another name.
     const opener = def.match(OTHER_SUBJECT_RE);
     if (opener && !norm(fact.term).includes(norm(opener[1])) && !norm(opener[1]).includes(norm(fact.term))) return 'about another name';
@@ -205,7 +220,7 @@
     }
     return make({
       question: `Which term is defined as:\n"${os().tidyStatement(def)}"`, answer: tidyTerm(fact.term, ctx), accept: aliasesOf(fact.term, ctx.text),
-      others: otherTerms(ctx), explanation: `Source: ${fact.term}: ${def}`,
+      others: otherTerms(ctx), explanation: `Source: ${fact.term}: ${def}`, checks: checksOf(fact.term, ctx),
     });
   }
 

@@ -10,7 +10,7 @@ cross-check that a script was not dropped from both the map and index.html toget
 import os
 import shutil
 
-EXPECTED_SCRIPT_COUNT = 230  # <script src> tags in index.html (modules and vendor scripts)
+EXPECTED_SCRIPT_COUNT = 243  # <script src> tags in index.html (modules and vendor scripts)
 
 EXPECTED_NAMESPACES: dict[str, str] = {
     # PDF extraction, 2D formula reconstruction & textbook/slide structure (23)
@@ -124,13 +124,20 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/nlp/term-kinds.js": "PDFStudy.termKinds",
     "src/nlp/cloze-questions.js": "PDFStudy.clozeQuestions",
     "src/nlp/naming-questions.js": "PDFStudy.namingQuestions",
+    "src/nlp/recall-labels.js": "PDFStudy.recallLabels",
     "src/nlp/recall-questions.js": "PDFStudy.recallQuestions",
     "src/nlp/table-questions.js": "PDFStudy.tableQuestions",
+    "src/nlp/table-notes.js": "PDFStudy.tableNotes",
+    "src/nlp/list-questions.js": "PDFStudy.listQuestions",
+    "src/nlp/number-questions.js": "PDFStudy.numberQuestions",
     "src/nlp/typed-numbers.js": "PDFStudy.typedNumbers",
+    "src/nlp/typed-forms.js": "PDFStudy.typedForms",
+    "src/nlp/typed-terms.js": "PDFStudy.typedTerms",
     "src/nlp/typed-check.js": "PDFStudy.typedCheck",
     "src/nlp/typed-shape.js": "PDFStudy.typedShape",
     "src/nlp/typed-questions.js": "PDFStudy.typedQuestions",
     "src/nlp/typed-values.js": "PDFStudy.typedValues",
+    "src/nlp/typed-tables.js": "PDFStudy.typedTables",
     "src/nlp/typed-round.js": "PDFStudy.typedRound",
     "src/nlp/annotation-notes.js": "PDFStudy.annotationNotes",
     "src/nlp/quiz-assembly.js": "PDFStudy.quizAssembly",
@@ -175,10 +182,16 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/nlp/section-rules.js": "PDFStudy.sectionRules",
     "src/nlp/rule-cards.js": "PDFStudy.ruleCards",
     "src/nlp/code-cards.js": "PDFStudy.codeCards",
+    "src/nlp/array-rules.js": "PDFStudy.arrayRules",
+    "src/nlp/branch-rules.js": "PDFStudy.branchRules",
+    "src/nlp/gate-rules.js": "PDFStudy.gateRules",
     "src/nlp/worked-algebra.js": "PDFStudy.workedAlgebra",
     "src/nlp/worked-expressions.js": "PDFStudy.workedExpressions",
     "src/nlp/worked-forms.js": "PDFStudy.workedForms",
     "src/nlp/worked-sets.js": "PDFStudy.workedSets",
+    "src/nlp/worked-arrays.js": "PDFStudy.workedArrays",
+    "src/nlp/worked-branches.js": "PDFStudy.workedBranches",
+    "src/nlp/worked-gates.js": "PDFStudy.workedGates",
     "src/nlp/worked-questions.js": "PDFStudy.workedQuestions",
     # Keep-it layer: stable keys, per-document state, deck merge, review scheduling, export (5 pure + 8 UI)
     "src/nlp/study-keys.js": "PDFStudy.studyKeys",
@@ -304,6 +317,7 @@ NODE_FIXTURES: tuple[str, ...] = (
     "ocr_store_fixtures.js",
     "page_schedule_fixtures.js",
     "worked_rule_fixtures.js",
+    "keyed_question_fixtures.js",
     "typed_answer_fixtures.js",
     "typed_question_fixtures.js",
 )

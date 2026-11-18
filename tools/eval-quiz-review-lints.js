@@ -60,7 +60,8 @@ const EXAMPLE_TALK_RE =
   /\b(?:if|suppose)\s+we\b|\bwe\s+(?:would|could|might)\b|\b(?:in|from)\s+(?:the|this|that|our)\s+(?:(?:earlier|previous|last|above|first|second|next)\s+)?example\b|\b[A-Za-z_]\w*\[[^\]\s]{1,8}\]/i;
 
 function lintExampleTalk(q) {
-  const m = T.stemBody(q).match(EXAMPLE_TALK_RE);
+  // (An array element set as code, `values[2]`, is the question's own notation, not a worked example's name.)
+  const m = T.stemBody(q).replace(/`[^`]*`/g, ' ').match(EXAMPLE_TALK_RE);
   return m ? found('example_talk', `"${m[0]}"`) : null;
 }
 

@@ -17,6 +17,7 @@
  *     kinds       which terms the scope calls kinds of one another (quiz-kinds.js): never offered against each other
  *     usable      (sentence) => may this sentence be asked (stands alone, study content, not an example)
  *     named       terms a sentence introduces by name ("... is called X", "... known as X")
+ *     titlePages  (title) => the slide numbers a deck prints that title on (a recall names its slide when > 1)
  *   clozeSentences(scope, seed) -> sentences a blank may be cut from, best first
  *   clozeTerms(scope)           -> terms a blank may replace or offer (marked-terms.js)
  * Returns null for a back-of-book answer key: there is nothing to learn from one. A slide the lecturer marked
@@ -243,12 +244,17 @@
     const subjectsDefined = definedHere.filter((d) => d.how === 'copula').map((d) => subjectTerm(d.term)).filter(Boolean);
     const summary = D.summarizer.summarizeText(text, { topK: Math.max(12, maxQuestions * 2), didacticBlocks });
     const pageOf = isDeck ? slideFinder(input) : dep('cardFields', './card-fields.js').pageLocator(opts.lines);
+    // The slides that print a title ("Claw Amputation" on five slides): a recall of one of them names its slide.
+    const titleKey = (t) => normKey(D.subjects.tidySubject(t));
+    const titled = new Map();
+    for (const s of isDeck ? input : []) titled.set(titleKey(s.title), [...(titled.get(titleKey(s.title)) || []), s.slideNumber]);
+    const titlePages = (title) => titled.get(titleKey(title)) || [];
     // Key concepts (a margin note, a stand-alone key statement): the statement is a cloze sentence and the
     // concept it is about, when the scope keeps naming it, is the term blanked ("________ compare values").
     const concepts = conceptCloze(allCards, (term) => isTerm(term) && recurs(term));
     return {
       isDeck, text, headingWords, profile, recurs, isTerm, usable, pageOf, sentences, structured, cards, facts, claims, peers, kinds, named, summary,
-      subjectsDefined, allCards, counts, ctx, concepts, rank, exampleTerm,
+      subjectsDefined, allCards, counts, ctx, concepts, rank, exampleTerm, titlePages,
     };
   }
 

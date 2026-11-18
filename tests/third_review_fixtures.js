@@ -64,7 +64,11 @@ const A = S.alteredStatements;
 const moved = A.alter('Replace the dressing in 4-6 days', { text: '' });
 check('altered: a range moves well outside itself', moved && moved.statement === 'Replace the dressing in 12-18 days', moved && moved.statement);
 check('altered: a percentage shifts by forty points', (A.alter('About 20% of carriers shed again', { text: '' }) || {}).statement === 'About 60% of carriers shed again');
-check('altered: a direction word flips', (A.alter('Increased gill pressure causes rupture', { text: '' }) || {}).statement === 'Decreased gill pressure causes rupture');
+// A direction flips only when the scope sets the two words against each other on one line about the same thing.
+const contrastText = 'Gill pressure: increased tears the filaments, decreased slows breathing';
+check('altered: a direction word flips', (A.alter('Increased gill pressure causes rupture', { text: contrastText }) || {}).statement === 'Decreased gill pressure causes rupture');
+check('altered: no contrast in the scope, no direction swap (upper/lower may both hold)', !A.alter('History of upper airway infections in the pond', { text: 'Ponds hold fish.' }) &&
+  !A.alter('Increased gill pressure causes rupture', { text: '' }));
 check('altered: a recommended minimum, a name with digits, or a printed value is not altered', !A.alter('Ponds should be dried 3 weeks', { text: '' }) &&
   !A.alter('Inject at sites L1 and L2 with 5 mL', { text: '' }) && !A.alter('Signs appear within 2 days', { text: 'signs appear within 6 days in carp' }));
 

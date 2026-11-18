@@ -1,7 +1,8 @@
 /**
  * Card Quality Gates shared by every flashcard source (prose, notes, slides).
  *   goodFront(front, opts)   a front names one thing: no pronoun or sentence opener, no clause, no dangling tail
- *   goodBack(back, front)    a back says something the front does not, and does not stop mid-phrase
+ *   goodBack(back, front)    a back says something the front does not, and does not stop mid-phrase or narrate
+ *   narrates(text)           the author announcing what comes next ("We will now introduce ...", "... in this book")
  *   readable(text)           plain words and numbers, not recognition debris
  *   tidyClause(text)         a cut-out defining clause as a standalone answer ("which raises ..." -> "Raises ...")
  *   tidySentence(text)       a whole sentence as an answer: no leading "However,", no "(see Figure 3)"
@@ -104,8 +105,14 @@
     if (!lines.length) return false;
     // A list back is judged line by line; only its last line can leave the reader hanging.
     if (endsMidPhrase(lines[lines.length - 1])) return false;
+    // "We will now introduce ...", "We will use ... in this book because ...": the author announcing what comes
+    // next, not what the term means.
+    if (narrates(lines[0])) return false;
     return !restatesFront(lines.join(' '), front);
   }
+  const NARRATION_RE = /^(?:(?:however|now|next|first|here|so),\s+)?(?:we|i)\s+(?:will|shall|now|next|begin|turn|are\s+going\s+to)\b|\bin\s+this\s+(?:book|chapter|text)\b/i;
+  /** "We will now introduce ...", "However, we will use ... in this book": the author announcing, not stating. */
+  const narrates = (text) => NARRATION_RE.test(plain(text));
 
   /** A clause lifted out of its sentence, made to stand alone: leading relative word dropped, capital, full stop. */
   function tidyClause(text) {
@@ -228,7 +235,7 @@
   // "For instance, the limit from the right means ..." is not one.
   const EXAMPLE_SETUP_RE = /^(?:(?:for\s+(?:example|instance)|as\s+an\s+example),?\s+(?:consider|suppose|imagine|let'?s\s+say|take|look\s+at)|consider|suppose|imagine|let'?s\s+say)\b/i;
 
-  const api = { introducedByExample, goodFront, goodBack, endsMidPhrase, restatesFront, leansBack, readable, tidyClause, tidySentence, withoutAsides, dedupe, withTopic, topicFinder, frontKey, plain };
+  const api = { introducedByExample, goodFront, goodBack, narrates, endsMidPhrase, restatesFront, leansBack, readable, tidyClause, tidySentence, withoutAsides, dedupe, withTopic, topicFinder, frontKey, plain };
   PDFStudy.cardQuality = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
