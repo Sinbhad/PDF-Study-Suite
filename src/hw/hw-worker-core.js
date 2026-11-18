@@ -1,13 +1,17 @@
 /**
  * Worker message handling, independent of the Worker global so Node tests can drive it.
  * Protocol:
- *   in:  init | page {jobId,pageNumber,gray,width,height,scale} | cancel {jobId}
- *        init-canvas | tile {jobId,pageNumber,rgba,width,height,lineHeight}
+ *   in:  init | page {jobId,pageNumber,gray,width,height,scale,angle?,upright?} | cancel {jobId}
+ *        init-canvas | tile {jobId,pageNumber,rgba,width,height,lineHeight,angle?}
  *   out: ready | model-progress | progress | page-done | cancelled {result?: partial page} | error
  *        canvas-ready {engine} | tile-done {jobId,pageNumber,lines,engine}
- * Two engines: `engine` (the handwriting model, loaded by init) and `canvasEngine` (PP-OCR, loaded on first use).
+ * Two engines, each optional: `engine` (the handwriting model) and `canvasEngine` (PP-OCR). `ready` reports the
+ * one that will read line crops: the handwriting model when it is installed, otherwise PP-OCR.
  * PP-OCR reads printed pages and whole tiles; on handwritten pages it gives a second opinion on pieces the
  * handwriting model is unsure of, and reads everything when the handwriting model is not installed.
+ * A page is straightened and turned upright before it is planned (upright.js); `angle` is the slope of its text
+ * lines when the caller has measured it, and `upright: true` says the page is known to be the right way up, so
+ * no lines are read to find that out. Boxes in results are always in the pixels of the page as given.
  * Line and region indices in ids are 0-based: `p${page}-l${line}-r${n}`.
  */
 (function (root) {
@@ -30,6 +34,16 @@
    * with known text: at 0.8 it took 27 reads and two pages got worse; at 0.88 it takes 12 and none does.
    */
   const SECOND_MEAN = 0.88;
+  /**
+   * On a page PP-OCR reads, a box narrower than this many times its height is not sent to the recogniser. By the
+   * proportions of ordinary letters three characters need a box about twice as wide as it is tall, so such a box
+   * holds two characters at most, and a piece with fewer than three letters or digits is discarded as picture
+   * noise anyway (pdf/ocr-noise.js). Photographs and diagrams shatter into dozens of these. The value is a
+   * judgement from letter proportions, not a measurement; three very narrow letters ("ill") can fall under it.
+   * The handwriting model's pages keep such boxes: a lone symbol matters in handwritten maths.
+   */
+  const MIN_READ_ASPECT = 1.2;
+  const NOT_READ = { text: '', confidence: 0, kind: null };
   const tick = () => new Promise((res) => (typeof setTimeout === 'function' ? setTimeout(res, 0) : res()));
 
   /**
@@ -41,6 +55,7 @@
   function createHandler(deps) {
     const { engine, post, segmenter } = deps;
     const prep = deps.prep || PDFStudy.hwPagePrep || (typeof require === 'function' ? require('./page-prep.js') : null);
+    const upright = deps.upright || PDFStudy.hwUpright || (typeof require === 'function' ? require('./upright.js') : null);
     const cancelled = new Set();
     const active = new Set(); // jobs in flight: a cancel for any other job is ignored, so nothing lingers
     let info = null;
@@ -48,10 +63,12 @@
     const canvas = deps.canvasEngine !== undefined ? deps.canvasEngine : PDFStudy.hwPpocrEngine || null;
     let canvasLoading = null;
 
+    const tellProgress = (p) => post({ type: 'model-progress', loaded: p && p.loaded, total: p && p.total, file: p && p.file });
+
     function ensureLoaded() {
       if (!loading) {
         loading = Promise.resolve()
-          .then(() => engine.load((p) => post({ type: 'model-progress', loaded: p && p.loaded, total: p && p.total, file: p && p.file })))
+          .then(() => engine.load(tellProgress))
           .then((r) => {
             info = { name: engine.name, available: !!(r && r.available), reason: (r && r.reason) || '' };
             return info;
@@ -70,11 +87,23 @@
         canvasLoading = !canvas
           ? Promise.resolve({ name, available: false, reason: 'PP-OCR engine is not available in this browser' })
           : Promise.resolve()
-            .then(() => canvas.load())
-            .then((r) => ({ name, available: !!(r && r.available), reason: (r && r.reason) || '' }))
+            .then(() => canvas.load(tellProgress))
+            .then((r) => ({ name, available: !!(r && r.available), reason: (r && r.reason) || '', threads: canvas.threads ? canvas.threads() : 1 }))
             .catch((err) => ({ name, available: false, reason: String((err && err.message) || err) }));
       }
       return canvasLoading;
+    }
+
+    /**
+     * The engine that reads line crops, for `ready`: the handwriting model, or PP-OCR when that model is not
+     * installed. Not having the handwriting model is normal and is never reported as a problem; when nothing
+     * can read, the reason given is PP-OCR's, because that is the reader an install needs first.
+     */
+    async function ensureReader() {
+      const hw = await ensureLoaded();
+      if (hw.available || !canvas) return hw;
+      const pp = await ensureCanvas();
+      return pp.available ? pp : { name: hw.name, available: false, reason: pp.reason || hw.reason };
     }
 
     async function recogniseRegion(engineInfo, crop, kind, eng) {
@@ -109,16 +138,36 @@
       const { jobId, pageNumber, width, height, scale } = msg;
       const engineInfo = await ensureLoaded();
       const gray = msg.gray instanceof ArrayBuffer ? new Uint8Array(msg.gray) : msg.gray;
-      // the same two calls the evaluation tool makes, so what is read here is exactly what gets measured
-      const plan = prep.plan(gray, width, height);
-      const { lines, bin, medH } = plan;
-      const total = lines.reduce((n, l) => n + l.regions.length, 0);
-      const tooMany = total > (plan.printed ? MAX_PRINTED : MAX_REGIONS);
+      const pieces = (p) => p.lines.reduce((n, l) => n + l.regions.length, 0);
+      const overfull = (p) => pieces(p) > (p.printed ? MAX_PRINTED : MAX_REGIONS);
       // PP-OCR reads a printed page, or every page when the handwriting model is not installed
-      const ppInfo = canvas && !tooMany && (plan.printed || !engineInfo.available) ? await ensureCanvas() : null;
-      const pp = ppInfo && ppInfo.available ? ppInfo : null;
+      const ppFor = async (p) => {
+        if (!canvas || overfull(p) || !(p.printed || !engineInfo.available)) return null;
+        const info = await ensureCanvas();
+        return info.available ? info : null;
+      };
+      const canRead = engineInfo.available || !!(canvas && (await ensureCanvas()).available);
+      const started = Date.now();
+      // The page is straightened, and turned the right way up by reading a few of its lines with the engine
+      // that reads the page (those reads are reused below). The plan and the crops are the same two page-prep
+      // calls the evaluation tool makes, on that upright view.
+      const { view, plan, reads, work } = await upright.choose(gray, width, height, {
+        angle: msg.angle,
+        upright: msg.upright === true,
+        plan: prep.plan,
+        crop: prep.cropFor,
+        read: canRead ? async (crop, p, box) => readPiece(engineInfo, await ppFor(p), crop, segmenter.classifyRegion(p.bin, box, p.medH)) : null,
+        skip: overfull,
+        stopped: () => cancelled.has(jobId),
+      });
+      const oriented = Date.now();
+      const { lines, bin, medH } = plan;
+      const total = pieces(plan);
+      const tooMany = overfull(plan);
+      const pp = await ppFor(plan);
       const source = (engineInfo.available || pp) && !tooMany ? 'model' : 'manual';
       let done = 0;
+      let unreadTiny = 0;
       let stop = false; // user cancel; a too-busy page is skipped, not cancelled
       const outLines = [];
       for (const line of lines) {
@@ -127,22 +176,41 @@
           if (!stop && cancelled.has(jobId)) stop = true;
           const guess = segmenter.classifyRegion(bin, reg.box, medH);
           const id = `p${pageNumber}-l${line.index}-r${regions.length}`;
-          if (stop || tooMany) {
-            regions.push({ id, kind: guess, box: reg.box, text: '', confidence: 0, source: 'manual' });
+          const box = upright.pageBox(view, reg.box);
+          // a piece already read for the orientation check is not read again (and counts as read after a cancel)
+          const early = tooMany ? null : reads.get(upright.keyOf(reg.box));
+          if ((stop && !early) || tooMany) {
+            regions.push({ id, kind: guess, box, text: '', confidence: 0, source: 'manual' });
             continue;
           }
-          const crop = prep.cropFor(plan, gray, width, height, reg.box); // soft gray, dark ink on white
-          const rec = await readPiece(engineInfo, pp, crop, guess);
-          const region = { id, kind: rec.kind || guess, box: reg.box, text: rec.text, confidence: rec.confidence, source };
+          // a box with room for two characters at most is not read (PP-OCR pages only: see MIN_READ_ASPECT)
+          const tiny = !early && !!pp && reg.box.w < MIN_READ_ASPECT * reg.box.h;
+          if (tiny) unreadTiny++;
+          const crop = early || tiny ? null : prep.cropFor(plan, view.gray, view.width, view.height, reg.box); // soft gray, dark ink on white
+          const rec = early || (tiny ? NOT_READ : await readPiece(engineInfo, pp, crop, guess));
+          const region = { id, kind: rec.kind || guess, box, text: rec.text, confidence: rec.confidence, source };
+          // on a turned page `box` is the page rectangle around the sloping piece; `size` is the piece itself
+          if (view.frame) region.size = { w: reg.box.w, h: reg.box.h };
           if (rec.stats) region.stats = rec.stats;
           regions.push(region);
           done++;
           post({ type: 'progress', jobId, pageNumber, done, total });
           await tick();
         }
-        outLines.push({ index: line.index, box: line.box, regions });
+        outLines.push({ index: line.index, box: upright.pageBox(view, line.box), regions });
       }
       const result = { pageNumber, scale, width, height, lines: outLines };
+      // where the time went (ms): straightening, page plans and the orientation check, then reading the pieces
+      result.timing = {
+        orient: oriented - started,
+        read: Date.now() - oriented,
+        plans: (work && work.plans) || 1,
+        probes: (work && work.reads) || 0,
+        pieces: done,
+        tiny: unreadTiny,
+      };
+      if (view.frame) result.angle = view.angle;
+      if (source === 'model') result.engine = pp ? pp.name : engineInfo.name;
       if (plan.printed) result.printed = true;
       if (plan.letterhead && plan.letterhead.length) result.letterhead = plan.letterhead.length;
       if (tooMany) result.skippedReason = 'too-many-regions';
@@ -153,12 +221,12 @@
 
     /** Detect and read a whole RGBA tile with PP-OCR; posts tile-done, or cancelled when stopped. */
     async function doTile(msg) {
-      const { jobId, pageNumber, width, height, lineHeight } = msg;
+      const { jobId, pageNumber, width, height, lineHeight, angle } = msg;
       const info = await ensureCanvas();
       const rgba = msg.rgba instanceof ArrayBuffer ? new Uint8ClampedArray(msg.rgba) : msg.rgba;
       const stop = () => cancelled.has(jobId);
       let lines = [];
-      if (info.available && !stop()) lines = ((await canvas.readTile({ rgba, width, height }, { lineHeight, shouldStop: stop })) || {}).lines || [];
+      if (info.available && !stop()) lines = ((await canvas.readTile({ rgba, width, height }, { lineHeight, angle, shouldStop: stop })) || {}).lines || [];
       if (stop()) post({ type: 'cancelled', jobId, pageNumber });
       else post({ type: 'tile-done', jobId, pageNumber, lines, engine: info });
     }
@@ -181,7 +249,7 @@
         return;
       }
       if (msg.type === 'init') {
-        post({ type: 'ready', engine: await ensureLoaded() });
+        post({ type: 'ready', engine: await ensureReader() });
         return;
       }
       if (msg.type === 'init-canvas') {
@@ -203,6 +271,6 @@
     return { handle };
   }
 
-  PDFStudy.hwWorkerCore = { createHandler, MAX_REGIONS, MAX_PRINTED, LOW, SECOND_MEAN };
+  PDFStudy.hwWorkerCore = { createHandler, MAX_REGIONS, MAX_PRINTED, LOW, SECOND_MEAN, MIN_READ_ASPECT };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.hwWorkerCore;
 })(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this);

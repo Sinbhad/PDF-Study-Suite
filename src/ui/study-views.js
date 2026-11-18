@@ -27,24 +27,42 @@
     return t.html ? `<${tag} class="${cls}" title="${escapeHtml(t.full)}">${t.html}</${tag}>` : '';
   }
 
+  /** "View p. 12" for a book, "Slide 12" for a deck (a deck's page is its slide). */
   function pageJump(page, label) {
     const n = parseInt(page, 10);
-    return n > 0 ? `<button class="page-jump" type="button" data-jump-page="${n}">${label || 'View'} p.&nbsp;${n}</button>` : '';
+    if (!(n > 0)) return '';
+    const deck = Boolean(PDFStudy.main && PDFStudy.main.appState && PDFStudy.main.appState.activeMode === 'slide_deck');
+    const text = deck && !label ? `Slide&nbsp;${n}` : `${label || 'View'} p.&nbsp;${n}`;
+    return `<button class="page-jump" type="button" data-jump-page="${n}">${text}</button>`;
   }
 
-  /** Shared header: eyebrow (view name), scope title, optional meta line. */
+  /**
+   * Shared header: eyebrow (view name), scope title, optional meta line, then the selection notes
+   * from scope-notes.js (which pages of a long selection are showing, why a quiz is short).
+   */
   function viewHead(eyebrow, scopeTitle, meta) {
     const scope = PDFStudy.main && PDFStudy.main.appState.selectedScope;
     const context = scope && scope.context ? RB().title(scope.context, 80).full : '';
+    const notes = PDFStudy.scopeNotes ? PDFStudy.scopeNotes.headHtml() : '';
     return `<header class="view-head">
         <p class="eyebrow">${escapeHtml(eyebrow)}${context ? ` · ${escapeHtml(context)}` : ''}</p>
         ${titled('h2', 'view-title', scopeTitle, 200) || '<h2 class="view-title">Untitled selection</h2>'}
         ${meta ? `<p class="view-meta">${meta}</p>` : ''}
+        ${notes}
       </header>`;
   }
 
   function emptyState(heading, text, actionHtml = '') {
     return `<div class="empty"><h3 class="empty-title">${escapeHtml(heading)}</h3><p>${escapeHtml(text)}</p>${actionHtml}</div>`;
+  }
+
+  /**
+   * Empty tab for the current selection: says why it is empty and what to do next
+   * (study-states.js); falls back to the plain message when no document is open.
+   */
+  function whyEmpty(tab, heading, text) {
+    const html = PDFStudy.studyStates ? PDFStudy.studyStates.emptyHtml(tab) : '';
+    return html || emptyState(heading, text);
   }
 
   function chip(attrs, on, label) {
@@ -68,7 +86,7 @@
   const delegate = (mod, fn) => (...args) => (PDFStudy[mod] && PDFStudy[mod][fn] ? PDFStudy[mod][fn](...args) : undefined);
 
   PDFStudy.studyViews = {
-    escapeHtml, rich, block, titled, pageJump, viewHead, emptyState, chip, bindPageJumps,
+    escapeHtml, rich, block, titled, pageJump, viewHead, emptyState, whyEmpty, chip, bindPageJumps,
     renderSummaryView: delegate('summaryView', 'renderSummaryView'),
     renderFlashcardsView: delegate('flashcardView', 'renderFlashcardsView'),
     renderQuizView: delegate('quizView', 'renderQuizView'),

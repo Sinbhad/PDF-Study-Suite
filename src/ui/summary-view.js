@@ -1,7 +1,10 @@
 /**
- * Summary view: a single reading column of key formulas, theorem/definition blocks (3px category
- * rule, no boxes), a definitions list, key concepts, takeaways and the slide-by-slide breakdown,
- * ending in a one-click "Quiz this section" action. Formatted text and math only: no page images.
+ * Summary view. When the summary carries an outline (summarizer: deck-outline.js / book-outline.js) it is
+ * rendered by summary-outline.js: a lead sentence, linked key terms and the material's own sections, every
+ * line with its "View p. N" / "Slide N" link. Otherwise
+ * (canvas topics, older saved results) the earlier single column of key formulas, theorem/definition
+ * blocks (3px category rule, no boxes), definitions, key concepts, takeaways and slide-by-slide breakdown.
+ * Both end in a one-click "Quiz this section" action. Formatted text and math only: no page images.
  * Optional data rendered when present: summary.definitions [{term, definition, page?}], and per
  * slide kind / qa {question, answer} / definitions / table {rows} / pages.
  */
@@ -86,17 +89,8 @@
     return hi > lo ? `Slides ${lo}–${hi}` : `Slide ${lo}`;
   }
 
-  /** qa: one { question, answer } or a list of them; each is a prompt with a click-to-reveal answer. */
-  function qaHtml(qa, titleText) {
-    if (Array.isArray(qa)) return qa.map((one) => qaHtml(one, titleText)).join('');
-    const sv = SV();
-    const answer = qa && sv.block(qa.answer);
-    if (!answer) return '';
-    const q = norm(qa.question) && norm(qa.question) !== norm(titleText) ? sv.block(qa.question) : '';
-    return `<div class="qa">${q}<details class="reveal">
-        <summary><span class="when-closed">Show answer</span><span class="when-open">Hide answer</span></summary>
-        <div class="answer"><span class="label">Answer</span>${answer}</div></details></div>`;
-  }
+  /** qa: one { question, answer } or a list of them (summary-outline.js renders both views' Q&A). */
+  const qaHtml = (qa, titleText) => PDFStudy.summaryOutline.qaHtml(qa, titleText);
 
   function slideHtml(entry, slides) {
     const sv = SV();
@@ -117,15 +111,17 @@
     const kindTag = { question: 'Question', table: 'Table', section: 'Section' }[e.kind] || '';
     return `<article class="slide${e.kind === 'section' || e.kind === 'title' ? ' is-section' : ''}">
         <div class="slide-head"><span class="label nums">${e.topicLabel || slideLabel(e)}</span>${kindTag ? `<span class="tag">${kindTag}</span>` : ''}${sv.pageJump(e.slideNumber)}</div>
-        ${title}${body}
+        ${title}${body}${PDFStudy.slideNotes ? PDFStudy.slideNotes.html(e.slideNumber) : ''}
       </article>`;
   }
 
-  function quizCta() {
+  /** emptySummary: the summary itself is empty, so the call to action only shows if there is something to offer. */
+  function quizCta(emptySummary) {
     const st = PDFStudy.main && PDFStudy.main.appState;
     if (!st) return '';
     const quizN = (st.generated.quiz || []).length;
     const cardN = (st.generated.flashcards || []).length;
+    if (emptySummary && !quizN && !cardN) return '';
     const what = { all_slides: 'all slides', single_slide: 'this slide', chapter: 'this chapter', custom_range: 'these pages' }[st.selectedScope.type] || 'this section';
     const sub = quizN ? `${quizN} question${quizN === 1 ? '' : 's'} from what you just read.` : 'There is not enough material here for quiz questions yet.';
     return `<aside class="cta" aria-label="Next steps">
@@ -141,6 +137,14 @@
     if (!container) return;
     const sv = SV();
     const d = data || {};
+    // Canvas topics (byTopic) keep the topic-by-topic view, which shows their recognised pairs.
+    const outline = d.outline && !d.byTopic ? outlineHtml(d.outline) : '';
+    if (outline) {
+      container.innerHTML = sv.viewHead('Summary', scopeTitle) + outline + quizCta(false);
+      sv.bindPageJumps(container);
+      PDFStudy.summaryOutline.bindTermLinks(container);
+      return;
+    }
     const blocks = (d.didacticBlocks || []).concat((d.keyFormulas || []).filter((f) => f && typeof f === 'object' && !f.tex && !f.formula && f.body));
     const pick = (test) => blocks.filter(test).map(dblock).filter(Boolean);
     const isDef = (b) => /definition/i.test(b.category || 'Definition');
@@ -170,11 +174,14 @@
     ].join('');
 
     container.innerHTML = sv.viewHead('Summary', scopeTitle) +
-      (body || sv.emptyState('Nothing to summarise here', 'Pick a section with full paragraphs of text. Headings and exercise lists do not summarise well.')) +
-      quizCta();
+      (body || sv.whyEmpty('summary', 'Nothing to summarise here', 'Pick a section with full paragraphs of text. Headings and exercise lists do not summarise well.')) +
+      quizCta(!body);
     sv.bindPageJumps(container);
   }
 
-  PDFStudy.summaryView = { renderSummaryView, dblock, defList, slideHtml };
+  /** The outline view lives in summary-outline.js; re-exported here for callers of the earlier API. */
+  const outlineHtml = (o) => PDFStudy.summaryOutline.outlineHtml(o);
+
+  PDFStudy.summaryView = { renderSummaryView, dblock, defList, slideHtml, outlineHtml };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.summaryView;
 })(typeof window !== 'undefined' ? window : globalThis);

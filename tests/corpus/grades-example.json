@@ -1,0 +1,26 @@
+[
+ {
+  "doc": "os-scheduling",
+  "kind": "quiz",
+  "grade": "GOOD",
+  "reason": "clear, correct, worth knowing",
+  "stem": "Which term is defined as follows?\n\"The part of the kernel that decides which ready process runs next.\"",
+  "answer": "Scheduler"
+ },
+ {
+  "doc": "os-scheduling",
+  "kind": "quiz",
+  "grade": "OK",
+  "reason": "usable; the options are easy to tell apart",
+  "stem": "Complete the statement:\n\"Round robin gives each process a fixed slice of CPU time called a(n) ________.\"",
+  "answer": "time quantum"
+ },
+ {
+  "doc": "os-scheduling",
+  "kind": "test",
+  "grade": "BAD",
+  "reason": "synthetic example: tests which slide a line sat on, not the fact",
+  "stem": "Which topic is this lecture point about?\n\"Processes wait in the ready queue.\"",
+  "answer": "Scheduling"
+ }
+]

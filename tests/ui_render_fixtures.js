@@ -11,6 +11,7 @@ const mr = ui('math-renderer.js');
 const rt = ui('rich-text.js');
 const rb = ui('rich-blocks.js');
 const sv = ui('study-views.js');
+ui('summary-outline.js');
 const sum = ui('summary-view.js');
 const ff = ui('flashcard-faces.js');
 const qc = ui('quiz-card.js');
@@ -166,6 +167,11 @@ let rvHtml = qc.questionCard(rv, 2, { reveal: false, locked: false });
 check('reveal hides the answer behind a button', /data-show-qid="r1"/.test(rvHtml) && !/class="answer"/.test(rvHtml) && !/data-opt-idx/.test(rvHtml) && /<sub class="math-sub">/.test(rvHtml), rvHtml);
 rvHtml = qc.questionCard(rv, 2, { reveal: false, locked: false, shown: true });
 check('reveal shows answer list + self-grade + page jump', /class="answer"[\s\S]*<ol><li>/.test(rvHtml) && /data-grade="got"/.test(rvHtml) && /data-grade="missed"/.test(rvHtml) && /data-jump-page="23"/.test(rvHtml), rvHtml);
+// A recall question whose source line is only "Term: <answer>" does not print the answer twice
+const defRv = { id: 'r2', type: 'reveal', question: 'Define "One-sided limit".', answer: 'The value a function approaches from one side.', explanation: 'One-sided limit: The value a function approaches from one side.' };
+const defHtml = qc.questionCard(defRv, 3, { shown: true });
+check('recall answer is not repeated by its source line', qc.repeatsAnswer(defRv) && (defHtml.match(/approaches from one side/g) || []).length === 1, defHtml);
+check('a source line that adds something is kept', !qc.repeatsAnswer(rv) && !qc.repeatsAnswer({ ...defRv, question: 'Name the term.', answer: 'One-sided limit' }), '');
 check('reveal grading', qc.isCorrect(rv, 'got') && !qc.isCorrect(rv, 'missed') && !qc.isCorrect(rv, undefined) && qc.isCorrect(qSample, 0) && !qc.isCorrect(qSample, 'got'), '');
 
 const normTest = tv._normalize({ title: 'Ch 2 Exam', sections: [{ name: 'Derivatives', questions: [qSample] }], total: 1 }, 'Ch 2');

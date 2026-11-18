@@ -79,29 +79,29 @@
     // 1. Page Aspect Ratio (max 45 pts)
     if (landscapeRatio >= 0.7) {
       slideScore += 45;
-      reasons.push(`Landscape slide layout (${medianAR}:1 aspect ratio)`);
+      reasons.push('Wide pages, shaped like slides');
     } else if (medianAR > 1.12) {
       slideScore += 25;
-      reasons.push(`Wide page geometry (${medianAR}:1)`);
+      reasons.push('Pages a little wider than a book page');
     } else {
-      reasons.push(`Portrait book layout (${medianAR}:1 aspect ratio)`);
+      reasons.push('Tall pages, shaped like a book');
     }
 
     // 2. Words Per Page Density (max 25 pts)
     if (medianWPP <= 95) {
       slideScore += 25;
-      reasons.push(`Concise slide text density (~${medianWPP} words/page)`);
+      reasons.push(`Little text per page (about ${medianWPP} words)`);
     } else if (medianWPP <= 155) {
       slideScore += 12;
-      reasons.push(`Moderate text density (~${medianWPP} words/page)`);
+      reasons.push(`A fair amount of text per page (about ${medianWPP} words)`);
     } else {
-      reasons.push(`Dense textbook prose (~${medianWPP} words/page)`);
+      reasons.push(`Full pages of text (about ${medianWPP} words each)`);
     }
 
     // 3. Base Font Size (max 15 pts)
     if (medianFS >= 15) {
       slideScore += 15;
-      reasons.push(`Presentation typography (${medianFS}pt median font)`);
+      reasons.push('Large, slide-size text');
     } else if (medianFS >= 13) {
       slideScore += 8;
     }
@@ -109,7 +109,7 @@
     // 4. Bullet & Short-Line Ratio (max 15 pts)
     if (bulletRatio >= 0.38) {
       slideScore += 15;
-      reasons.push(`High bullet/point structure (${Math.round(bulletRatio * 100)}% of lines)`);
+      reasons.push('Mostly bullet points and short lines');
     } else if (bulletRatio >= 0.25) {
       slideScore += 7;
     }
@@ -117,7 +117,7 @@
     // Portrait homework / problem set / exam pages have sparse prose + short math/code lines, not slides
     if (isPortrait && worksheetCueHits >= 2 && medianFS < 14) {
       slideScore = Math.max(0, slideScore - 25);
-      reasons.push('Portrait homework/worksheet problem structure');
+      reasons.push('Laid out like a homework sheet');
     } else if (
       landscapeRatio < 0.5 &&
       medianWPP <= 105 &&
@@ -128,7 +128,7 @@
     ) {
       // Portrait slide handout (large presentation font + actual slide bullets, not 12pt homework)
       slideScore = Math.max(slideScore, 55);
-      reasons.push('Detected portrait slide handout structure');
+      reasons.push('Laid out like printed slide handouts');
     }
 
     const isSlide = slideScore >= 50;

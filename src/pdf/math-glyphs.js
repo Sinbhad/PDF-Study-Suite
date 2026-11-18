@@ -33,6 +33,19 @@
     Four: { '∈': '+', '∉': '−', '⊂': '=' },
   };
 
+  // Symbol-only "MATHPRO" subsets (no glyph names, no ToUnicode) draw the right arrow at code 0x53 ("S"):
+  // "A S B" in a functional dependency is "A → B"; the narrow raised glyph at 0x23 ("#") is the AND dot of
+  // "X ⋅ Y". Only codes seen standing for a symbol are listed. The glyph name, when present, is just the
+  // standard-encoding name of that code ("numbersign"), so it confirms rather than contradicts the guess.
+  // "c" between subscripted terms is the midline ellipsis of "X₁X₂ ⋯ Xₙ"; the inverted question and
+  // exclamation marks are the logic AND and OR wedges ("the symbols ∧ and ∨").
+  const MATHPRO_FALLBACK = { S: '→', '#': '⋅', c: '⋯', '¿': '∧', '¡': '∨' };
+  const STANDARD_NAME = { S: 'S', '#': 'numbersign', c: 'c', '¿': 'questiondown', '¡': 'exclamdown' };
+
+  // Wingdings (the original face, not Wingdings 2 / 3) arrows reach PDF.js as private-use U+F0xx and were
+  // dropped, losing "cause → effect" flow arrows between words. Bullet glyphs stay dropped (layout finds bullets).
+  const WINGDINGS_ARROWS = { 0xf0e0: '→', 0xf0e8: '→', 0xf0df: '←', 0xf0e7: '←', 0xf0e1: '↑', 0xf0e2: '↓', 0xf0f0: '⇒' };
+
   // Adobe Symbol / CMEX private-use pieces of tall delimiters and radicals
   const PUA = {
     0xf8e5: '', 0xf8e6: '', 0xf8e7: '', 0xf8eb: '(', 0xf8ec: '', 0xf8ed: '', 0xf8ee: '[', 0xf8ef: '', 0xf8f0: '',
@@ -60,6 +73,13 @@
     circlemultiply: '⊗', circleplus: '⊕', perpendicular: '⊥', angle: '∠', mapsto: '↦', arrowup: '↑', arrowdown: '↓',
   };
 
+  // STIX calligraphic capitals sit in the private-use area from U+E22D (A) to U+E246 (Z) and reach PDF.js
+  // with a control-character code, so "𝒫(S)" (the power set) read "(S)". Mapped to the Unicode script
+  // capitals; only the STIX calligraphy / script faces use these names.
+  const SCRIPT_CAPITALS = '𝒜ℬ𝒞𝒟ℰℱ𝒢ℋℐ𝒥𝒦ℒℳ𝒩𝒪𝒫𝒬ℛ𝒮𝒯𝒰𝒱𝒲𝒳𝒴𝒵';
+  const STIX_CALLIGRAPHY = {};
+  [...SCRIPT_CAPITALS].forEach((ch, i) => { STIX_CALLIGRAPHY[`uni${(0xe22d + i).toString(16).toUpperCase()}`] = ch; });
+
   const LIGATURES = { 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st' };
   const MATH_FAMILY_RE = /mathematicalpi|symbol|^cm(?:sy|mi|ex|bsy|mib|r)|^ms(?:bm|am)|^mt(?:mi|sy|ex|extra)|euclid|stix|math/i;
 
@@ -67,14 +87,25 @@
   function familyInfo(realName) {
     const base = String(realName || '').replace(/^[A-Z]{6}\+/, '');
     const pi = /MathematicalPi(?:LTStd)?-?(One|Two|Three|Four|Five|Six)/i.exec(base);
-    return { base, pi: pi ? pi[1][0].toUpperCase() + pi[1].slice(1).toLowerCase() : null, isMath: MATH_FAMILY_RE.test(base) };
+    return {
+      base,
+      pi: pi ? pi[1][0].toUpperCase() + pi[1].slice(1).toLowerCase() : null,
+      // STIXGeneral is the STIX text face (running prose), unlike STIXMath / STIXSizeOne
+      isMath: MATH_FAMILY_RE.test(base) && !/^STIXGeneral/i.test(base),
+      mathPro: /MATHPRO\d*$/i.test(base),
+      calligraphy: /^STIX(?:Math)?(?:Calligraphy|Script)/i.test(base),
+      wingdings: /^Wingdings(?:-Regular)?$/i.test(base),
+    };
   }
 
   /** Repairs one character. glyph: real glyph name when the loader could resolve it (else null). */
   function decodeChar(ch, fam, glyph) {
     if (LIGATURES[ch]) return LIGATURES[ch];
+    // MATHPRO subsets carry only a standard-encoding guess ("S"), never a real symbol name
+    if (fam && fam.mathPro && MATHPRO_FALLBACK[ch] && (!glyph || glyph === ch || glyph === STANDARD_NAME[ch])) return MATHPRO_FALLBACK[ch];
     if (glyph) {
       const g = String(glyph);
+      if (fam && fam.calligraphy && STIX_CALLIGRAPHY[g]) return STIX_CALLIGRAPHY[g];
       if (fam && fam.pi && PI_NAMES[g] !== undefined) return PI_NAMES[g];
       if (fam && fam.pi && /^HS?\d+$/.test(g)) return PI_NAMES[g.replace(/^HS/, 'H')] || (ch.charCodeAt(0) < 32 ? '' : ch);
       if (NAMED[g] !== undefined && (ch.charCodeAt(0) < 32 || /[\uE000-\uF8FF]/.test(ch) || fam.isMath)) return NAMED[g];
@@ -82,6 +113,7 @@
       return PI_FALLBACK[fam.pi][ch];
     }
     const cp = ch.codePointAt(0);
+    if (fam && fam.wingdings && WINGDINGS_ARROWS[cp]) return WINGDINGS_ARROWS[cp];
     if (PUA[cp] !== undefined) return PUA[cp];
     if (cp >= 0xe000 && cp <= 0xf8ff) return '';
     if (cp < 32 || (cp >= 0x7f && cp <= 0x9f) || cp === 0xfffd) return ' ';

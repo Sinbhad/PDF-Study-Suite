@@ -7,19 +7,25 @@
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
   let viewMode = 'single'; // 'single' | 'all' (remembered between renders)
+  let afterRegen = null; // { focus, say } while "New quiz" or a length chip redraws the whole view
 
   function renderQuizView(container, rawQuestions, scopeTitle) {
     if (!container) return;
     const sv = PDFStudy.studyViews;
     const QC = PDFStudy.quizCard;
     const st = (PDFStudy.main && PDFStudy.main.appState) || { quizCount: 10, quizSeed: 0 };
-    const regen = (count, seed) => PDFStudy.main && PDFStudy.main.regenerateQuiz(count, seed);
+    /** A new set replaces the view; keyboard focus goes back to the control used (or the first question). */
+    const regen = (count, seed, focus) => {
+      afterRegen = { focus, say: 'New quiz ready.' };
+      if (PDFStudy.main) PDFStudy.main.regenerateQuiz(count, seed);
+      afterRegen = null;
+    };
     const questions = (rawQuestions || []).filter(QC.isValid);
 
     if (questions.length === 0) {
       PDFStudy.keys.set('quiz', null);
       container.innerHTML = sv.viewHead('Quiz', scopeTitle) +
-        sv.emptyState('Not enough material for a quiz', 'Pick a section with definitions, theorems or formulas to build questions from.');
+        sv.whyEmpty('quiz', 'Not enough material for a quiz', 'Pick a section with definitions, theorems or formulas to build questions from.');
       return;
     }
 
@@ -27,7 +33,7 @@
     let retrying = false;
     let idx = 0;
     let showResults = false;
-    let announce = '';
+    let announce = afterRegen ? afterRegen.say : '';
     const answers = {}; // qid -> option index | 'got' | 'missed'
     const shown = {}; // qid -> reveal answer visible
 
@@ -43,7 +49,12 @@
       const plain = PDFStudy.richText ? PDFStudy.richText.plain(q.answer) : q.answer;
       announce = QC.isReveal(q) ? (isRight(q) ? 'Marked as correct.' : 'Marked as missed.') : isRight(q) ? 'Correct.' : `Incorrect. The answer is ${plain}.`;
       draw();
-      const next = container.querySelector('#quizNextBtn');
+      // One at a time: on to "Next question". All questions: the answered card locks, so on to the next open
+      // question, or to the results once every question is answered.
+      const cardEl = container.querySelector(`[data-qcard="${root.CSS && CSS.escape ? CSS.escape(q.id) : q.id}"]`);
+      const open = Array.from(container.querySelectorAll('.q-opt:not(:disabled), [data-show-qid], [data-grade]:not(:disabled)'));
+      const later = cardEl ? open.find((el) => !cardEl.contains(el) && (cardEl.compareDocumentPosition(el) & 4)) : null;
+      const next = container.querySelector('#quizNextBtn') || later || container.querySelector('#retryMissedBtn, #newQuizSetBtn');
       if (next) next.focus();
     }
     function show(q) {
@@ -54,10 +65,19 @@
       const got = container.querySelector(`[data-qcard="${root.CSS && CSS.escape ? CSS.escape(q.id) : q.id}"] [data-grade="got"]`);
       if (got) got.focus();
     }
+    /** The button that moved on is gone after a redraw: keep keyboard focus in the new question (or the results). */
+    function focusAfterMove() {
+      const plain = (s) => (PDFStudy.richText ? PDFStudy.richText.plain(s) : String(s || ''));
+      const q = showResults ? null : active[idx];
+      announce = q ? `Question ${idx + 1} of ${active.length}: ${plain(q.question)}` : 'Results';
+      draw();
+      const target = container.querySelector('.q-card .q-opt:not(:disabled), .q-card [data-show-qid], #retryMissedBtn, #newQuizSetBtn');
+      if (target) target.focus();
+    }
     function goNext() {
       if (idx < active.length - 1) idx += 1;
       else showResults = true;
-      draw();
+      focusAfterMove();
     }
     function retryMissed() {
       active = active.filter((q) => !isRight(q));
@@ -65,7 +85,7 @@
       retrying = true;
       idx = 0;
       showResults = false;
-      draw();
+      focusAfterMove();
     }
 
     PDFStudy.keys.set('quiz', (e) => {
@@ -84,6 +104,12 @@
       answer(q, i);
       return true;
     });
+
+    /** "Press A–B or 1–2" for a true/false question: name only the keys this question has. */
+    const keyHint = (q) => {
+      const n = Math.max(2, Math.min(9, (q.options || []).length));
+      return `Press A–${String.fromCharCode(64 + n)} or 1–${n} to answer`;
+    };
 
     const card = (q, num) => QC.questionCard(q, num, { picked: answers[q.id], reveal: isAnswered(q), locked: isAnswered(q), shown: !!shown[q.id] });
 
@@ -122,7 +148,7 @@
         ? `<div class="q-nav"><button class="btn btn-primary" id="quizNextBtn" type="button">${idx === active.length - 1 ? 'See results' : 'Next question'}</button></div>`
         : '';
       const status = single && !results ? `Question ${idx + 1} of ${active.length}` : `${answered} of ${active.length} answered`;
-      const hint = !cur || results || isAnswered(cur) ? '' : QC.isReveal(cur) ? 'Space shows the answer · G got it · M missed it' : 'Press A–D or 1–4 to answer';
+      const hint = !cur || results || isAnswered(cur) ? '' : QC.isReveal(cur) ? 'Space shows the answer · G got it · M missed it' : keyHint(cur);
 
       container.innerHTML = `
         ${sv.viewHead('Quiz', scopeTitle, `${status} · ${correct} correct${retrying ? ' · missed questions only' : ''}`)}
@@ -130,7 +156,7 @@
           <div class="chip-row" role="group" aria-label="Layout">${sv.chip('data-mode="single"', single, 'One at a time')}${sv.chip('data-mode="all"', !single, 'All questions')}</div>
           <div class="chip-row" role="group" aria-label="Quiz length">
             <span class="label">Length</span>${[5, 10, 15].map((n) => sv.chip(`data-qcount="${n}"`, qMax === n, String(n))).join('')}
-            <button class="btn-link" id="newQuizSetBtn2" type="button">New quiz</button>
+            <button class="btn-link note-link" id="newQuizSetBtn2" type="button">New quiz</button>
           </div>
         </div>
         <div class="progress q-progress" role="progressbar" aria-label="Quiz progress" aria-valuemin="0"
@@ -151,7 +177,7 @@
     }
 
     function bind() {
-      QC.bindOptions(container, active, answer, show);
+      QC.bindOptions(container, active, answer, show, { redraw: draw, answers, retrying });
       container.querySelectorAll('[data-mode]').forEach((btn) => {
         btn.onclick = () => {
           viewMode = btn.getAttribute('data-mode');
@@ -162,9 +188,10 @@
         };
       });
       container.querySelectorAll('[data-qcount]').forEach((btn) => {
-        btn.onclick = () => regen(parseInt(btn.getAttribute('data-qcount'), 10), st.quizSeed || 0);
+        const n = btn.getAttribute('data-qcount');
+        btn.onclick = () => regen(parseInt(n, 10), st.quizSeed || 0, `[data-qcount="${n}"]`);
       });
-      const newQuiz = () => regen(st.quizCount || 10, (st.quizSeed || 0) + 1);
+      const newQuiz = () => regen(st.quizCount || 10, (st.quizSeed || 0) + 1, '#newQuizSetBtn2');
       ['#newQuizSetBtn', '#newQuizSetBtn2'].forEach((sel) => {
         const b = container.querySelector(sel);
         if (b) b.onclick = newQuiz;
@@ -176,6 +203,8 @@
     }
 
     draw();
+    const back = afterRegen && afterRegen.focus && container.querySelector(afterRegen.focus);
+    if (back) back.focus();
   }
 
   PDFStudy.quizView = { renderQuizView };

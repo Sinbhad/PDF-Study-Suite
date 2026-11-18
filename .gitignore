@@ -3,3 +3,6 @@ __pycache__/
 # Handwriting runtime + model weights, installed by tools/fetch-handwriting-model.py (large; never committed)
 vendor/hw/
 *.part
+
+# Local eval corpus: real course PDFs referenced by absolute path, never committed
+tests/corpus/local/

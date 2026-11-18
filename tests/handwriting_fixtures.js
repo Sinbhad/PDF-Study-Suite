@@ -112,7 +112,9 @@ async function workerCoreTests() {
   check('core null engine: empty manual regions', nr.length === 3 && nr.every((r) => r.text === '' && r.confidence === 0 && r.source === 'manual'));
   const th = await run(S.mockEngine({ throwOn: 2 }));
   const tr = th.find((m) => m.type === 'page-done');
-  check('core: throwing engine does not lose the page', !!tr && tr.result.lines.flatMap((l) => l.regions).length === 3 && tr.result.lines[1].regions[0].text === '' && tr.result.lines[0].regions[0].text !== '', th.map((m) => m.type).join());
+  // the second read throws; which piece that is depends on the order (the widest lines are read first, upright.js)
+  const trRegs = tr ? tr.result.lines.flatMap((l) => l.regions) : [];
+  check('core: throwing engine does not lose the page', trRegs.length === 3 && trRegs.filter((r) => r.text === '').length === 1 && trRegs[0].text !== '', th.map((m) => m.type).join());
   const cm = await run(S.mockEngine(), (m, h) => { if (m.type === 'progress' && m.done === 1) h.handle({ type: 'cancel', jobId: 7 }); });
   check('core: cancel -> cancelled, no page-done', cm.some((m) => m.type === 'cancelled' && m.jobId === 7 && m.pageNumber === 3) && !cm.some((m) => m.type === 'page-done'), cm.map((m) => m.type).join());
   for (const [conf, want] of [[1.7, 1], [-0.5, 0], [NaN, 0]]) {

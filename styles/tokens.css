@@ -19,16 +19,17 @@
   --primary-soft: rgba(63, 55, 201, 0.09);
   --on-primary: #FFFFFF;
   /* Semantic */
-  --success: #1F7A4D;
-  --success-soft: rgba(31, 122, 77, 0.1);
+  /* Success is dark enough to hold 4.5:1 for small "Correct" labels on its own soft tint */
+  --success: #1A6B43;
+  --success-soft: rgba(26, 107, 67, 0.1);
   --danger: #B42318;
   --danger-soft: rgba(180, 35, 24, 0.08);
   --warning: #B45309;
-  /* Category accents */
+  /* Category accents: dark enough for 4.5:1 as small badge text on the tinted current row too */
   --theorem: #6D3FD1;
-  --definition: #0E7490;
-  --example: #B45309;
-  --guideline: #4D7C0F;
+  --definition: #0A6A84;
+  --example: #9A4507;
+  --guideline: #426B0C;
   --shadow-1: 0 1px 2px rgba(27, 26, 23, 0.05), 0 10px 28px rgba(27, 26, 23, 0.08);
   --scrim: rgba(27, 26, 23, 0.38);
 

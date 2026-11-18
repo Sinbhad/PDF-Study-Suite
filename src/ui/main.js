@@ -1,6 +1,7 @@
 /**
  * Main Application Controller — Coordinates Lazy PDF State, Smart Default Scope, Split View & Study Tabs.
- * Material generation lives in study-pipeline.js. Every render re-syncs the tab bar and the outline
+ * Material generation lives in study-pipeline.js, the cancellable build around it in build-run.js,
+ * and the explained empty states in study-states.js. Every render re-syncs the tab bar and the outline
  * selection from appState.activeTab / appState.selectedScope, so the chrome can never drift.
  */
 (function (root) {
@@ -24,26 +25,42 @@
     lastScopeObj: null,
     handwriting: null, // { pages, regions, low, cancelled, engine } once handwritten pages were read
     generated: { summary: null, flashcards: [], quiz: [], test: null },
+    counts: { flashcards: 0, quiz: 0, test: 0 }, // what the tab counters show (valid items only)
+    verdict: null, // docVerdict.documentVerdict: { kind: 'blank' | 'pictures' | 'text', ... }
+    shownRange: null, // { startPage, endPage } the last build read (a long selection is read in windows)
+    runState: null, // { kind: 'stopped' | 'failed', detail? } when the last build did not finish
+    typeChosen: false, // the student switched slides/textbook by hand
   };
 
-  let runToken = 0;
-  let runCtrl = null;
-
-  function abortRun() {
-    runToken++; // any run in flight is now stale
-    if (runCtrl) runCtrl.abort();
-    runCtrl = null;
-  }
+  const noMaterials = () => ({ summary: null, flashcards: [], quiz: [], test: null });
+  const AVAILABILITY_WAIT_MS = 1500;
 
   async function processLoadedDocument(docName, parsedPdf) {
-    abortRun();
+    // a file opened in the page's first moments: wait (briefly) until it is known whether pictures can be read
+    if (PDFStudy.hwAvailability && PDFStudy.hwAvailability.settled) await PDFStudy.hwAvailability.settled(AVAILABILITY_WAIT_MS);
+    PDFStudy.buildRun.abort();
     if (PDFStudy.hwPipeline && PDFStudy.hwPipeline.dispose) PDFStudy.hwPipeline.dispose();
-    if (PDFStudy.hwReview) PDFStudy.hwReview.close();
+    if (PDFStudy.hwReview) {
+      PDFStudy.hwReview.close();
+      PDFStudy.hwReview.syncNotice(null);
+    }
     appState.docName = docName;
     appState.parsedPdf = parsedPdf;
     appState.classification = PDFStudy.classifier.classifyDocument(parsedPdf);
     appState.activeMode = appState.classification.type;
     appState.handwriting = null;
+    appState.verdict = PDFStudy.docVerdict.documentVerdict(parsedPdf);
+    appState.generated = noMaterials();
+    appState.shownRange = null;
+    appState.runState = null;
+    appState.typeChosen = false;
+    appState.quizSeed = 0;
+    appState.activeTab = 'summary';
+    if (PDFStudy.sidebarTree.resetFilter) PDFStudy.sidebarTree.resetFilter();
+    if (appState.verdict.kind === 'blank') {
+      openBlankDocument();
+      return;
+    }
     const ink = PDFStudy.inkDetect && PDFStudy.inkDetect.summarise(parsedPdf);
     if (ink && ink.share >= 0.5) { // ink-only pages are prose, not slides
       appState.activeMode = 'book';
@@ -55,17 +72,48 @@
     }
     appState.slideDeck = PDFStudy.slideExtractor.extractSlideDeck(parsedPdf);
     appState.bookHierarchy = PDFStudy.bookHierarchy.extractBookHierarchy(parsedPdf);
-    appState.quizSeed = 0;
-    appState.activeTab = 'summary';
-    if (PDFStudy.sidebarTree.resetFilter) PDFStudy.sidebarTree.resetFilter();
 
     setDefaultScope();
+    if (PDFStudy.docSession) await PDFStudy.docSession.open(appState); // stored progress; may restore the last section and tab
+    showWorkspace();
+    await recomputeStudyMaterials();
+  }
+
+  function showWorkspace() {
     renderDocumentHeader();
     document.body.classList.add('has-doc');
     document.getElementById('workspaceArea').classList.remove('hidden');
     renderSidebarScopeTree();
     if (PDFStudy.readerControls) PDFStudy.readerControls.initReaderControls(appState);
-    await recomputeStudyMaterials();
+  }
+
+  /**
+   * Every page is blank (a notes app exported the notebook without its handwriting): no outline
+   * of made-up chapters and nothing to build, just the explanation in every study tab.
+   */
+  function openBlankDocument() {
+    const total = appState.parsedPdf.numPages;
+    appState.activeMode = 'book';
+    appState.slideDeck = { slides: [] };
+    appState.bookHierarchy = { source: 'none', chapters: [] };
+    appState.selectedScope = { id: 'all-book', type: 'all_book', title: appState.docName, startPage: 1, endPage: total };
+    appState.currentReaderPage = 1;
+    showWorkspace();
+    updateCounts();
+    renderActiveTab();
+    PDFStudy.studyStates.announce(PDFStudy.studyStates.deadEnd(appState).title);
+  }
+
+  /** Back to the start screen (used when a file opened but could not be worked through). */
+  function closeDocument() {
+    PDFStudy.buildRun.abort();
+    appState.parsedPdf = null;
+    appState.docName = '';
+    appState.verdict = null;
+    appState.generated = noMaterials();
+    document.body.classList.remove('has-doc');
+    document.getElementById('workspaceArea').classList.add('hidden');
+    document.title = 'PDF Study Suite';
   }
 
   function setDefaultScope() {
@@ -84,7 +132,8 @@
         : { id: ch1.id, type: 'chapter', title: ch1.title, startPage: ch1.startPage, endPage: ch1.endPage };
       appState.currentReaderPage = appState.selectedScope.startPage;
     } else {
-      appState.selectedScope = { id: 'all-book', type: 'all_book', title: `Pages 1–${Math.min(total, 15)}`, startPage: 1, endPage: Math.min(total, 15) };
+      const end = Math.min(total, 15);
+      appState.selectedScope = { id: 'all-book', type: 'all_book', title: end > 1 ? `Pages 1–${end}` : 'Page 1', startPage: 1, endPage: end };
       appState.currentReaderPage = 1;
     }
   }
@@ -101,7 +150,17 @@
     set('docPagesText', `${pages} ${pages === 1 ? 'page' : 'pages'}`);
     set('docKindText', isSlide ? 'Read as class slides' : 'Read as a textbook');
     set('docReasonsText', reasons || 'Detected from the page layout.');
-    set('toggleModeBtn', isSlide ? 'Treat as textbook' : 'Treat as slides');
+    const toggle = set('toggleModeBtn', isSlide ? 'Treat as textbook' : 'Treat as slides');
+    const blank = !!appState.verdict && appState.verdict.kind === 'blank';
+    if (toggle) toggle.classList.toggle('hidden', blank); // blank pages are neither slides nor a textbook
+    // Nothing to export from blank pages: an empty study guide would be one more dead end.
+    document.querySelectorAll('[data-export]').forEach((b) => b.classList.toggle('hidden', blank));
+    if (blank) {
+      set('docTypeBadge', 'Blank pages');
+      set('docKindText', 'Nothing to read');
+      set('docReasonsText', 'Every page that was checked is blank.');
+    }
+    if (PDFStudy.shell) PDFStudy.shell.syncTypeHint(appState);
     document.title = `${appState.docName} · PDF Study Suite`;
   }
 
@@ -124,53 +183,17 @@
   function updateCounts() {
     const g = appState.generated;
     const valid = (list, mod) => (list || []).filter((x) => !PDFStudy[mod] || PDFStudy[mod].isValid(x)).length;
-    PDFStudy.tabs.setCounts({
+    appState.counts = {
       flashcards: valid(g.flashcards, 'flashcardFaces'),
       quiz: valid(g.quiz, 'quizCard'),
       test: PDFStudy.testView ? PDFStudy.testView.count(g.test, appState.selectedScope.title) : 0,
-    });
+    };
+    PDFStudy.tabs.setCounts(appState.counts);
   }
 
-  async function recomputeStudyMaterials(options) {
-    const retrySkipped = !!(options && options.retrySkipped);
-    const { startPage, endPage } = appState.selectedScope;
-    const L = PDFStudy.loading;
-    const P = PDFStudy.studyPipeline;
-    const panel = document.getElementById('activeStudyPanel');
-    const onProgress = (cur, tot, pNum) => L.update(cur, tot, `Page ${pNum} (${cur} of ${tot})`);
-    const hwUi = PDFStudy.hwReview;
-    const useHw = !!PDFStudy.ENABLE_HANDWRITING;
-    if (runCtrl) runCtrl.abort();
-    const token = ++runToken;
-    const isCurrent = () => token === runToken;
-    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-    runCtrl = ctrl;
-    const cancel = ctrl ? () => ctrl.abort() : null;
-    const onHandwriting = (p) => {
-      if (cancel) L.showCancel(cancel);
-      if (hwUi) hwUi.reportProgress(L, p);
-    };
-    if (PDFStudy.testView && PDFStudy.testView.reset) PDFStudy.testView.reset();
-    if (hwUi) { hwUi.close(); hwUi.syncNotice(null); }
-    panel.classList.remove('hidden');
-    const ink = useHw && PDFStudy.inkDetect && PDFStudy.hwPipeline ? PDFStudy.inkDetect.pagesNeeding(appState.parsedPdf, startPage, endPage) : [];
-    L.start(panel, 'Reading pages', ink.length && cancel ? { onCancel: cancel } : undefined);
-    try {
-      await P.buildMaterials(appState, startPage, endPage, onProgress, { signal: ctrl && ctrl.signal, onHandwriting, isCurrent, retrySkipped, handwriting: useHw });
-    } catch (err) {
-      if (!isCurrent()) return;
-      L.end();
-      panel.innerHTML = PDFStudy.studyViews.emptyState("Couldn't build study materials", String((err && err.message) || err));
-      PDFStudy.tabs.sync();
-      return;
-    }
-    if (!isCurrent()) return;
-    if (runCtrl === ctrl) runCtrl = null;
-    L.end();
-    if (hwUi) hwUi.syncNotice(useHw ? appState.handwriting : null);
-    renderSidebarScopeTree(); // lazy documents refine the slide list while pages load
-    updateCounts();
-    renderActiveTab();
+  /** Builds study material for the selected scope (progress, Cancel and failure handling: build-run.js). */
+  function recomputeStudyMaterials(options) {
+    return PDFStudy.buildRun.run(options);
   }
 
   function regenerateQuiz(newCount, newSeed) {
@@ -189,12 +212,15 @@
     const showReader = isReader || appState.splitView;
 
     PDFStudy.tabs.sync();
+    if (PDFStudy.docSession) PDFStudy.docSession.afterRender(appState); // remember section + tab, refresh the due badge
     if (PDFStudy.readerControls) PDFStudy.readerControls.syncSplitBtn(appState);
     splitWrap.classList.toggle('split-active', !isReader && appState.splitView);
     viewEl.classList.toggle('hidden', isReader);
     readerEl.classList.toggle('hidden', !showReader);
     if (showReader && PDFStudy.readerControls) PDFStudy.readerControls.renderReaderPage(appState);
     if (isReader) return;
+    // Blank export, pictures of text, a stopped or failed build: the pane explains instead of sitting empty
+    if (PDFStudy.studyStates.renderDeadEnd(viewEl, appState)) return;
 
     const sv = PDFStudy.studyViews;
     const g = appState.generated;
@@ -207,6 +233,8 @@
   PDFStudy.main = {
     appState,
     processLoadedDocument,
+    closeDocument,
+    updateCounts,
     setDefaultScope,
     renderDocumentHeader,
     renderSidebarScopeTree,

@@ -72,5 +72,13 @@ module.exports = async function realModels(check) {
   for (let i = 0; i < 330 * 50; i++) { const j = ((110 - 8 + Math.floor(i / 330)) * 900 + 32 + (i % 330)) * 4; crop.data[i] = Math.min(img.data[j], img.data[j + 1], img.data[j + 2]); }
   const rc = await eng.recognise(crop, 'text');
   check('real: recognise() reads a gray line crop', plain(rc.text) === 'GIARDIA' && rc.confidence >= 0.6, JSON.stringify(rc));
+  // the same tile lying 7 degrees crooked: read from an upright copy, boxes reported on the crooked tile
+  const T = require(path.join(ROOT, 'src', 'hw', 'page-turn.js'));
+  const crooked = T.rotate({ data: img.data, w: img.w, h: img.h, ch: 4 }, T.frame(img.w, img.h, 7));
+  const rt = await eng.readTile({ rgba: crooked.data, width: crooked.w, height: crooked.h }, { lineHeight: 35, angle: -7 });
+  const crookedTexts = rt.lines.map((l) => plain(l.text));
+  check('real: a crooked tile is read the same once its angle is given', crookedTexts.join('|') === 'FLEAS+TICKS|GIARDIA|CEDAR', JSON.stringify(rt.lines.map((l) => [l.text, l.box])));
+  const onTile = (l) => l.box.x >= 0 && l.box.y >= 0 && l.box.x + l.box.w <= crooked.w && l.box.y + l.box.h <= crooked.h;
+  check('real: its boxes are on the tile as given and carry the line\'s own size', rt.lines.every((l) => onTile(l) && l.size && l.size.h < l.box.h), JSON.stringify(rt.lines.map((l) => [l.box, l.size])));
   console.log(`info: real PP-OCR tile read in ${ms} ms`);
 };

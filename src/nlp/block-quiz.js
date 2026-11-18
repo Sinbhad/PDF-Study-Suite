@@ -2,11 +2,12 @@
  * Textbook Section Quiz from didactic blocks (theorems, definitions, guidelines) of the selected scope:
  *   - formula completion   "$\lim_{x \to c}[f(x)g(x)]$ = ________"  options = sibling right-hand sides
  *   - which result         "Which result states that $$...$$?"      options = sibling theorem titles
- *   - which statement      theorem / definition body -> its title
+ *   - which statement      theorem / definition body -> its title (a numbered box by the term it defines, boxedCards.boxName)
  *   - which property       numbered item formula -> its label ("Quotient", "Power", ...)
  *   - true / false         an item formula kept (True) or given a sibling's right-hand side (False)
  *   - guideline steps      'reveal' (show answer + self-grade)
  * Formulas are only ever cut at a top-level "=" and options are formulas vs formulas, titles vs titles.
+ * One set of options is offered once: a second question with the same titles would be answered by elimination.
  * build(blocks, { seedOffset, maxQuestions }) -> [{ type, badge, question, options, answer, explanation, skill, page }]
  */
 (function (root) {
@@ -39,12 +40,16 @@
 
   /** Block -> { title, name, noun, body, page, items[{ label, lhs, rhs, formula }], steps[], single }. */
   function parseBlock(blk) {
-    const title = String(blk.title || '').replace(/\*\*/g, '').trim();
+    const printed = String(blk.title || '').replace(/\*\*/g, '').trim();
     const sc = dep('stemCards', './stem-cards.js');
     const body = sc ? sc.didacticBack(blk) : String(blk.body || '');
+    // "Definition 4" names nothing a student learns: the block is asked by the term it defines ("Exclusive or"),
+    // or not by name at all ('' — its formulas and steps may still be asked).
+    const boxed = dep('boxedCards', './boxed-cards.js');
+    const title = boxed ? boxed.boxName(printed, body) : printed;
     const noun = /^Theorem|^Corollary|^Lemma/i.test(blk.category || '') ? 'theorem' : /^Definition/i.test(blk.category || '') ? 'definition'
       : /^Guideline|^Algorithm|^Summary/i.test(blk.category || '') ? 'procedure' : 'result';
-    const name = title.replace(/^.*?\s[—–]\s/, '').replace(/^(?:The|A|An)\s+/i, '');
+    const name = (title || printed).replace(/^.*?\s[—–]\s/, '').replace(/^(?:The|A|An)\s+/i, '');
     const items = [];
     const add = (label, formula) => {
       const eq = splitEq(formula);
@@ -64,7 +69,7 @@
     }
     const steps = noun === 'procedure' ? body.split(/(?:^|\s)(?=\d+\.\s+[A-Z])/).map((s) => s.trim()).filter((s) => /^\d+\.\s/.test(s)) : [];
     const single = source.length === 1 && !numbered && splitEq(source[0]) ? source[0].trim().replace(/[.;]\s*$/, '') : '';
-    return { title, name, noun, body, category: blk.category || 'Concept', page: blk.pageNumber || null, items, steps, single };
+    return { title, printed, name, noun, body, category: blk.category || 'Concept', page: blk.pageNumber || null, items, steps, single };
   }
 
   function mcq(badge, question, answer, distractors, extra, seed, k) {
@@ -80,11 +85,11 @@
     const lower = (s) => String(s).toLowerCase().trim();
     const fams = { formula: [], which: [], statement: [], tf: [], label: [], steps: [] };
     const allItems = parsed.flatMap((b) => b.items.map((it) => ({ ...it, block: b })));
-    const titled = parsed.filter((b) => b.noun !== 'procedure');
+    const titled = parsed.filter((b) => b.noun !== 'procedure' && b.title);
 
     parsed.forEach((b, bi) => {
       const meta = (skill) => ({ skill, page: b.page, pageNumber: b.page, block: b.title });
-      const where = b.page ? `${b.title} (p. ${b.page})` : b.title;
+      const where = b.page ? `${b.printed} (p. ${b.page})` : b.printed;
       // Sibling titles: same kind first (theorem vs theorem), nearest in the section first.
       const sibTitles = shuffle(titled.filter((o) => o !== b), b.title, seed)
         .sort((x, y) => (x.noun !== b.noun) - (y.noun !== b.noun) || Math.abs(parsed.indexOf(x) - bi) - Math.abs(parsed.indexOf(y) - bi)).map((o) => o.title);
@@ -114,13 +119,14 @@
         }
       });
 
-      if (b.noun !== 'procedure' && b.single) {
+      if (b.noun !== 'procedure' && b.title && b.single) {
         const wq = mcq('Which Result', `Which ${b.noun === 'result' ? 'result' : b.noun} gives this formula?\n$$${b.single}$$`, b.title, sibTitles,
           { ...meta('theorem'), explanation: `${where}: ${b.body}` }, seed, lower);
         if (wq) fams.which.push(wq);
       }
-      const plainName = lower(b.name).replace(/[^a-z0-9 ]/g, '');
-      if (b.noun !== 'procedure' && b.body.length >= 30 && b.body.length <= 520 && !lower(b.body).includes(plainName)) {
+      // The body must not print the name it is asked for ("ordered n-tuple" in the body of "Ordered n-tuple").
+      const folded = (t) => ` ${lower(t).replace(/[^a-z0-9]+/g, ' ').trim()} `;
+      if (b.noun !== 'procedure' && b.title && b.body.length >= 30 && b.body.length <= 520 && !folded(b.body).includes(folded(b.name))) {
         const sq = mcq(`Multiple Choice • ${b.category}`, `Which ${b.noun === 'result' ? 'named result' : b.noun} states the following?\n"${b.body}"`,
           b.title, sibTitles, { ...meta(b.noun === 'definition' ? 'definition' : 'theorem'), explanation: `${where}: ${b.body}` }, seed, lower);
         if (sq) fams.statement.push(sq);
@@ -138,13 +144,22 @@
     for (const k of Object.keys(fams)) if (seed > 0) fams[k] = shuffle(fams[k], k, seed);
     const out = [];
     const perBlock = new Map();
+    // The same options are offered once only: asked a second time, the first answer rules itself out.
+    // With four theorems every "which theorem" question has the same four titles, so one is asked.
+    const offered = new Set();
+    const optionKey = (q) => (q.options.length >= 3 ? q.options.map(lower).sort().join(' | ') : '');
+    const isRepeat = (q) => Boolean(optionKey(q)) && offered.has(optionKey(q));
     for (let cap = 1; cap <= (parsed.length < 4 ? 1 : 12) && out.length < maxQuestions; cap++) { // few blocks: titles give the options away
       for (let i = 0, idle = 0; out.length < maxQuestions && idle < order.length; i++) {
         const list = fams[order[i % order.length]];
-        const at = list.findIndex((q) => (perBlock.get(q.block) || 0) < cap);
-        if (at === -1) { idle++; continue; }
+        const at = list.findIndex((q) => (perBlock.get(q.block) || 0) < cap && !isRepeat(q));
+        if (at === -1) {
+          idle++;
+          continue;
+        }
         const [q] = list.splice(at, 1);
         perBlock.set(q.block, (perBlock.get(q.block) || 0) + 1);
+        offered.add(optionKey(q));
         idle = 0;
         out.push(q);
       }

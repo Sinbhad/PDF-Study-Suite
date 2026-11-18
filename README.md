@@ -1,7 +1,7 @@
 # PDF Study Suite
 
 Turn any lecture deck or textbook PDF into a summary, flashcards and a quiz for each section.
-It runs entirely in your browser: no account, no uploads, no AI service, no internet needed.
+It runs on your device, in your browser: no account, no internet needed, and your file is never uploaded.
 
 **Try it now: [sinbhad.github.io/PDF-Study-Suite](https://sinbhad.github.io/PDF-Study-Suite/)** — nothing to install.
 
@@ -13,7 +13,7 @@ It runs entirely in your browser: no account, no uploads, no AI service, no inte
 - **Summaries that keep the math.** Definitions, theorems and formulas are pulled out and shown as formatted text and equations, with a link back to the page they came from.
 - **Flashcards.** Term and definition cards, theorem cards, and the question-and-answer slides your lecturer already put in the deck. Mark cards as known, filter by kind, export to Anki.
 - **A quiz for every section.** Pick a chapter, a section or a slide range and get multiple choice, fill-in-the-blank, true/false and show-the-answer questions built from that material. When you finish you get your score and a review of every answer, missed ones first, with a one-click retry. There is also a longer practice test with an optional timer.
-- **Handwritten and scanned pages (in progress).** Reading PDFs that have no selectable text — handwritten notes or a scanned book — is in progress and is currently hidden from the live app. You can still open those files in the built-in reader, but summaries, flashcards and quizzes are built from digital PDFs with selectable text. We are actively looking for methods to do this without the use of AI.
+- **Reads pages that are pictures (local build, optional install).** Slides that are a photo or a screenshot, scanned pages and handwritten notes have no selectable text. On your own computer the app can read them with a small text-recognition model that runs on your device, after a one-time install of about 34 MB (see below). The typed text is shown first and the picture pages are read after it, with a Stop button. Lines the reader is unsure of are left out until you check them. This is not on the hosted page yet. Typed PDFs need nothing extra.
 - **Skips the filler.** Copyright notices, author pages, prefaces, photo credits and figure labels are left out. Exercise sets are kept out of the summaries.
 - **Built-in reader.** View the original page beside your notes with split view.
 - **Works on a phone.** The layout adapts to small screens, and there are light and dark themes.
@@ -53,6 +53,21 @@ To stop the app, close the terminal window or press `Ctrl+C` in it.
 
 The math font (STIX Two, about 0.85 MB) is already included. `python tools/fetch-math-font.py` re-downloads it from [github.com/stipub/stixfonts](https://github.com/stipub/stixfonts) (v2.13) if you ever need to restore it.
 
+### Reading picture pages (optional, local build only)
+
+Typed PDFs need none of this. To have the app also read pages that are pictures of text, install the page reader once (this step needs internet; about 34 MB goes into `vendor/hw/`):
+
+```bash
+python tools/fetch-handwriting-model.py --ppocr-only
+```
+
+Start the app again and it switches reading on by itself when the files are there. After that it works offline like the rest. What to expect:
+
+- The reader is a small neural model (PP-OCRv5) that runs in your browser. Your file is never uploaded.
+- It is slow: on the laptop it was measured on, a slide that is a picture took a few seconds, so a deck with two dozen of them takes a couple of minutes. The typed slides are ready first and you can study while the rest is read; **Stop** ends it.
+- A page that has been read is remembered in your browser, so opening the same file again does not read it again.
+- It reads printed text on slides and scans. Handwriting has only been tried on pages drawn with handwriting-style fonts, not on real notes, so check what it read with **Review** before relying on it.
+
 ## Using it
 
 1. **Open a PDF.** Large textbooks open quickly because pages are read only when you study them.
@@ -72,8 +87,8 @@ If the app guesses the document type wrong, click the **Slides** / **Textbook** 
 ## Good to know
 
 - **Your files stay on your computer.** The app is a small local web page; the PDF is read by your browser and never sent anywhere.
-- **It is rule-based, not AI.** Questions and cards are built from what the PDF actually says, so quality depends on the document. Material with clear definitions, theorems and formulas works best; sections that are all prose get fewer and simpler questions.
-- **Handwritten and scanned pages are not read yet.** The live app and the default local build only use the selectable text already in the PDF. Image-only or handwritten pages open in the reader, but they will not produce a summary, flashcards or a quiz until this in-progress feature is ready. We are actively looking for methods to do this without the use of AI.
+- **Summaries, cards and questions are rule-based.** They are built from what the PDF actually says, with no language model, so quality depends on the document. Material with clear definitions, theorems and formulas works best; sections that are all prose get fewer and simpler questions.
+- **Pages that are pictures need the optional page reader.** Without it (the hosted page, or a local copy where it was not installed) only the selectable text already in the PDF is used: image-only and handwritten pages open in the reader but give no summary, flashcards or quiz. The page reader is a small on-device neural model, the one part of the app that is not rule-based.
 - **Textbooks work best when the PDF has bookmarks** (a built-in table of contents), which is how chapters and sections are found.
 - Always check anything important against the source page. The **View p. N** links are there for that.
 
@@ -90,14 +105,14 @@ To keep spam out, reports have to come through the forms, and an automatic check
 
 ## For developers
 
-Plain HTML, CSS and JavaScript with no build step and no dependencies beyond the bundled [PDF.js](https://mozilla.github.io/pdf.js/). The STIX Two math font is included.
+Plain HTML, CSS and JavaScript with no build step and no dependencies beyond the bundled [PDF.js](https://mozilla.github.io/pdf.js/). The STIX Two math font is included. The optional page reader (onnxruntime-web and the PP-OCRv5 models) is fetched into the git-ignored `vendor/hw/` and is not part of the repository; `docs/HANDWRITING.md` and `docs/HANDWRITING-RESULTS.md` describe it and what was measured.
 
 ```
 index.html        page shell and script order
 app.py            tiny local web server (no-cache), opens the browser
 src/pdf/          text extraction: lines, columns, math, slides, book outline, filler removal
 src/nlp/          summaries, key terms, flashcards, quiz and practice-test generation
-src/hw/           handwriting and scanned-page reading (in progress; hidden from the live app)
+src/hw/           reading pages that are pictures (on-device model; on only where vendor/hw/ is installed)
 src/ui/           views, outline, reader, theme, storage
 styles/           design tokens and component styles
 tests/            fixture suites and the verification script
@@ -105,7 +120,7 @@ tools/run-pdf.js  run the whole pipeline on a PDF from the command line
 tools/fetch-math-font.py  re-downloads the STIX Two math font (checksum-verified)
 tools/eval-text.js          counts extraction defects on a fixed set of pages of a digital PDF
 docs/             MATH-FONT.md, screenshots, and working notes
-vendor/           PDF.js; fonts/ (STIX Two)
+vendor/           PDF.js; fonts/ (STIX Two); hw/ (the optional page reader, git-ignored)
 ```
 
 Run the checks (needs Python 3.10+ and Node.js):
@@ -120,7 +135,7 @@ Inspect what the pipeline produces for a PDF without opening the browser:
 node tools/run-pdf.js path/to/file.pdf 1 20 --out=report.json
 ```
 
-Every source file is kept to 250 lines or fewer; the verification script enforces it.
+Files over about 250 lines are listed by the verification script as a prompt to check that each still has one responsibility. It is a review trigger, not a limit: never shorten a file by joining statements or removing comments.
 
 ## Credits
 

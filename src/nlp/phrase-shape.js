@@ -122,7 +122,24 @@
     return MORPH_SUFFIXES.find((suf) => w.length > suf.length + 2 && w.endsWith(suf)) || '';
   }
 
-  const api = { isNounPhrase, shapeFits, getShapeBucket, getMorphSuffix };
+  /**
+   * The term ends in an adjective or adverb form ("reflexive", "functionally dependent", "orthogonally
+   * diagonalizable") rather than a noun. Such a term fills a different slot in a sentence than a noun
+   * does, so an option set never mixes the two.
+   */
+  function isAdjectival(term) {
+    const words = clean(term).toLowerCase().split(' ');
+    const last = words[words.length - 1];
+    if (/^[A-Z]{2,}$/.test(clean(term).split(' ').pop())) return false; // an acronym is a name
+    // Adverb + one word is an adjective phrase ("functionally dependent"), whatever the second word ends in.
+    if (words.length === 2 && /ly$/.test(words[0]) && !LY_NOUNS.has(words[0])) return true;
+    if (ADJ_NOUNS.has(last) || ING_NOUNS.has(last) || LY_NOUNS.has(last)) return false;
+    // A compound ending in -ing names an activity ("clock gating", "priority scheduling").
+    if (/ing$/.test(last) && words.length > 1) return false;
+    return ADJ_END_RE.test(last);
+  }
+
+  const api = { isNounPhrase, shapeFits, getShapeBucket, getMorphSuffix, isAdjectival };
   PDFStudy.phraseShape = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

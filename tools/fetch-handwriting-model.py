@@ -10,7 +10,10 @@ Standard library only, HTTPS only, every file pinned and verified, fail closed (
     (tools/ppocr-v5-vocab.json, copied after a sha256 check)
 All pins live in tools/hw_model_pins.py. See docs/HANDWRITING.md sections 5 and 6.
 
-Usage:  python tools/fetch-handwriting-model.py [--dry-run] [--all]
+--ppocr-only fetches just what the page reader needs (about 34 MB): the onnxruntime-web files and the PP-OCR
+models. Transformers.js and the TrOCR handwriting model (about 130 MB more) are optional and are left out.
+
+Usage:  python tools/fetch-handwriting-model.py [--dry-run] [--all] [--ppocr-only]
 """
 import argparse
 import base64
@@ -32,6 +35,9 @@ ALLOWED_HOSTS = ("registry.npmjs.org", "huggingface.co")
 ALLOWED_SUFFIXES = (".huggingface.co", ".hf.co")
 ORT_LOADER = "ort.wasm.min.mjs"
 WASM = "ort-wasm-simd-threaded.jsep.wasm"
+WASM_GLUE = "ort-wasm-simd-threaded.jsep.mjs"
+# Runtime files both tarballs carry (the same build): the onnxruntime-web copy is used only when one is missing.
+SHARED_RUNTIME = (WASM, WASM_GLUE)
 
 
 def host_ok(url):
@@ -176,24 +182,29 @@ def fetch_tarball(name, url, integrity, limit_mb, members, want):
     return ok, found_wasm
 
 
-def model_total():
-    total = sum(f[1] for f in MODEL_FILES) + sum(f[2] for f in PPOCR_FILES)
-    return "%d model files, %d bytes (about %.0f MB)" % (len(MODEL_FILES) + len(PPOCR_FILES), total, total / 1e6)
+def model_total(ppocr_only):
+    trocr = [] if ppocr_only else MODEL_FILES
+    total = sum(f[1] for f in trocr) + sum(f[2] for f in PPOCR_FILES)
+    return "%d model files, %d bytes (about %.0f MB)" % (len(trocr) + len(PPOCR_FILES), total, total / 1e6)
 
 
-def dry_run():
-    for name, url, integrity, _limit, members in TARBALLS:
+def dry_run(ppocr_only):
+    for idx, (name, url, integrity, _limit, members) in enumerate(TARBALLS):
+        if ppocr_only and idx == 0:
+            print("%s\n  skipped (--ppocr-only)" % name)
+            continue
         print("%s\n  %s\n  %s" % (name, url, integrity))
         for member, dest_name, required, sha256 in members:
             print("    %s -> vendor/hw/%s%s%s" % (member, dest_name, "" if required else " (if present)",
                                                  " (sha256 %s)" % sha256 if sha256 else ""))
-    print("onnxruntime-web is skipped when the .wasm and %s are already there (unless --all)" % ORT_LOADER)
-    for path, size, kind, checksum in MODEL_FILES:
+    print("onnxruntime-web is skipped when the .wasm, the .mjs glue and %s are already there (unless --all); "
+          "it supplies the .wasm and the glue only when they are missing" % ORT_LOADER)
+    for path, size, kind, checksum in ([] if ppocr_only else MODEL_FILES):
         print("%s%s\n  -> vendor/hw/%s/%s (%d bytes, %s %s)" % (HF, path, MODEL_SUBDIR, path, size, kind, checksum))
     for url, rel, size, sha in PPOCR_FILES:
         print("%s\n  -> vendor/hw/%s (%d bytes, sha256 %s)" % (url, rel, size, sha))
     print("tools/%s\n  -> vendor/hw/%s (copied, sha256 %s)" % PPOCR_VOCAB)
-    print(model_total())
+    print(model_total(ppocr_only))
     print("dry run: nothing downloaded")
     return 0
 
@@ -202,34 +213,42 @@ def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dry-run", action="store_true", help="print what would be fetched, download nothing")
     ap.add_argument("--all", action="store_true", help="also download onnxruntime-web when its files are present")
+    ap.add_argument("--ppocr-only", action="store_true",
+                    help="only the page reader: onnxruntime-web and the PP-OCR models, no Transformers.js or TrOCR")
     args = ap.parse_args(argv)
     if args.dry_run:
-        return dry_run()
+        return dry_run(args.ppocr_only)
     os.makedirs(DEST, exist_ok=True)
     failed = False
     have = lambda f: os.path.exists(os.path.join(DEST, f))  # noqa: E731
-    have_wasm = have(WASM)
     for idx, (name, url, integrity, limit, members) in enumerate(TARBALLS):
-        if idx == 1 and have_wasm and have(ORT_LOADER) and not args.all:
-            print("%s skipped: .wasm and %s already found" % (name, ORT_LOADER))
+        if idx == 0 and args.ppocr_only:
+            print("%s skipped (--ppocr-only)" % name)
+            continue
+        if idx == 1 and all(have(f) for f in SHARED_RUNTIME + (ORT_LOADER,)) and not args.all:
+            print("%s skipped: .wasm, .mjs glue and %s already found" % (name, ORT_LOADER))
             continue
         print("%s" % name)
-        # the .wasm comes from the first tarball when it has one; the second then only supplies the loader
-        want_wasm = idx == 0 or not have_wasm
-        ok, found = fetch_tarball(name, url, integrity, limit, members, lambda d: d != WASM or want_wasm)
+        # the .wasm and its glue come from the first tarball when it was fetched; onnxruntime-web then adds only
+        # what is still missing (with --ppocr-only that is everything)
+        missing = [f for f in SHARED_RUNTIME if not have(f)]
+        ok, _found = fetch_tarball(name, url, integrity, limit, members,
+                                   lambda d: idx == 0 or d not in SHARED_RUNTIME or d in missing)
         failed = failed or not ok
-        have_wasm = have_wasm or found
-    print("Model files: " + model_total())
-    for path, size, kind, checksum in MODEL_FILES:
+    print("Model files: " + model_total(args.ppocr_only))
+    for path, size, kind, checksum in ([] if args.ppocr_only else MODEL_FILES):
         failed = (not fetch_file(HF + path, MODEL_SUBDIR + "/" + path, size, kind, checksum)) or failed
     for url, rel, size, sha in PPOCR_FILES:
         failed = (not fetch_file(url, rel, size, "sha256", sha)) or failed
     failed = (not install_vocab()) or failed
     print("")
     print("FAILED: nothing unverified was left in place." if failed else "All files fetched and verified.")
-    print("NOTE: the TrOCR weights licence must be confirmed by the owner before any redistribution "
-          "(docs/HANDWRITING.md R1; see models/trocr-small-handwritten/README.md). PP-OCRv5 is Apache-2.0. "
-          "vendor/hw/ is git-ignored: do not commit it.")
+    if args.ppocr_only:
+        print("NOTE: PP-OCRv5 is Apache-2.0. vendor/hw/ is git-ignored: do not commit it.")
+    else:
+        print("NOTE: the TrOCR weights licence must be confirmed by the owner before any redistribution "
+              "(docs/HANDWRITING.md R1; see models/trocr-small-handwritten/README.md). PP-OCRv5 is Apache-2.0. "
+              "vendor/hw/ is git-ignored: do not commit it.")
     return 1 if failed else 0
 
 

@@ -38,7 +38,8 @@
   /**
    * RAKE (Rapid Automatic Keyword Extraction — Rose et al., 2010), boundary-aware variant:
    * candidates break at stopwords, punctuation, line/sentence boundaries, numbers and symbols, and at a
-   * lowercase→Capitalised transition ("approach Construct"); compounds longer than maxWords are dropped,
+   * lowercase→Capitalised transition ("approach Construct"); stopwords here are the phrase-breaking kind
+   * only (tokenizer.PHRASE_BREAK_WORDS); compounds longer than maxWords are dropped,
    * and a once-seen 3+ word compound is cut where it joins two phrases seen elsewhere ("reaction | heat").
    */
   function stripMathAndCode(text) {
@@ -47,7 +48,9 @@
   }
 
   function extractRakeKeyphrases(text, maxWords = 3, topK = 35) {
-    const { STOPWORDS, cleanMarkdown } = getTokenizer();
+    // Only function and instruction words end a phrase. Publisher nouns ("rights", "table", "solution")
+    // stay inside it, so "property rights" and "truth table" survive as whole terms.
+    const { PHRASE_BREAK_WORDS, BOILERPLATE_WORDS, CALLOUT_WORDS, cleanMarkdown } = getTokenizer();
     const runs = []; // [{ low: [...], raw: [...] }]
     for (const seg of rakeSegments(stripMathAndCode(text))) {
       for (const clause of cleanMarkdown(seg).split(/[.!?,;:\t"'()\[\]{}—–/]+/)) {
@@ -56,7 +59,7 @@
         for (const tok of clause.split(/\s+/)) {
           const rawW = tok.replace(/^-+|-+$/g, '');
           const w = rawW.toLowerCase();
-          if (!WORD_RE.test(rawW) || STOPWORDS.has(w) || w.length < 3 || RAKE_BREAK.has(w)) { flush(); continue; }
+          if (!WORD_RE.test(rawW) || PHRASE_BREAK_WORDS.has(w) || w.length < 3 || RAKE_BREAK.has(w)) { flush(); continue; }
           const prev = cur.raw[cur.raw.length - 1];
           if (prev && /^[a-z]/.test(prev) && /^[A-Z][a-z]/.test(rawW)) flush(); // case-run boundary
           cur.low.push(w);
@@ -91,7 +94,10 @@
       pieces.push({ low: r.low.slice(startIdx), raw: r.raw.slice(startIdx) });
     }
 
-    const phrases = pieces.filter((p) => p.low.length <= maxWords);
+    // A phrase that opens with a callout label ("figure shows") or holds nothing but publisher words
+    // ("rights reserved") is a reference or a footer, not a concept.
+    const isConcept = (p) => !CALLOUT_WORDS.has(p.low[0]) && p.low.some((w) => !BOILERPLATE_WORDS.has(w));
+    const phrases = pieces.filter((p) => p.low.length <= maxWords && isConcept(p));
     const originalCaseMap = new Map();
     const count = Object.create(null);
     const freq = Object.create(null);

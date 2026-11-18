@@ -3,11 +3,13 @@
  * Starts `python app.py`, opens the real app in a headless browser over the DevTools protocol, loads a PDF with
  * no text layer, lets the real model read it in the real Web Worker, and prints what came out.
  *
- * Usage: node tools/smoke-handwriting.js <fixture.pdf> [--shots=dir] [--browser=path] [--timeout=600]
+ * Usage: node tools/smoke-handwriting.js <fixture.pdf> [--shots=dir] [--browser=path] [--timeout=600] [--no-isolation]
+ *   --no-isolation   serve without the COOP/COEP headers (one WebAssembly thread, as on a static host)
  * Make a fixture first: python tools/make-handwriting-fixture.py fixture.pdf
  * If <fixture.pdf>.expected.json is beside it (the fixture maker writes it) the text is compared with it.
- * Exit code 0 = model loaded, text read (character error rate <= 15% when expected text is known), no request
- * left this computer and no page errors; 1 = any of those failed; 2 = usage/setup problem.
+ * Exit code 0 = the app switched page reading on by itself, a reader loaded (PP-OCR alone is enough), text read (character error rate <= 15% when expected text is known), no request
+ * left this computer and no page errors; 1 = any of those failed; 2 = usage/setup problem (this includes the app or
+ * the browser not starting: nothing was tested).
  */
 const fs = require('fs');
 const os = require('os');
@@ -55,12 +57,16 @@ async function connect(wsUrl) {
 /** Runs inside the page: load the PDF bytes the way the app does, then report what recognition produced. */
 function pageScript(b64) {
   return `(async () => {
-    PDFStudy.ENABLE_HANDWRITING = true;
+    // the app's own switch decides (src/hw/hw-availability.js): it is on when the reader's files are installed
+    const availability = await PDFStudy.hwAvailability.ready;
+    const switchedOn = PDFStudy.ENABLE_HANDWRITING === true;
     const bytes = Uint8Array.from(atob(${JSON.stringify(b64)}), (c) => c.charCodeAt(0));
     const t0 = performance.now();
     const parsed = await PDFStudy.pdfLoader.loadPdfDocument(bytes.buffer, () => {});
     const ink = Array.from(parsed.pageCache.values()).map((p) => Object.assign({ page: p.pageNumber, words: p.wordCount }, p.ink));
     await PDFStudy.main.processLoadedDocument('handwriting-fixture.pdf', parsed);
+    // a document with typed pages too shows those first and reads its pictures afterwards: wait for that
+    if (PDFStudy.backgroundRead) await PDFStudy.backgroundRead.whenIdle();
     const st = PDFStudy.main.appState;
     const firstRun = performance.now() - t0;
     // Second pass with the model already loaded: time per piece without the one-off model load
@@ -82,6 +88,7 @@ function pageScript(b64) {
     return JSON.stringify({
       firstRunSeconds: Math.round(firstRun / 100) / 10, warmSecondsPerPiece: again.regions ? Math.round(warm / again.regions / 10) / 100 : null,
       userAgent: navigator.userAgent, cores: navigator.hardwareConcurrency, crossOriginIsolated: self.crossOriginIsolated,
+      availability: { available: availability.available, reason: availability.reason, switchedOn },
       inkBefore: ink, mode: st.activeMode, handwriting: st.handwriting, pages,
       generated: { summarySentences: (g.summary && g.summary.sentences) || [], flashcards: (g.flashcards || []).length,
         quiz: (g.quiz || []).length, firstCard: (g.flashcards || [])[0] || null },
@@ -107,17 +114,30 @@ async function main() {
   const shots = flags.shots ? path.resolve(flags.shots) : null;
   if (shots) fs.mkdirSync(shots, { recursive: true });
 
-  const server = spawn(process.platform === 'win32' ? 'python' : 'python3', ['-u', 'app.py'], { cwd: ROOT, env: { ...process.env, NO_BROWSER: '1' } });
-  kids.push(server);
-  const appUrl = (await waitLine(server.stdout, /Running locally at: (http:\/\/\S+)/, 15000))[1];
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-study-smoke-'));
-  const browser = spawn(exe, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run',
-    '--disable-extensions', '--window-size=1280,900', 'about:blank']);
-  kids.push(browser);
-  const port = (await waitLine(browser.stderr, /DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//, 20000))[1];
-  await sleep(500);
-  const target = (await getJson(`http://127.0.0.1:${port}/json/list`)).find((t) => t.type === 'page');
-  const cdp = await connect(target.webSocketDebuggerUrl);
+  const serverEnv = { ...process.env, NO_BROWSER: '1' };
+  if ('no-isolation' in flags) serverEnv.NO_ISOLATION = '1';
+  // Starting the app and the browser is set-up: when either does not come up (seen with Edge launched from
+  // Git Bash on Windows) that is exit code 2, "could not run", not a failed test.
+  let appUrl = '';
+  let cdp = null;
+  try {
+    const server = spawn(process.platform === 'win32' ? 'python' : 'python3', ['-u', 'app.py'], { cwd: ROOT, env: serverEnv });
+    kids.push(server);
+    server.stderr.resume(); // the request log: left unread, the server blocks once the pipe buffer fills
+    appUrl = (await waitLine(server.stdout, /Running locally at: (http:\/\/\S+)/, 15000))[1];
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-study-smoke-'));
+    const browser = spawn(exe, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run',
+      '--disable-extensions', '--window-size=1280,900', 'about:blank']);
+    kids.push(browser);
+    const port = (await waitLine(browser.stderr, /DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//, 20000))[1];
+    await sleep(500);
+    const target = (await getJson(`http://127.0.0.1:${port}/json/list`)).find((t) => t.type === 'page');
+    cdp = await connect(target.webSocketDebuggerUrl);
+  } catch (err) {
+    console.error(`the app or the browser did not start (${(err && err.message) || err}); on Windows run this from PowerShell or cmd`);
+    stop();
+    process.exit(2);
+  }
   await cdp.send('Page.enable'); await cdp.send('Runtime.enable'); await cdp.send('Network.enable'); await cdp.send('Log.enable');
   await cdp.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: false });
   await cdp.send('Page.navigate', { url: appUrl });
@@ -161,7 +181,9 @@ async function main() {
   console.log(JSON.stringify(report, null, 1));
   cdp.close();
   const read = report.pages.flatMap((p) => p.regions).filter((r) => r.source === 'model' && r.text);
-  const ok = { modelLoaded: !!(report.handwriting && report.handwriting.engine && report.handwriting.engine.available),
+  const engine = (report.handwriting && report.handwriting.engine) || {};
+  console.log(`reader: ${engine.name || 'none'}, threads ${engine.threads || 1}, crossOriginIsolated ${report.crossOriginIsolated}, warm seconds per piece ${report.warmSecondsPerPiece}`);
+  const ok = { switchedOn: report.availability.switchedOn, modelLoaded: !!engine.available,
     textRead: read.length > 0, nothingLeftThisComputer: report.offOriginRequests.length === 0, noPageErrors: report.consoleProblems.length === 0 };
   const expFile = `${pdfPath}.expected.json`;
   if (fs.existsSync(expFile)) {

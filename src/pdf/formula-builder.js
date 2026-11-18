@@ -5,6 +5,7 @@
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
   const ML = () => PDFStudy.mathLine || (typeof require === 'function' ? require('./math-line.js') : null);
+  const overlineBuilder = () => PDFStudy.overlineBuilder || (typeof require === 'function' ? require('./overline-builder.js') : null);
   const cx = (s) => (s.x0 + s.x1) / 2;
   const wrapPlain = (t) => (/^[\w.′'^]+$/.test(t) ? t : `(${t})`);
   const TALL_DELIM_RE = /^[|‖()[\]]+$/;
@@ -88,10 +89,41 @@
     return group.map((s) => (TALL_DELIM_RE.test((s.text || '').trim()) && s.fontSize > body * 1.2 ? { ...s, baselineY: refY, fontSize: body } : s));
   }
 
+  // A rule with prose or a spaced-out table row on one side is a table / caption rule, not a fraction bar
+  const PROSE_WORDS = 2; // words of 3+ letters in one part
+  const COLUMN_GAP = 1.5; // x body size: horizontal gap between spans that separates table columns
+  const MIN_COLUMN_GAPS = 2;
+
+  // Lower-case words only: "PAO" in "Perimeter △PAO" is a point name, not prose
+  const isProsePart = (part) => (part.filter((s) => !s.tex).map((s) => s.text || '').join(' ').match(/\b[A-Za-z][a-z]{2,}\b/g) || []).length >= PROSE_WORDS;
+
+  function isTableRow(part, body) {
+    const xs = part.slice().sort((a, b) => a.x0 - b.x0);
+    // Measured against the row's own size: a table set in 8pt type has narrower column gaps than the page body
+    const size = Math.min(body, Math.max(...xs.map((s) => s.fontSize || body)));
+    let gaps = 0;
+    for (let i = 1; i < xs.length; i++) if (xs[i].x0 - xs[i - 1].x1 > size * COLUMN_GAP) gaps += 1;
+    return gaps >= MIN_COLUMN_GAPS;
+  }
+
+  /** Word fractions ("Perimeter / Perimeter") stay fractions; prose over prose, or a spaced table row, does not. */
+  function notAFraction(num, den, body) {
+    return (isProsePart(num) && isProsePart(den)) || isTableRow(num, body) || isTableRow(den, body) ||
+      (isLabelledRow(num) && isLabelledRow(den));
+  }
+
+  // A function-table row: single-symbol cells ("0 1 X") followed by a worded entry ("Reset state")
+  const isLabelledRow = (part) => {
+    const text = part.filter((s) => !s.tex).map((s) => s.text || '').join(' ');
+    return /(?:^|\s)[0-9A-Z](?=\s)/.test(` ${text} `) && /\b[A-Za-z][a-z]{2,}\b/.test(text);
+  };
+
   function fractions(spans, rules, used) {
     const body = bodyOf(spans);
     const order = rules.filter((r) => !used.has(r)).sort((a, b) => a.x1 - a.x0 - (b.x1 - b.x0));
     for (const r of order) {
+      // A table rule drawn cell by cell continues in a collinear segment; a fraction bar stands alone
+      if (rules.some((q) => q !== r && Math.abs(q.y - r.y) < 0.8 && (Math.abs(q.x0 - r.x1) < 1.5 || Math.abs(q.x1 - r.x0) < 1.5))) continue;
       const inside = (s) => !(s.x0 >= r.x1 - 1 && /^[.,;:]$/.test((s.text || '').trim())) &&
         cx(s) > r.x0 - 1.5 && cx(s) < r.x1 + 1.5 && s.x0 >= r.x0 - body * 0.45 && s.x1 <= r.x1 + body * 0.45;
       const isTall = (s) => !s.tex && TALL_DELIM_RE.test((s.text || '').trim()) && s.fontSize >= body * 1.2;
@@ -103,11 +135,19 @@
         ? midY(s) > r.y + 0.5 && midY(s) - r.y <= body * 1.65 && s.topY >= r.y - 3
         : s.baselineY - r.y > body * 0.25 && s.baselineY - r.y <= body * 1.95));
       if (!num.length || !den.length) continue;
+      if (notAFraction(num, den, body)) continue; // caption / table header over a rule
+      // Pieces of longer rows above and below a short rule: a complement bar between two table rows or
+      // lines of prose ("X + X = X" over "X + X̄ = 1"), left for the overline builder.
+      const ob = overlineBuilder();
+      if (ob && (num.some((s) => ob.onLongerRow(s, spans, r)) || den.some((s) => ob.onLongerRow(s, spans, r)))) continue;
       const chars = (g) => g.reduce((a, s) => a + (s.plain || s.text).trim().length, 0);
       if (chars(num) > 160 || chars(den) > 160) continue;
       const contentW = Math.max(...num.map((s) => s.x1)) - Math.min(...num.map((s) => s.x0));
       const denW = Math.max(...den.map((s) => s.x1)) - Math.min(...den.map((s) => s.x0));
       if (r.x1 - r.x0 > Math.max(contentW, denW) * 1.25 + body * 1.5) continue;
+      // Numerator and denominator are centred on their bar; a table header over its underline is not
+      const offCentre = (g) => Math.abs((Math.min(...g.map((s) => s.x0)) + Math.max(...g.map((s) => s.x1))) / 2 - (r.x0 + r.x1) / 2);
+      if (Math.max(offCentre(num), offCentre(den)) > Math.max(body, (r.x1 - r.x0) * 0.2)) continue;
       const axis = spans.find((s) => !num.includes(s) && !den.includes(s) && s.baselineY >= r.y - body * 0.1 && s.baselineY <= r.y + body * 0.75 &&
         (s.x1 <= r.x0 + 1 || s.x0 >= r.x1 - 1) && Math.min(Math.abs(s.x1 - r.x0), Math.abs(s.x0 - r.x1)) < body * 6);
       used.add(r);
@@ -228,13 +268,36 @@
     return spans;
   }
 
+  /**
+   * An operator glyph drawn from a symbol font at a larger size and a raised baseline (the AND dot of
+   * "X ⋅ Y" set at 13.5pt beside 9pt letters) belongs to its row: it takes the size and baseline of the
+   * nearest operand, so it is never read as a base with sub- and superscripts around it.
+   */
+  const OPERATOR_RE = /^[⋅·+−=×∙]$/;
+
+  function seatOperators(spans) {
+    const body = bodyOf(spans);
+    for (const s of spans) {
+      if (s.tex || !OPERATOR_RE.test((s.text || '').trim()) || s.fontSize < body * 1.25) continue;
+      // Operands at body size only: an exponent beside a normal "+" is a script, not the row
+      const near = spans.filter((o) => o !== s && !OPERATOR_RE.test((o.text || '').trim()) && o.fontSize < s.fontSize * 0.85 && o.fontSize >= body * 0.85 &&
+        Math.abs(o.baselineY - s.baselineY) < s.fontSize * 0.35 && Math.min(Math.abs(o.x0 - s.x1), Math.abs(s.x0 - o.x1)) < o.fontSize * 1.2);
+      if (!near.length) continue;
+      near.sort((a, b) => Math.min(Math.abs(a.x0 - s.x1), Math.abs(s.x0 - a.x1)) - Math.min(Math.abs(b.x0 - s.x1), Math.abs(s.x0 - b.x1)));
+      Object.assign(s, { fontSize: near[0].fontSize, baselineY: near[0].baselineY, topY: near[0].topY, bottomY: near[0].bottomY });
+    }
+    return spans;
+  }
+
   function collapse(spans, rules = []) {
     if (!spans || spans.length < 2) return spans || [];
     const used = new Set();
-    let out = radicals(spans.slice(), rules, used);
+    let out = radicals(seatOperators(spans.slice()), rules, used);
     out = fractions(out, rules, used);
     out = piecewiseCases(out);
     out = bigOperators(out);
+    const ob = overlineBuilder();
+    if (ob) out = ob.overlines(out, rules, used); // complement bars: rules nobody else claimed
     return seatTallGlyphs(out);
   }
 

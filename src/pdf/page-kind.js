@@ -80,6 +80,20 @@
     return OBJECTIVE_VERB_RE.test(plain) && /\.$/.test(plain) && plain.length <= 125;
   }
 
+  /** Most common (character-weighted) font size of the lines: the page's body size, or 0. */
+  function bodySizeOf(lines) {
+    const counts = new Map();
+    for (const l of lines) {
+      if (!l.fontSize) continue;
+      const k = Math.round(l.fontSize * 2) / 2;
+      counts.set(k, (counts.get(k) || 0) + String(l.text || '').length);
+    }
+    let best = 0;
+    let n = -1;
+    for (const [k, c] of counts) if (c > n) [best, n] = [k, c];
+    return best;
+  }
+
   /** Classifies a page object and caches/assigns `page.kind`. */
   function classifyPage(page) {
     if (!page || !Array.isArray(page.lines)) return 'front';
@@ -172,7 +186,11 @@
       page.kind = 'exercises';
       return page.kind;
     }
-    const rawTexts = lines.map((l) => String(l.text || l.cleanText || '').replace(/\*\*/g, '').trim()).filter(Boolean);
+    // Numbered rows set smaller than the body text are a numbered table inside the prose (a table of
+    // identities "1. X + 0 = X  2. X ⋅ 1 = X"), never a problem set: problems are set at body size.
+    const body = bodySizeOf(lines);
+    const rawTexts = lines.filter((l) => !body || !l.fontSize || l.fontSize >= body * 0.95)
+      .map((l) => String(l.text || l.cleanText || '').replace(/\*\*/g, '').trim()).filter(Boolean);
     const instrHits = texts.filter((t) => EXERCISE_INSTRUCTION_RE.test(t)).length;
     const probNums = rawTexts
       .map((t) => {

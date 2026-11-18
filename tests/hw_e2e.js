@@ -21,7 +21,7 @@ function loadEnvironment() {
 
 const LINES = [
   ['A limit describes the value a function approaches.', 0.9],
-  ['Definition: A function is continuous at c if the limit equals f(c).', 0.3],
+  ['Definition: continuous at c if the limit equals f(c).', 0.3], // short enough to stay under the page-level hold (ocr-merge.js)
   ['The derivative is defined as the limit of the difference quotient.', 0.85],
 ];
 

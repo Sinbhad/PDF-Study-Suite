@@ -1,8 +1,13 @@
 /**
- * Recognised handwriting -> ordinary page lines (line-builder.js shape), so the existing
+ * Text read from a page picture -> ordinary page lines (line-builder.js shape), so the existing
  * summary / flashcard / quiz pipeline works unchanged. Pure functions, no DOM.
- * Pieces below LOW_CONFIDENCE stay in the page result for the review panel but are left out of the page lines
- * (so out of summaries, flashcards and quizzes) until they are corrected or confirmed there (confidence 1).
+ * Picture noise (one- and two-character fragments from photos and diagrams: ocr-noise.js) is discarded first:
+ * it is never counted, listed for review or added. Of what remains, pieces below LOW_CONFIDENCE stay in the
+ * page result for the review panel but are left out of the page lines (so out of summaries, flashcards and
+ * quizzes) until they are corrected or confirmed there (confidence 1).
+ * applyToPage merges: typed lines stay, recognised lines are added only where no typed line is; a page that is
+ * mostly unsure is held whole and a page with no confident words and no unsure lines is treated as a picture
+ * (rules in ocr-merge.js).
  * Page result shape : { pageNumber, scale, width, height, lines: [{ index, box, regions: [...] }] }.
  * A canvas (mind-map) result adds layout: 'canvas' and line.cluster / line.group (ocr-canvas.js): its lines stay
  * in the given reading order, a second reading of the same ink is dropped, and each page line also carries
@@ -15,6 +20,8 @@
   const lineBuilder = () => mod('lineBuilder', './line-builder.js');
   const pageKind = () => mod('pageKind', './page-kind.js');
   const ocrCanvas = () => mod('ocrCanvas', './ocr-canvas.js');
+  const ocrMerge = () => mod('ocrMerge', './ocr-merge.js');
+  const ocrNoise = () => mod('ocrNoise', './ocr-noise.js');
 
   const LOW_CONFIDENCE = 0.6;
   const BODY_PT = 11;
@@ -74,6 +81,17 @@
   }
 
   /**
+   * Height of the written line in result pixels. On a page that was straightened before reading, a piece's
+   * `box` is the upright rectangle around a sloping line, so it is taller than the writing; the reader then
+   * also gives `size`, the piece as it lay on the level page, and that is the height used.
+   */
+  function writtenHeight(parts, fallback) {
+    const sized = parts.map((p) => p.region.size && p.region.size.h).filter((h) => h > 0);
+    if (sized.length && sized.length === parts.length) return Math.max(...sized);
+    return unionBox(parts, fallback).h;
+  }
+
+  /**
    * Font size from line height. The median text-line height (points) maps to 11pt body, so lines
    * stay body-sized (9..12). A line >= 1.3x the median that is short (<= 8 words) and not
    * math-only becomes 16pt so downstream heading detection can see it. Everything clamps to 9..18.
@@ -98,17 +116,17 @@
       const parts = usableRegions(line, includeLow);
       if (!parts.length) continue;
       const { text, onlyMath } = lineText(parts);
-      items.push({ line, parts, text, onlyMath, box: unionBox(parts, line.box) });
+      items.push({ line, parts, text, onlyMath, box: unionBox(parts, line.box), height: writtenHeight(parts, line.box) });
     }
     // Canvas pages: topic blocks in reading order; a block's opening title line is marked as a heading
     const oc = ocrCanvas();
     const canvas = Boolean(oc && oc.isCanvas(result));
     if (canvas) items = oc.dedupe(items);
     const titles = canvas ? oc.titleItems(items) : null;
-    const med = median(items.filter((i) => !i.onlyMath).map((i) => i.box.h / scale));
+    const med = median(items.filter((i) => !i.onlyMath).map((i) => i.height / scale));
 
     return items.map((item) => {
-      const { line, parts, text, onlyMath, box } = item;
+      const { line, parts, text, onlyMath, box, height } = item;
       const wordCount = text.split(/\s+/).length;
       const confs = parts.map((p) => clampConf(p.region.confidence));
       const confidence = Math.min(...confs);
@@ -117,7 +135,7 @@
         text, formattedText: text, cleanText: text.replace(BULLET_RE, '').trim(),
         x0, textX0: x0, x1: (box.x + box.w) / scale,
         topY: box.y / scale, bottomY: (box.y + box.h) / scale,
-        fontSize: fontSizeFor(box.h / scale, med, wordCount, onlyMath),
+        fontSize: fontSizeFor(height / scale, med, wordCount, onlyMath),
         isBold: false, hasBullet: BULLET_RE.test(text),
         hasMath: parts.some((p) => p.region.kind === 'math'), isCode: false,
         wordCount, pageWidth, pageHeight,
@@ -133,16 +151,47 @@
     });
   }
 
-  /** Mutates the shared page object (parsedPdf.pages and pageCache hold the same reference). */
+  /**
+   * Merges the recognised text into the page; the typed lines the PDF already holds are kept, never replaced.
+   * Mutates the shared page object (parsedPdf.pages and pageCache hold the same reference).
+   *   ink.typedLines   the page's own lines, saved on the first call
+   *   ink.raw          the result as the reader gave it (what is remembered between sessions); corrections
+   *                    change its pieces in place and the page is judged from it again
+   *   ink.result       the result without picture noise and without the lines that re-read typed text
+   *                    (what review, counts and corrections use)
+   *   ink.picture      a photo, diagram or cover: nothing is added or listed (result kept in ink.pictureResult)
+   *   ink.held         too much of the page is unsure: nothing is added until it is reviewed (see ocr-merge.js)
+   *   ink.emptyRender  nothing at all was found on the rendered page
+   *   ink.recognised   the page was read to the end (false after a reading that was cut short: result.partial)
+   */
   function applyToPage(pageObj, result) {
     if (!pageObj || !result) return pageObj;
-    pageObj.lines = toPageLines(result, pageObj);
+    const merge = ocrMerge();
+    const ink = (pageObj.ink = pageObj.ink || { needsRecognition: true, reason: 'no-text', pathOps: 0, imageOps: 0 });
+    if (!ink.typedLines) ink.typedLines = (pageObj.lines || []).filter((l) => !l.ocr);
+    const typed = ink.typedLines;
+    ink.raw = result;
+    const fresh = ocrNoise().strip(merge.outsideTyped(result, typed));
+    const verdict = merge.judge(fresh);
+
+    let added = [];
+    if (!verdict.picture && !verdict.held) {
+      const mixed = ink.reason === 'mixed';
+      added = merge.additions(toPageLines(fresh, pageObj), mixed, ink.mixed === 'image' ? ink.readBoxes : null);
+    }
+    pageObj.lines = merge.mergeLines(typed, added);
     pageObj.wordCount = pageObj.lines.reduce((sum, l) => sum + l.wordCount, 0);
     const pk = pageKind();
     if (pk) pageObj.kind = pk.classifyPage(pageObj);
-    pageObj.ink = pageObj.ink || { needsRecognition: true, reason: 'no-text', pathOps: 0, imageOps: 0 };
-    pageObj.ink.recognised = true;
-    pageObj.ink.result = result;
+
+    // A reading that was cut short (Stop, or a newer run took over) puts the lines it got on the page, but the
+    // page still counts as unread: it is read again in full, and its unread pieces are never listed for review.
+    ink.recognised = !result.partial;
+    ink.picture = verdict.picture;
+    ink.held = verdict.held;
+    ink.emptyRender = verdict.emptyRender;
+    ink.result = verdict.picture ? Object.assign({}, fresh, { lines: [] }) : fresh;
+    if (verdict.picture) ink.pictureResult = result;
     return pageObj;
   }
 
@@ -160,7 +209,8 @@
     region.text = String(text == null ? '' : text);
     region.confidence = 1;
     region.source = 'user';
-    applyToPage(pageObj, result);
+    pageObj.ink.corrected = true; // not remembered yet: ui/ocr-cache.js saves the page and clears the mark
+    applyToPage(pageObj, pageObj.ink.raw || result);
     return true;
   }
 

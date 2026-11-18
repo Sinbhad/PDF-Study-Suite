@@ -1,0 +1,543 @@
+{
+ "corpus": "tests/corpus/manifest.json",
+ "documents": [
+  {
+   "id": "sample-textbook",
+   "kind": "pdf",
+   "words": 584,
+   "requested": 30,
+   "generated": 29,
+   "quiz": 10,
+   "test": 19,
+   "defective": 20,
+   "defectPct": 69,
+   "lints": {
+    "thin_stem": 1,
+    "option_case_mix": 5,
+    "option_article_mismatch": 4,
+    "answer_length_tell": 1,
+    "answer_leak": 8,
+    "tf_copied_true": 2,
+    "tf_antonym_swap": 3,
+    "tf_double_antonym": 3,
+    "malformed_math": 1,
+    "reused_option_set": 11
+   },
+   "flashcards": 17,
+   "per1000": 49.7,
+   "gold": {
+    "hit": 17,
+    "total": 20,
+    "pct": 85,
+    "missing": [
+     "continuity",
+     "Taylor series",
+     "Dijkstra's algorithm"
+    ]
+   },
+   "guess": {
+    "n": 29,
+    "expected": 12.25,
+    "byChance": 8.5,
+    "accuracy": 42.2,
+    "chance": 29.3,
+    "tells": 8
+   }
+  },
+  {
+   "id": "sample-slides",
+   "kind": "pdf",
+   "words": 261,
+   "requested": 30,
+   "generated": 20,
+   "quiz": 9,
+   "test": 11,
+   "defective": 10,
+   "defectPct": 50,
+   "lints": {
+    "thin_stem": 1,
+    "answer_leak": 7,
+    "tf_antonym_swap": 2,
+    "tf_double_antonym": 2,
+    "reused_option_set": 1
+   },
+   "flashcards": 10,
+   "per1000": 76.6,
+   "gold": {
+    "hit": 9,
+    "total": 15,
+    "pct": 60,
+    "missing": [
+     "loop invariant",
+     "breadth-first search",
+     "depth-first search",
+     "Dijkstra algorithm",
+     "topological sort",
+     "Fundamental Theorem"
+    ]
+   },
+   "guess": {
+    "n": 20,
+    "expected": 6.5,
+    "byChance": 5.5,
+    "accuracy": 32.5,
+    "chance": 27.5,
+    "tells": 2
+   }
+  },
+  {
+   "id": "bio-respiration",
+   "kind": "text",
+   "words": 443,
+   "requested": 30,
+   "generated": 21,
+   "quiz": 10,
+   "test": 11,
+   "defective": 21,
+   "defectPct": 100,
+   "lints": {
+    "unresolved_reference": 3,
+    "thin_stem": 4,
+    "option_not_noun_phrase": 8,
+    "option_case_mix": 6,
+    "option_number_mix": 2,
+    "answer_leak": 4,
+    "tf_copied_true": 5,
+    "tf_antonym_swap": 2
+   },
+   "flashcards": 2,
+   "per1000": 47.4,
+   "gold": {
+    "hit": 3,
+    "total": 16,
+    "pct": 18.8,
+    "missing": [
+     "ATP",
+     "glycolysis",
+     "pyruvate",
+     "NADH",
+     "acetyl-CoA",
+     "citric acid cycle",
+     "oxidative phosphorylation",
+     "ATP synthase",
+     "chemiosmosis",
+     "fermentation",
+     "feedback inhibition",
+     "mitochondria",
+     "phosphofructokinase"
+    ]
+   },
+   "guess": {
+    "n": 21,
+    "expected": 8.5,
+    "byChance": 7,
+    "accuracy": 40.5,
+    "chance": 33.3,
+    "tells": 7
+   }
+  },
+  {
+   "id": "psych-memory",
+   "kind": "text",
+   "words": 502,
+   "requested": 30,
+   "generated": 18,
+   "quiz": 8,
+   "test": 10,
+   "defective": 12,
+   "defectPct": 66.7,
+   "lints": {
+    "unresolved_reference": 3,
+    "option_not_noun_phrase": 2,
+    "option_case_mix": 2,
+    "tf_copied_true": 5,
+    "reused_option_set": 2
+   },
+   "flashcards": 2,
+   "per1000": 35.9,
+   "gold": {
+    "hit": 6,
+    "total": 24,
+    "pct": 25,
+    "missing": [
+     "retrieval",
+     "sensory memory",
+     "chunking",
+     "central executive",
+     "phonological loop",
+     "visuospatial sketchpad",
+     "episodic buffer",
+     "long-term memory",
+     "explicit memory",
+     "episodic memory",
+     "procedural memory",
+     "hippocampus",
+     "levels of processing",
+     "encoding specificity principle",
+     "forgetting curve",
+     "proactive interference",
+     "retroactive interference",
+     "misinformation effect"
+    ]
+   },
+   "guess": {
+    "n": 18,
+    "expected": 7.25,
+    "byChance": 5.75,
+    "accuracy": 40.3,
+    "chance": 31.9,
+    "tells": 5
+   }
+  },
+  {
+   "id": "econ-supply-demand",
+   "kind": "text",
+   "words": 507,
+   "requested": 30,
+   "generated": 25,
+   "quiz": 10,
+   "test": 15,
+   "defective": 25,
+   "defectPct": 100,
+   "lints": {
+    "thin_stem": 6,
+    "option_not_noun_phrase": 20,
+    "option_case_mix": 7,
+    "option_number_mix": 3,
+    "answer_length_tell": 2,
+    "answer_leak": 4,
+    "tf_copied_true": 3,
+    "tf_antonym_swap": 2,
+    "reused_option_set": 3
+   },
+   "flashcards": 1,
+   "per1000": 49.3,
+   "gold": {
+    "hit": 4,
+    "total": 20,
+    "pct": 20,
+    "missing": [
+     "law of demand",
+     "law of supply",
+     "normal good",
+     "inferior good",
+     "substitutes",
+     "complements",
+     "equilibrium price",
+     "shortage",
+     "invisible hand",
+     "price elasticity of demand",
+     "elastic",
+     "inelastic",
+     "price ceiling",
+     "price floor",
+     "deadweight loss",
+     "total surplus"
+    ]
+   },
+   "guess": {
+    "n": 25,
+    "expected": 9.5,
+    "byChance": 7.5,
+    "accuracy": 38,
+    "chance": 30,
+    "tells": 7
+   }
+  },
+  {
+   "id": "linalg-eigen",
+   "kind": "text",
+   "words": 500,
+   "requested": 30,
+   "generated": 17,
+   "quiz": 8,
+   "test": 9,
+   "defective": 11,
+   "defectPct": 64.7,
+   "lints": {
+    "thin_stem": 3,
+    "option_case_mix": 6,
+    "option_number_mix": 5,
+    "option_article_mismatch": 2,
+    "answer_leak": 3,
+    "tf_copied_true": 2
+   },
+   "flashcards": 4,
+   "per1000": 34,
+   "gold": {
+    "hit": 8,
+    "total": 17,
+    "pct": 47.1,
+    "missing": [
+     "characteristic equation",
+     "characteristic polynomial",
+     "null space",
+     "trace",
+     "determinant",
+     "diagonal matrix",
+     "linearly independent",
+     "symmetric matrix",
+     "orthogonal matrix"
+    ]
+   },
+   "guess": {
+    "n": 17,
+    "expected": 5.75,
+    "byChance": 4.75,
+    "accuracy": 33.8,
+    "chance": 27.9,
+    "tells": 2
+   }
+  },
+  {
+   "id": "os-scheduling",
+   "kind": "text",
+   "words": 526,
+   "requested": 30,
+   "generated": 23,
+   "quiz": 10,
+   "test": 13,
+   "defective": 18,
+   "defectPct": 78.3,
+   "lints": {
+    "option_not_noun_phrase": 3,
+    "option_case_mix": 11,
+    "answer_length_tell": 1,
+    "answer_leak": 5,
+    "tf_antonym_swap": 3,
+    "reused_option_set": 4
+   },
+   "flashcards": 10,
+   "per1000": 43.7,
+   "gold": {
+    "hit": 11,
+    "total": 19,
+    "pct": 57.9,
+    "missing": [
+     "non-preemptive scheduling",
+     "preemptive scheduling",
+     "first-come, first-served",
+     "convoy effect",
+     "shortest job first",
+     "starvation",
+     "priority scheduling",
+     "multilevel feedback queue"
+    ]
+   },
+   "guess": {
+    "n": 23,
+    "expected": 10.75,
+    "byChance": 6.5,
+    "accuracy": 46.7,
+    "chance": 28.3,
+    "tells": 8
+   }
+  },
+  {
+   "id": "history-french-rev",
+   "kind": "text",
+   "words": 494,
+   "requested": 30,
+   "generated": 8,
+   "quiz": 4,
+   "test": 4,
+   "defective": 6,
+   "defectPct": 75,
+   "lints": {
+    "thin_stem": 2,
+    "option_case_mix": 4,
+    "reused_option_set": 4
+   },
+   "flashcards": 2,
+   "per1000": 16.2,
+   "gold": {
+    "hit": 4,
+    "total": 19,
+    "pct": 21.1,
+    "missing": [
+     "Estates-General",
+     "Third Estate",
+     "National Assembly",
+     "Bastille",
+     "Declaration of the Rights of Man and of the Citizen",
+     "Civil Constitution of the Clergy",
+     "First Republic",
+     "Jacobins",
+     "Maximilien Robespierre",
+     "Committee of Public Safety",
+     "Reign of Terror",
+     "Girondins",
+     "Directory",
+     "Napoleon Bonaparte",
+     "Coup of 18 Brumaire"
+    ]
+   },
+   "guess": {
+    "n": 8,
+    "expected": 3.5,
+    "byChance": 2,
+    "accuracy": 43.8,
+    "chance": 25,
+    "tells": 2
+   }
+  },
+  {
+   "id": "notes-chem-bonding",
+   "kind": "text",
+   "words": 399,
+   "requested": 30,
+   "generated": 4,
+   "quiz": 2,
+   "test": 2,
+   "defective": 4,
+   "defectPct": 100,
+   "lints": {
+    "option_case_mix": 2,
+    "answer_length_tell": 2,
+    "answer_leak": 2,
+    "whole_block_stem": 4
+   },
+   "flashcards": 2,
+   "per1000": 10,
+   "gold": {
+    "hit": 1,
+    "total": 21,
+    "pct": 4.8,
+    "missing": [
+     "ionic bond",
+     "covalent bond",
+     "metallic bond",
+     "polar covalent",
+     "electronegativity",
+     "octet rule",
+     "lone pair",
+     "bonding pair",
+     "formal charge",
+     "resonance",
+     "VSEPR theory",
+     "trigonal planar",
+     "tetrahedral",
+     "London dispersion",
+     "dipole-dipole",
+     "hydrogen bond",
+     "bond energy",
+     "bond order",
+     "sigma bond",
+     "pi bond"
+    ]
+   },
+   "guess": {
+    "n": 4,
+    "expected": 0.5,
+    "byChance": 1,
+    "accuracy": 12.5,
+    "chance": 25,
+    "tells": 2
+   }
+  },
+  {
+   "id": "notes-networking",
+   "kind": "text",
+   "words": 423,
+   "requested": 30,
+   "generated": 2,
+   "quiz": 1,
+   "test": 1,
+   "defective": 2,
+   "defectPct": 100,
+   "lints": {
+    "option_case_mix": 2,
+    "whole_block_stem": 2
+   },
+   "flashcards": 1,
+   "per1000": 4.7,
+   "gold": {
+    "hit": 1,
+    "total": 31,
+    "pct": 3.2,
+    "missing": [
+     "OSI model",
+     "MAC address",
+     "IP address",
+     "IPv4",
+     "IPv6",
+     "subnet mask",
+     "default gateway",
+     "ARP",
+     "DHCP",
+     "DNS",
+     "NAT",
+     "TCP",
+     "UDP",
+     "port",
+     "socket",
+     "router",
+     "routing table",
+     "longest prefix match",
+     "static route",
+     "dynamic routing",
+     "OSPF",
+     "BGP",
+     "TTL",
+     "switch",
+     "VLAN",
+     "latency",
+     "bandwidth",
+     "throughput",
+     "MTU",
+     "ICMP"
+    ]
+   },
+   "guess": {
+    "n": 2,
+    "expected": 0.5,
+    "byChance": 0.5,
+    "accuracy": 25,
+    "chance": 25,
+    "tells": 0
+   }
+  }
+ ],
+ "total": {
+  "id": "TOTAL",
+  "documents": 10,
+  "words": 4639,
+  "requested": 300,
+  "generated": 167,
+  "quiz": 72,
+  "test": 95,
+  "defective": 129,
+  "defectPct": 77.2,
+  "lints": {
+   "thin_stem": 17,
+   "option_case_mix": 45,
+   "option_article_mismatch": 6,
+   "answer_length_tell": 6,
+   "answer_leak": 33,
+   "tf_copied_true": 17,
+   "tf_antonym_swap": 12,
+   "tf_double_antonym": 5,
+   "malformed_math": 1,
+   "reused_option_set": 25,
+   "unresolved_reference": 6,
+   "option_not_noun_phrase": 33,
+   "option_number_mix": 10,
+   "whole_block_stem": 6
+  },
+  "flashcards": 51,
+  "per1000": 36,
+  "gold": {
+   "hit": 64,
+   "total": 202,
+   "pct": 31.7
+  },
+  "guess": {
+   "n": 167,
+   "expected": 65,
+   "byChance": 49,
+   "accuracy": 38.9,
+   "chance": 29.3,
+   "tells": 43
+  }
+ }
+}

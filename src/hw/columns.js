@@ -11,7 +11,7 @@
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
 
   const MIN_GUTTER = 1.5; // narrowest gutter, in line heights (word gaps are well under one)
-  const MIN_ROWS = 4; // lines needed on each side
+  const MIN_ROWS = 3; // lines needed on each side (a short column of notes beside a longer one has three)
   const MIN_WIDE = 8; // typical width of a column's lines, in line heights (three or four words)
   const BAND = 0.2; // a gutter lies in the middle 60% of the written width
   const MAX_DEPTH = 1; // a column may itself be split once (three or four columns)
@@ -62,9 +62,12 @@
     const out = [];
     let plain = []; // boxes read across, as one block
     let zone = [];
+    // The gutter band tolerates a few boxes, so the longest line of a column may end inside it. Such a line
+    // still belongs to its column: only a box reaching past both edges of the band crosses it.
+    const mid = (g.g0 + g.g1) / 2;
     const flush = () => {
-      const left = zone.filter((b) => b.x + b.w <= g.g0 + 2);
-      const right = zone.filter((b) => b.x >= g.g1 - 2);
+      const left = zone.filter((b) => b.x + b.w / 2 < mid);
+      const right = zone.filter((b) => b.x + b.w / 2 >= mid);
       if (sideBySide(left, right, lineH)) {
         if (plain.length) out.push(plain);
         plain = [];
@@ -73,7 +76,7 @@
       zone = [];
     };
     for (const b of boxes.slice().sort((p, q) => p.y - q.y)) {
-      const crosses = b.x + b.w > g.g0 + 2 && b.x < g.g1 - 2;
+      const crosses = b.x < g.g0 - 2 && b.x + b.w > g.g1 + 2;
       if (!crosses) { zone.push(b); continue; }
       flush();
       plain.push(b);

@@ -1,0 +1,63 @@
+CHEM 101 - wk 4 - bonding
+
+Types of bonds
+ionic bond - transfer of e- from metal to nonmetal
+covalent bond - sharing of e- pairs between 2 nonmetals
+metallic bond - sea of delocalised e- around + ions
+polar covalent - unequal sharing bc diff in electronegativity
+electronegativity = ability of an atom to attract bonding e-
+- increases across a period
+- decreases down a group
+- F is highest (4.0)
+
+diff in EN > 1.7 -> ionic
+diff 0.4 to 1.7 -> polar covalent
+diff < 0.4 -> nonpolar
+
+Octet rule
+atoms gain/lose/share e- to get 8 valence e-
+exceptions:
+- H and He only need 2
+- B ok with 6
+- period 3+ can have expanded octet (eg SF6, PCl5)
+
+Lewis structures
+valence electrons - e- in outermost shell
+lone pair - pair of valence e- not shared
+bonding pair = shared pair
+formal charge = valence e- minus nonbonding e- minus 1/2 bonding e-
+resonance - when more than 1 valid Lewis structure, real molecule is avg (eg O3, benzene)
+
+VSEPR
+VSEPR theory: e- pairs around central atom repel so get as far apart as poss
+2 domains -> linear, 180
+3 domains -> trigonal planar, 120
+4 domains -> tetrahedral, 109.5
+4 domains w/ 1 lone pair -> trigonal pyramidal (NH3) 107
+4 domains w/ 2 lone pairs -> bent (H2O) 104.5
+lone pairs repel more than bonding pairs so angles get smaller
+
+Intermolecular forces (IMF)
+weakest to strongest
+London dispersion - temp dipoles, all molecules, bigger molecule = stronger
+dipole-dipole - between polar molecules
+hydrogen bond - H attached to N, O or F attracted to lone pair on another N/O/F
+stronger IMF -> higher bp and mp
+H bonding is why water bp is so high for its size
+
+Bond energy
+bond energy = energy needed to break 1 mol of a bond in gas phase
+breaking bonds endothermic, making bonds exothermic
+shorter bond -> stronger bond
+triple > double > single for strength
+bond order - no. of bonding pairs between 2 atoms
+
+Hybridisation
+sp3 - 4 domains
+sp2 - 3 domains
+sp - 2 domains
+sigma bond: head on overlap, 1st bond between any 2 atoms
+pi bond: sideways overlap of p orbitals, 2nd and 3rd bonds
+double bond = 1 sigma + 1 pi
+
+!! exam: be able to draw Lewis + predict shape + polarity

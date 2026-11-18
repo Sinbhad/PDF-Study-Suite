@@ -119,7 +119,10 @@
     const clean2d = (Array.isArray(rows) ? rows : []).filter((r) => Array.isArray(r) && r.some(hasContent));
     if (!clean2d.length) return '';
     const cols = Math.max(...clean2d.map((r) => r.length));
-    const cells = (r, tag, attr) => Array.from({ length: cols }, (_, c) => `<${tag}${attr}>${inline(r[c]) }</${tag}>`).join('');
+    // An operator cell ("~", "&", "|") has no letters but is the content of its row: shown as typed
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const cell = (v) => (hasContent(v) ? inline(v) : esc(clean(v)));
+    const cells = (r, tag, attr) => Array.from({ length: cols }, (_, c) => `<${tag}${attr}>${cell(r[c])}</${tag}>`).join('');
     const head = clean2d.length > 1 ? `<thead><tr>${cells(clean2d[0], 'th', ' scope="col"')}</tr></thead>` : '';
     const body = (head ? clean2d.slice(1) : clean2d).map((r) => `<tr>${cells(r, 'td', '')}</tr>`).join('');
     return `<div class="table-wrap"><table class="data-table">${head}<tbody>${body}</tbody></table></div>`;

@@ -129,3 +129,35 @@ Same 20 pages, tool and scoring as `docs/HANDWRITING-RESULTS.md`; "before" is th
 - One browser (Edge) on one Windows laptop. Timings were taken while other programs were running.
 - The print and column rules were tuned on these pages; there is no held-out set for scans.
 - No photographs of printed pages, no non-English text.
+
+## 4. Structure from real documents (2026-11-18)
+
+Five annotated lecture decks (whole) and seven textbook ranges (Big Java 222-238 and 358-375, Database
+Processing 188-210, Rosen 24-39 and 144-155, Logic and Computer Design 55-71 and 215-226), run with
+`tools/run-pdf.js`. "Before" is commit caa0c24.
+
+Notes-app handwriting text (invisible text, render mode 3) moved out of slide text:
+
+| Deck | Text items marked | Annotation lines | Slides with notes | Titles changed | Slides with bullets changed |
+| --- | --- | --- | --- | --- | --- |
+| Anti-Cest/Trem | 151 | 75 | 16 | 1 | 16 |
+| Nerve Blocks | 91 | 51 | 17 | 6 | 16 |
+| Neuro 2 | 117 | 55 | 19 | 8 | 36 |
+| LRT bacterial | 14 | 9 | 4 | 0 | 4 |
+| Spirochetes | 7 | 4 | 3 | 1 | 8 |
+
+Textbook ranges and block counts by kind (before: 0 blocks in every range):
+
+| Range | definition | theorem | example | proof | key-concept | sidebar | syntax | table rows | quarantined lines |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Big Java 222-238 | 0 | 0 | 1 | 0 | 7 | 9 | 1 | 5 | 33 |
+| Big Java 358-375 | 0 | 0 | 0 | 0 | 18 | 6 | 2 | 19 | 55 |
+| Database 188-210 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 14 | 85 |
+| Rosen 24-39 | 7 | 0 | 16 | 0 | 2 | 0 | 0 | 27 | 214 |
+| Rosen 144-155 | 9 | 1 | 21 | 1 | 1 | 0 | 0 | 0 | 127 |
+| Logic Design 55-71 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 27 | 53 |
+| Logic Design 215-226 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 31 |
+
+Slide tables (`slide.tables`): Anti-Cest/Trem 3, Spirochetes 6, Neuro 2 1 (before: 1 legacy grid in total).
+`tools/eval-text.js` (Larson ranges + samples): defect counts unchanged; scope lines 1267 -> 1265,
+exercise lines 1508 -> 1516. Sample PDFs: slide output unchanged, book scope text gains blank lines only.

@@ -2,6 +2,7 @@
  * STEM Garbage Gate: exercise prompts, answer keys, figure/example callouts, dangling-pronoun
  * fragments, biographical sidelines, structural labels ("Solution", "Proof", "Example 2") and orphan
  * formula fragments never become flashcards, quiz stems/options, summaries or test items.
+ * hasUnresolvedReference is the stricter check for a statement shown alone as a quiz stem or option.
  * Math spans ($...$) are masked first so their content never trips a prose rule.
  */
 (function (root) {
@@ -9,7 +10,7 @@
   const mt = () => PDFStudy.mathText || (typeof require === 'function' ? require('./math-text.js') : null);
 
   const IMPERATIVE =
-    'Find|Evaluate|Compute|Determine|Calculate|Sketch|Graph|Prove|Verify|Solve|Differentiate|Integrate|Simplify|' +
+    'Find|Evaluate|Compute|Determine|Calculate|Sketch|Graph(?=\\s+(?:the|a|an|each|both|X|y|f)\\b)|Prove|Verify|Solve|Differentiate|Integrate|Simplify|' +
     'Approximate|Estimate|Explain|Describe|Discuss|Identify|Complete|Rewrite|Write|Express|Classify|Analyze|' +
     'Implement|Trace|Draw|Construct|Give|List|Name|State|Justify|Compare|Plot|Decide|Test|Apply|Locate|Match|Answer|' +
     'Understand|Develop|Recognize|Use\\s+(?!of\\b)';
@@ -26,7 +27,7 @@
     /\banswers?\s+to\s+(?:odd|even|selected|all)\b|\bodd-numbered\b|\bsolutions?\s+to\s+(?:odd|even|selected)\b/i,
     /^(?:\d{1,3}\.\s+(?:[-−]?\d|\$|[a-z]\s*=)[^A-Za-z]{0,30}){2,}/, // "1. 3  3. -2  5. x = 4"
     /^(?:answer|ans)\s*[:.]|\bsample\s+answers?\b|\banswers?\s+will\s+vary\b/i,
-    /\s\d{1,3}\.\s*$/, // glued trailing exercise number ("... at x = 2 41.")
+    /(?:\d|[=)\]}]|X)\s+\d{1,3}\.\s*$/, // glued trailing exercise number ("... at x = 2 41."), not "has length 10."
   ];
   const CALLOUT_RES = [
     /\b(?:Figure|Fig\.|Table)\s*[A-Z]?\d|\bExample\s+\d+\b(?!\.)/i,
@@ -45,7 +46,7 @@
   const LABEL_WORDS =
     'Solution|Solutions|Proof|Remark|Remarks|Note|Notes|Check|Checkpoint|Exploration|Example|Examples|Step|Steps|' +
     'Theorem|Definition|Def|Defs|Rule|Rules|Lemma|Corollary|Proposition|Figure|Table|Exercise|Exercises|Answer|Answers|Hint|Summary|' +
-    'Review|Section|Chapter|Technology|Study\\s+Tip|Caution|Warning|Important|Key|Objectives?|Algorithm|Case|Part|' +
+    'Review|Section|Chapter|Technology|Study\\s+Tip|Caution|Warning|Important|Key\\s+(?:Ideas?|Points?|Concepts?|Terms?)|Objectives?|Algorithm|Case|Part|' +
     'Problem|Problems|Question|Questions|Introduction|Conclusion|Applications?|Concept\\s+Check|Writing\\s+About\\s+Concepts|' +
     'Base\\s+Cases?|Inductive\\s+(?:Step|Hypothesis)|Sample\\s+Answers?|Homework|Name|Points?|The|What|Which|How|Why|Given';
   const LABEL_RE = new RegExp(`^(?:${LABEL_WORDS})(?:\\s+(?:[A-Z]|\\d+)(?:\\.\\d+)*[a-z]?)?\\s*[.:]?$`, 'i');
@@ -117,6 +118,48 @@
     return isStemNoise(t);
   }
 
+  const POINTS_OUTSIDE_RE = new RegExp([
+    '\\b(?:as|see|shown|given|listed|described|mentioned|discussed|noted|defined|stated|the)\\s+(?:above|below)\\b',
+    '\\b(?:tables?|figures?|diagrams?|lists?|examples?|equations?|graphs?|charts?|steps?)\\s+(?:above|below)\\b',
+    '\\bthe\\s+following\\b',
+    '\\bas\\s+(?:shown|follows)\\b',
+    '\\bshown\\s+(?:in|here)\\b',
+    '\\b(?:arrows?|arrowheads?|asterisks?|circled|pictured|inset)\\b',
+    '\\b(?:Sections?|Chapters?|Figures?|Fig\\.|Tables?|Examples?|Appendix|Equations?|Eq\\.)\\s+[A-Z]?\\d',
+    '^As\\s+(?:stated|noted|mentioned|discussed|described|explained|seen|before|we\\s+(?:saw|said|have\\s+seen))\\b',
+  ].join('|'), 'i');
+  // "Alternatively, ...", "Otherwise ...", "In addition, ...": the line continues one the reader does not see.
+  const DISCOURSE_LINK_RE = /^(?:alternatively|otherwise|instead|conversely|likewise|similarly|additionally|furthermore|moreover|however|therefore|thus|hence|also|in\s+addition|on\s+the\s+other\s+hand|in\s+contrast)\b/i;
+  /** A quiz statement that opens on a link to the line before it ("Alternatively, ~25% ..."). */
+  const opensOnLink = (text) => DISCOURSE_LINK_RE.test(String(text || '').trim());
+  const DEMONSTRATIVE_RE = /\b(?:this|these|those)\b|\bsuch\s+(?!as\b|that\b)/i;
+  const THAT_NOUN_RE =
+    /(?:^|\b(?:in|of|at|for|by|from|with|on|to|during|after|before|under)\s+)that\s+(?!is\b|are\b|was\b|were\b|has\b|have\b|can\b|may\b|will\b|the\b|an?\b)[a-z]{3,}/i;
+  // "A very small one improves ...": "one" as the subject stands for a noun of the sentence before.
+  const OPENING_ONE_RE = /^(?:A|An|The)\s+(?:[a-z-]+\s+){0,2}ones?(?![\w-])(?!\s+of\b)/;
+  const PRONOUN_RE = /\b(?:it|they|them|its|their)\b/i;
+  const NOT_A_NOUN = new Set(('a an the and or but nor so yet if when while whereas because although though unless ' +
+    'until since whether of in on at by for from with to into onto over under between among through during ' +
+    'before after about against across along around per via within without than as is are was were be been ' +
+    'being has have had do does did can could will would shall should may might must not very only often ' +
+    'usually always never also then thus hence however therefore there here who whom whose which what').split(' '));
+
+  /**
+   * True when a statement shown on its own points at something the reader cannot see: "the table below",
+   * "this process", "such cells", "in that case", an arrow in a picture, or "it"/"they" with no noun
+   * before it in the same statement. Stricter than isDangling, which only reads the first word.
+   */
+  function hasUnresolvedReference(text) {
+    const s = prose(String(text || '').replace(/\*\*|__/g, '')).trim();
+    if (POINTS_OUTSIDE_RE.test(s) || DEMONSTRATIVE_RE.test(s) || THAT_NOUN_RE.test(s) || OPENING_ONE_RE.test(s)) return true;
+    const pronoun = s.match(PRONOUN_RE);
+    if (!pronoun) return false;
+    // "It is clear that ..." / "It follows that ...": an expletive, not a reference.
+    if (/^it\s+(?:follows|is\s+\w+\s+(?:to|that))\b/i.test(s.slice(pronoun.index))) return false;
+    const before = s.slice(0, pronoun.index).match(/[A-Za-z][A-Za-z'’-]*/g) || [];
+    return !before.some((w) => w === 'X' || (w.length >= 3 && !NOT_A_NOUN.has(w.toLowerCase()) && !/ly$/i.test(w)));
+  }
+
   /** Full gate for a standalone study sentence (quiz stem source, summary pick, definition back). */
   function isUnusableSentence(text) {
     const s = String(text || '').trim();
@@ -126,9 +169,65 @@
     return isStemNoise(s) || isDangling(s) || isFragment(s) || /\?\s*$/.test(s);
   }
 
+  // Extraction left-overs a question must not show (quiz and test only; isUnusableSentence stays the shared gate).
+  // A line-break hyphen kept ("tab char- acters", "rela- tion"), told from a dash after a label ("signs- let it run")
+  // by the scope printing the joined word, or else by a word ending left on the second line.
+  const SPLIT_WORD_RE = /\b([a-z]{2,})-\s+([a-z]{2,})\b/g;
+  // A short second half that is only a word ending ("tion", "dency", "ments"): the rest of a split word.
+  const WORD_ENDING_RE = /^[a-z]{0,3}(?:tion|sion|ment|ness|ing|ity|itie|ally|ence|ance|able|ible|ure|ous|ive|ated|ating|ized|ised|ency|ical|ular|ology)s?$/;
+  const MAX_ENDING_CHARS = 7;
+  function hasSplitWord(text, isWord) {
+    for (const [, a, b] of String(text || '').matchAll(SPLIT_WORD_RE)) {
+      if ((isWord && isWord(a + b)) || (b.length <= MAX_ENDING_CHARS && WORD_ENDING_RE.test(b))) return true;
+    }
+    // "Tion are called ...", "a run-time excep tion": the second half of a word split at a break, standing alone.
+    const first = (String(text || '').match(/^\s*([A-Za-z]+)\b/) || [])[1] || '';
+    if (first.length <= 4 && WORD_ENDING_RE.test(first.toLowerCase()) && !(isWord && isWord(first.toLowerCase()))) return true;
+    return /\b[a-z]{2,}\s+(?:tion|tions|sion|sions|ment|ments|ities)\b/.test(String(text || ''));
+  }
+  const DEBRIS_RES = [
+    /^(?:[A-Z]{2,}[,:]?\s+)+(?:AND\s+|OR\s+)?[A-Z]{2,}\s+[A-Z][a-z]/, // a run-in heading: "CONVERSE, ... AND INVERSE We can"
+    /(?:^|\s)([A-Z0-9][^\s,:;]*[/A-Z0-9][^\s,:;]*)\s+\1(?=[\s,:;.]|$)/, // a cell printed twice: "DK/NF DK/NF"
+    /[a-z,]\s+You\s+[a-z]/, // a table cell glued to the next one: "Error You cannot"
+  ];
+  const PROSE_PAIR_RE = /\b(?:is|in|it|the|and|of|if|then|for|are)\s+(?:is|in|it|the|and|of|if|then|for|are)\b/;
+  // Inside math a bare word of three letters or more that is no command ("\log") and no function name is prose
+  // swallowed by the formula ("$p\oplus q(orp$", "$Sis a$"), as is a bare "is", "the" or "and".
+  const MATH_FUNCTION_RE = /^(?:sin|cos|tan|sec|csc|cot|log|ln|exp|max|min|mod|gcd|lcm|lim|det|deg|dim|ker|sup|inf|arg|sgn)$/i;
+  const MATH_TEXT_RE = /\\(?:text|mathrm|operatorname|mathbf|mathit|mathsf|mathtt|textbf|textit)\s*\{[^}]*\}/g;
+  function proseInMath(part) {
+    const body = part.replace(MATH_TEXT_RE, ' ');
+    if (PROSE_PAIR_RE.test(body) || /(?:^|[^\\A-Za-z])(?:is|are|the|and|then|where)(?![A-Za-z])/.test(body)) return true;
+    return (body.match(/(?:^|[^\\A-Za-z])[A-Za-z]{3,}/g) || []).map((w) => w.replace(/^[^A-Za-z]/, '')).some((w) => !MATH_FUNCTION_RE.test(w));
+  }
+  /** Prose read as math: "$it is in 1NF$", "$Sis a$": a $...$ span holds running words. */
+  const wordsInMath = (text) => String(text || '').split('$').some((part, i) => i % 2 === 1 && proseInMath(part));
+  // A worked example's own talk: "if we assign the product to ...", "In the earlier example, ...", "values[i]".
+  const EXAMPLE_TALK_RE =
+    /\b(?:if|suppose)\s+we\b|\bwe\s+(?:would|could|might)\b|\b(?:in|from)\s+(?:the|this|that|our)\s+(?:(?:earlier|previous|last|above|first|second|next)\s+)?example\b|\b[A-Za-z_]\w*\[[^\]\s]{1,8}\]/i;
+  // "THE EMPTY SET There is a special set ...": a run-in heading set in capitals before the sentence.
+  const RUN_IN_HEADING_RE = /^(?:[A-Z][A-Z'’-]+[,:]?\s+)*[A-Z][A-Z'’-]+[,:]?\s+(?=[A-Z][a-z])/;
+
+  /** The sentence without a run-in heading in capitals ("NAIVE SET THEORY Note that ..." -> "Note that ..."). */
+  function stripRunInHeading(text) {
+    const s = String(text || '');
+    const m = s.match(RUN_IN_HEADING_RE);
+    // Two capitalised words at least: "PCR Testing is ..." keeps its acronym.
+    return m && m[0].trim().split(/\s+/).length >= 2 ? s.slice(m[0].length) : s;
+  }
+
+  /**
+   * Does the text carry extraction debris (a kept line-break hyphen, a run-in heading, a doubled cell, words read
+   * as math)? isWord (optional): does the scope print this word, to recognise "char- acters" as "characters".
+   */
+  const hasExtractionDebris = (text, isWord) => DEBRIS_RES.some((re) => re.test(String(text || ''))) || wordsInMath(text) || hasSplitWord(text, isWord);
+  /** Does the sentence narrate a worked example rather than state a fact? */
+  const isExampleTalk = (text) => EXAMPLE_TALK_RE.test(String(text || ''));
+
   const api = {
     isExercisePrompt, isAnswerKey, isAnswerKeySection, isCallout, isBiographical, isDangling, isFragment,
-    isStemNoise, isLabelTerm, isUnusableSentence,
+    isStemNoise, isLabelTerm, isUnusableSentence, hasUnresolvedReference, hasExtractionDebris, isExampleTalk, stripRunInHeading,
+    opensOnLink,
   };
   PDFStudy.stemNoise = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

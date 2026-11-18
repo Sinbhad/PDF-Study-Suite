@@ -18,15 +18,20 @@ TARBALLS = [
       ("package/dist/ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.mjs", True, None),
       ("package/dist/ort-wasm-simd-threaded.jsep.wasm", "ort-wasm-simd-threaded.jsep.wasm", False, None),
       ("package/LICENSE", "LICENSE-transformers.txt", True, None)]),
-    # Same onnxruntime-web build as the .wasm above. Its small ESM loader runs the PP-OCR models directly.
+    # Same onnxruntime-web build as the .wasm above. Its small ESM loader runs the PP-OCR models directly, and with
+    # --ppocr-only this tarball alone supplies the whole runtime (loader, .mjs glue and .wasm).
+    # The tarball carries no LICENSE file (the fetch script reported it missing on a real run), so that member is
+    # optional; package.json, which every npm tarball has, is kept instead: it states the version and the licence.
     ("onnxruntime-web 1.22.0-dev.20250409-89f8206ba4",
      "https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.22.0-dev.20250409-89f8206ba4.tgz",
      "sha512-0uS76OPgH0hWCPrFKlL8kYVV7ckM7t/36HfbgoFw6Nd0CZVVbQC4PkrR8mBX8LtNUFZO25IQBqV2Hx2ho3FlbQ==",
      400,
      [("package/dist/ort-wasm-simd-threaded.jsep.wasm", "ort-wasm-simd-threaded.jsep.wasm", True, None),
+      ("package/dist/ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.mjs", True, None),
       ("package/dist/ort.wasm.min.mjs", "ort.wasm.min.mjs", True,
        "0cb5ac5be2c414d5b9e361f857108630c6d6e24a5ab9be3cf5f761de55289e94"),
-      ("package/LICENSE", "LICENSE-onnxruntime.txt", True, None)]),
+      ("package/package.json", "onnxruntime-web.package.json", True, None),
+      ("package/LICENSE", "LICENSE-onnxruntime.txt", False, None)]),
 ]
 MAX_MEMBER_MB = 150
 

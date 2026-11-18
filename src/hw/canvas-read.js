@@ -56,12 +56,18 @@
 
   const round1 = (v) => Math.round(v * 10) / 10;
 
-  /** Page result (the shape ocr-lines.js reads) from lines in overview pixels, already in reading order. */
+  /**
+   * Page result (the shape ocr-lines.js reads) from lines in overview pixels. The reading order is worked out
+   * on `box`; a line of a crooked page also carries `pageBox`, its rectangle on the page as given, and that is
+   * the box the result reports.
+   */
   function toResult(shot, pageNumber, placed) {
     const order = mod('hwCanvasOrder', './canvas-order.js').arrange(placed);
     const lines = order.lines.map((l, index) => {
-      const box = { x: round1(l.box.x), y: round1(l.box.y), w: round1(l.box.w), h: round1(l.box.h) };
+      const src = l.pageBox || l.box;
+      const box = { x: round1(src.x), y: round1(src.y), w: round1(src.w), h: round1(src.h) };
       const region = { id: `p${pageNumber}-l${index}-r0`, kind: 'text', box, text: l.text, confidence: l.confidence, source: 'model' };
+      if (l.pageBox) region.size = { w: round1(l.box.w), h: round1(l.box.h) };
       if (l.stats) region.stats = l.stats;
       return { index, box, cluster: l.cluster, group: l.group, regions: [region] };
     });
@@ -69,11 +75,22 @@
   }
 
   /**
+   * Where a line read from a turned tile lies once the whole page is level: its own size (`size`), centred on
+   * the page-box centre carried into the page's upright frame. Lines of every tile then share one level space,
+   * so the reading order sees straight rows and columns.
+   */
+  function levelBox(pageFrame, pageBox, size) {
+    const c = pageFrame.toFrame(pageBox.x + pageBox.w / 2, pageBox.y + pageBox.h / 2);
+    return { x: c.x - size.w / 2, y: c.y - size.h / 2, w: size.w, h: size.h };
+  }
+
+  /**
    * Read a surveyed canvas page. A cancel rejects with the AbortError from the client; the tiles read so far
    * ride along as err.partial.
    * @param {{page:object, scale:number, width:number, height:number}} shot from renderOverview
    * @param {object} survey from hwCanvasPlan.survey
-   * @param {{pageNumber:number, client:object, onProgress?:function, isCancelled?:function, renderTile?:function}} o
+   * @param {{pageNumber:number, client:object, angle?:number, onProgress?:function, isCancelled?:function, renderTile?:function}} o
+   *   angle: slope of the page's text lines in degrees (skew-angle.js); every tile is read turned level by it
    * @returns {Promise<object>} page result with layout 'canvas'; result.engine is the tile reader's info
    */
   async function readPage(shot, survey, o) {
@@ -82,19 +99,33 @@
     const drawTile = o.renderTile || PDFStudy.hwCanvasRead.renderTile;
     const placed = [];
     let engine = null;
-    const finish = () => Object.assign(toResult(shot, o.pageNumber, placed), { tiles: rects.length, engine });
+    const turn = mod('hwPageTurn', './page-turn.js');
+    const angle = turn && turn.needsTurn(o.angle) ? turn.fold(o.angle) : 0;
+    const pageFrame = angle ? turn.frame(shot.width, shot.height, angle) : null;
+    const finish = () => {
+      const result = Object.assign(toResult(shot, o.pageNumber, placed), { tiles: rects.length, engine });
+      if (angle) result.angle = angle;
+      return result;
+    };
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
       try {
         if (o.isCancelled && o.isCancelled()) throw Object.assign(new Error('Recognition cancelled'), { name: 'AbortError' });
         const tile = await drawTile(shot.page, shot.scale, rect);
-        const read = await o.client.readTile({ pageNumber: o.pageNumber, rgba: tile.rgba, width: tile.width, height: tile.height, lineHeight: survey.lineHeight * rect.zoom });
+        const job = { pageNumber: o.pageNumber, rgba: tile.rgba, width: tile.width, height: tile.height, lineHeight: survey.lineHeight * rect.zoom };
+        if (angle) job.angle = angle;
+        const read = await o.client.readTile(job);
         engine = read.engine || engine;
         if (engine && engine.available === false) break; // the tile reader is not installed: nothing will be read
         for (const l of read.lines) {
           if (!l || !l.box || !String(l.text || '').trim()) continue;
           const box = { x: rect.x + l.box.x / rect.zoom, y: rect.y + l.box.y / rect.zoom, w: l.box.w / rect.zoom, h: l.box.h / rect.zoom };
-          placed.push({ box, text: l.text, confidence: l.confidence, stats: l.stats });
+          const line = { box, text: l.text, confidence: l.confidence, stats: l.stats };
+          if (pageFrame && l.size) {
+            line.pageBox = box;
+            line.box = levelBox(pageFrame, box, { w: l.size.w / rect.zoom, h: l.size.h / rect.zoom });
+          }
+          placed.push(line);
         }
       } catch (err) {
         if (err && err.name === 'AbortError' && placed.length) err.partial = Object.assign(finish(), { partial: true });

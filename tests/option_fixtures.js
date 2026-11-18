@@ -59,8 +59,8 @@
     for (const [label, text] of [['bio', bioSection], ['calc', CALC_SECTION]]) {
       const words = new Set(text.toLowerCase().replace(/\*\*/g, '').match(/[a-z][a-z'-]*/g) || []);
       const count = (w) => (text.toLowerCase().match(new RegExp(`\\b${w}\\b`, 'g')) || []).length;
-      const opts = [0, 1, 2].flatMap((seed) => S.quizEngine.generateQuiz(text, { maxQuestions: 10, seedOffset: seed })
-        .filter((q) => q.type !== 'true_false').flatMap((q) => q.options));
+      const quizzes = [0, 1, 2].map((seed) => S.quizEngine.generateQuiz(text, { maxQuestions: 10, seedOffset: seed }));
+      const opts = quizzes.flatMap((quiz) => quiz.filter((q) => q.type !== 'true_false').flatMap((q) => q.options));
       const truncated = opts.filter((o) => {
         const last = (o.toLowerCase().match(/[a-z][a-z'-]*/g) || []).pop();
         return last && (!words.has(last) || last === 'diver');
@@ -72,7 +72,15 @@
       check(`[${label}] no cross-phrase compound options`, crossOpts.length === 0, crossOpts.join(' | '));
       const generic = opts.filter((o) => /^[a-z]+$/.test(o) && (GENERIC_SINGLES.has(o) || count(o) < 2));
       check(`[${label}] no generic one-off single-word options`, generic.length === 0, generic.join(' | '));
-      check(`[${label}] options still produced`, opts.length >= 4, `${opts.length} options`);
+      // The bio section defines three terms, so every seed asks something. The calc section is a list of
+      // traps (captions, units, glued lines) around two terms of one kind and one theorem: too few
+      // siblings for a sound option set, so asking nothing there is the right outcome.
+      if (label === 'bio') {
+        check('[bio] every seed still asks questions', quizzes.every((quiz) => quiz.length >= 1), quizzes.map((quiz) => quiz.length).join(','));
+      }
+      const mixed = quizzes.flat().filter((q) => q.type !== 'true_false' && q.options.length &&
+        new Set(q.options.map((o) => /^[A-Z]/.test(o))).size > 1 && !q.options.some((o) => /^[A-Z]{2,}/.test(o)));
+      check(`[${label}] one leading case per option set`, mixed.length === 0, mixed.map((q) => q.options.join('/')).join(' | '));
     }
   }
 

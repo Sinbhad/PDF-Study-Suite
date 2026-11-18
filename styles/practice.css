@@ -77,11 +77,13 @@
 .q-verdict { font: 600 var(--fs-md)/1.3 var(--font-ui); color: var(--danger); }
 .q-feedback.is-ok .q-verdict { color: var(--success); }
 .q-feedback .prose { margin-top: var(--sp-2); font-size: 1rem; line-height: 1.6; color: var(--text-soft); }
-.q-feedback .page-jump { display: inline-block; margin-top: var(--sp-2); }
+.q-feedback .page-jump { margin-top: var(--sp-2); }
 .q-grade { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); }
 .q-grade .label { color: var(--text-muted); margin-right: var(--sp-1); }
 .btn-got[aria-pressed="true"] { background: var(--success-soft); color: var(--success); border-color: var(--success); }
 .btn-missed[aria-pressed="true"] { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+/* Once graded the buttons lock, but the grade the student gave stays readable */
+.q-grade .btn[aria-pressed="true"]:disabled { opacity: 1; }
 .q-nav { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-5); }
 .q-status { color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .q-progress { margin-bottom: var(--sp-5); }
@@ -104,4 +106,58 @@
   .fc-front .prose.is-long { font-size: var(--fs-lg); }
   .q-prompt.prose { font-size: var(--fs-lg); }
   .fc-nav .btn { min-width: 0; flex: 1 1 0; padding: 0 var(--sp-2); }
+}
+
+/* Keep-it controls: card edit form, review answers, undo, restore, "Bad question", last result, due badge */
+.act { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; }
+.act-danger { color: var(--danger); }
+.fc-links-deck { margin-top: var(--sp-2); }
+.fc-restore { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-5); margin-top: var(--sp-5); color: var(--text-muted); font-size: var(--fs-sm); }
+
+.fc-nav-review { justify-content: center; }
+.fc-nav-review #fcShowBtn { min-width: 12rem; }
+.fc-nav .fc-grade { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 2px; height: auto; min-height: 44px; padding: var(--sp-1) var(--sp-2); }
+.fc-grade-when { color: var(--text-muted); font-weight: 400; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+
+.fc-form { display: grid; gap: var(--sp-2); padding: var(--sp-5); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+.fc-form-title { margin-bottom: var(--sp-1); font: 600 var(--fs-xl)/1.3 var(--font-head); }
+.fc-form .label { margin-top: var(--sp-2); color: var(--text-muted); }
+.fc-textarea { height: auto; min-height: 5rem; padding: var(--sp-2) var(--sp-3); font: 400 1rem/1.5 var(--font-read); resize: vertical; }
+.fc-textarea[aria-invalid="true"] { border-color: var(--danger); }
+.fc-form-hint { color: var(--text-muted); font-size: var(--fs-sm); }
+.fc-form-error { color: var(--danger); font-size: var(--fs-sm); font-weight: 600; }
+.fc-form-error:empty { display: none; }
+.fc-form-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+
+/* Undo: in the flow under the card; pinned like the status line on question lists, which scroll */
+.undo-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--r-md); font-size: var(--fs-sm); color: var(--text);
+}
+.undo-bar.is-floating {
+  position: fixed; left: 50%; bottom: var(--sp-5); transform: translateX(-50%); z-index: 60; margin: 0;
+  width: max-content; max-width: min(34rem, calc(100vw - 32px)); box-shadow: var(--shadow-1);
+}
+.undo-text { min-width: 0; }
+.undo-bar .btn { flex: 0 0 auto; }
+
+.q-head { flex-wrap: wrap; }
+.q-head .badge { margin-left: auto; }
+.q-bad { color: var(--text-muted); font-weight: 500; }
+.last-time {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: calc(-1 * var(--sp-2)) 0 var(--sp-4);
+  color: var(--text-soft); font-size: var(--fs-sm); font-variant-numeric: tabular-nums;
+}
+.tab-due {
+  padding: 2px 6px; border-radius: var(--r-pill); background: var(--primary-soft); color: var(--primary);
+  font: 600 0.6875rem/1.2 var(--font-ui); font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 600px) {
+  .fc-form { padding: var(--sp-4); }
+  .fc-form-actions .btn { flex: 1 1 0; }
+}
+@media print {
+  .undo-bar, .q-bad, .last-time button, .fc-restore { display: none !important; }
 }

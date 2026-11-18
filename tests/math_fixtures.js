@@ -135,11 +135,56 @@
       /\$O\(x\^\{n\}\)\.\$$/.test(slidePoly[0].formattedText), slidePoly[0].formattedText);
   }
 
+  /** Complement bars drawn as short rules over letters (synthetic geometry: letters 0.65em wide). */
+  function checkComplements(S, check) {
+    const text = (ls) => ls.map((l) => l.text).join(' | ');
+    // Prose: the previous line sits just above the bar but runs far past it, so it is no numerator
+    const prose = lines(S, [
+      it('two inputs and two useful states. When the', 72, 100, 'r', 10, 228),
+      it('latch holds 1,', 72, 112, 'r', 10, 60), it('Q', 136, 112, 'i', 10, 7), it('= 1 and', 146, 112, 'r', 10, 32),
+      it('Q', 181, 112, 'i', 10, 7), it('= 0 in the set state.', 191, 112, 'r', 10, 86),
+    ], [{ x0: 181.1, x1: 187.9, y: 103.6 }]);
+    check('bar under a line of prose -> Q\' (the line above is not a numerator)', prose.length === 2 && /Q = 1 and Q' = 0/.test(prose[1].text), text(prose));
+    // Two table rows: a bar over the lower row's second X lies between the rows
+    const rows = lines(S, [
+      it('X', 93, 200, 'i', 9, 6.5), it('+', 104, 200, 'r', 9, 5), it('X', 113.6, 200, 'i', 9, 6.5), it('=', 124, 200, 'r', 9, 5), it('X', 134, 200, 'i', 9, 6.5),
+      it('X', 93, 211.6, 'i', 9, 6.5), it('+', 104, 211.6, 'r', 9, 5), it('X', 113.6, 211.6, 'i', 9, 6.5), it('=', 124, 211.6, 'r', 9, 5), it('1', 134, 211.6, 'r', 9, 4.5),
+    ], [{ x0: 113.8, x1: 120, y: 204.1 }]);
+    check('bar between two table rows is a complement, not a fraction', rows.length === 2 && rows[0].text === 'X + X = X' && rows[1].text === "X + X' = 1", text(rows));
+    // A double bar is two strokes about a point apart: X̿
+    const dbl = lines(S, [it('X', 93, 300, 'i', 9, 6.5), it('=', 104, 300, 'r', 9, 5), it('X', 113, 300, 'i', 9, 6.5)],
+      [{ x0: 93.2, x1: 99.4, y: 291.6 }, { x0: 93.2, x1: 99.4, y: 292.5 }]);
+    check('double bar -> X\'\' = X', dbl.length === 1 && dbl[0].text === "X'' = X", text(dbl));
+    // One item "XY" with the bar over its Y only
+    const part = lines(S, [it('XY', 150, 400, 'i', 10, 13), it('+', 167, 400, 'r', 10, 5), it('XY', 176, 400, 'i', 10, 13)], [{ x0: 182.6, x1: 189, y: 391.8 }]);
+    check('bar over part of one item is cut at a glyph boundary -> XY + XY\'', part.length === 1 && part[0].text === "XY + XY'", text(part));
+    // A bar over X + Y with an operator under it
+    const sum = lines(S, [it('X', 100, 500, 'i', 10, 7), it('+', 111, 500, 'r', 10, 5.5), it('Y', 120, 500, 'i', 10, 7), it('= 1', 131, 500, 'r', 10, 14)],
+      [{ x0: 100.2, x1: 126.8, y: 491.7 }]);
+    check('bar over X + Y -> (X + Y)\'', sum.length === 1 && /^\(X \+ Y\)' = 1$/.test(sum[0].text) && /\\overline\{X \+ Y\}/.test(sum[0].formattedText), `${text(sum)} ${fmt(sum)}`);
+    // A bar that ends mid-glyph cannot be placed: the letters are marked damaged, never printed bare
+    const lost = lines(S, [it('XYZ', 150, 600, 'i', 10, 19.5), it('= 1', 172, 600, 'r', 10, 14)], [{ x0: 153.3, x1: 166.3, y: 591.8 }]);
+    check('unplaceable bar marks its letters as damaged (¿)', lost.length === 1 && /¿/.test(lost[0].text), text(lost));
+    // A function-table header over its rule is no fraction: S R Q Q̄ / 1 0 1 0 Set state
+    const table = lines(S, [
+      it('S', 290, 700, 'i', 8, 4.4), it('R', 300, 700, 'i', 8, 6), it('Q', 318, 700, 'i', 8, 6.7), it('Q', 330, 700, 'i', 8, 6.7),
+      it('1', 290, 712, 'r', 8, 4), it('0', 300, 712, 'r', 8, 4), it('1', 318, 712, 'r', 8, 4), it('0', 330, 712, 'r', 8, 4), it('Set state', 344, 712, 'r', 8, 33),
+    ], [{ x0: 330.5, x1: 336.4, y: 692.6 }, { x0: 286, x1: 390, y: 706 }]);
+    check('function-table header and row stay rows; the header Q gets its bar', table.length === 2 && table[0].text === "S R Q Q'" && /^1 0 1 0 Set state$/.test(table[1].text), text(table));
+    const G = S.mathGlyphs;
+    check('MATHPRO narrow 0x23 is the AND dot; inverted ? and ! are AND / OR wedges',
+      G.decodeChar('#', G.familyInfo('PearsonMATHPRO02'), 'numbersign') === '⋅' && G.decodeChar('¿', G.familyInfo('PearsonMATHPRO18'), 'questiondown') === '∧' &&
+      G.decodeChar('¡', G.familyInfo('PearsonMATHPRO18'), 'exclamdown') === '∨');
+    check('STIX calligraphic capital P (power set) decodes from its private-use name', G.decodeChar('\u0004', G.familyInfo('ABCDEF+STIXMathCalligraphy-Regular'), 'uniE23C') === '𝒫' &&
+      S.mathTex.texOf('𝒫(S)') === '\\mathcal{P}(S)', S.mathTex.texOf('𝒫(S)'));
+    check('STIXGeneral is a text face, not a math font', !G.familyInfo('AAAAJV+STIXGeneral-Regular').isMath && G.familyInfo('AAAABF+STIXMath-Regular').isMath);
+  }
+
   function runMathChecks() {
     const S = load();
     const results = [];
     const check = (name, ok, detail = '') => results.push({ name: `[math] ${name}`, ok: Boolean(ok), detail });
-    [checkGlyphs, checkScripts, checkFraction, checkOperators, checkCodeAndProse, checkComplex2D].forEach((fn) => {
+    [checkGlyphs, checkScripts, checkFraction, checkOperators, checkCodeAndProse, checkComplex2D, checkComplements].forEach((fn) => {
       try {
         fn(S, check);
       } catch (err) {

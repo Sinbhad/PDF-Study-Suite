@@ -1,6 +1,8 @@
 /**
- * Handwriting model engine: Transformers.js 3.8.1 + Xenova/trocr-small-handwritten on WASM (one thread), all from
- * vendor/hw/ on the app's own origin. Full-precision encoder + 8-bit decoder (measured clearly more accurate
+ * Handwriting model engine: Transformers.js 3.8.1 + Xenova/trocr-small-handwritten on WASM, all from vendor/hw/ on
+ * the app's own origin. One thread, or a few where the page is cross-origin isolated (wasm-threads.js); the
+ * threaded path has not been run with this model. Optional: without it PP-OCR reads every page.
+ * Full-precision encoder + 8-bit decoder (measured clearly more accurate
  * than all 8-bit, somewhat slower on one thread); an older install with only the 8-bit encoder still loads, all 8-bit. Each crop is stretched to
  * the model's 384x384 input here (engine-util.js prepareCrop), so the library does not resize again.
  * Checked against the real files in a real browser with tools/smoke-handwriting.js (docs/HANDWRITING.md
@@ -116,7 +118,8 @@
       env.backends.onnx = env.backends.onnx || {};
       const wasm = (env.backends.onnx.wasm = env.backends.onnx.wasm || {});
       wasm.wasmPaths = new URL('vendor/hw/', root0).href;
-      wasm.numThreads = 1;
+      // one thread unless the page is cross-origin isolated (wasm-threads.js)
+      wasm.numThreads = PDFStudy.hwWasmThreads ? PDFStudy.hwWasmThreads.count(root) : 1;
       wasm.proxy = false;
     }
 

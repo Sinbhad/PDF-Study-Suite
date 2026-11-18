@@ -159,19 +159,21 @@ async function engineTests() {
 function ocrTests() {
   const ocr = src('pdf', 'ocr-lines.js');
   const reg = (id, kind, x, text, confidence) => ({ id, kind, box: { x, y: 0, w: 200, h: 30 }, text, confidence, source: 'model' });
+  // long enough that the unsure pieces stay under the page-level hold (ocr-merge.js PAGE_HOLD_LOW_SHARE)
+  const TRUSTED = 'Trusted words here that outweigh the unsure pieces on this page';
   const result = { pageNumber: 2, scale: 1, width: 600, height: 800, lines: [
-    { index: 0, box: { x: 0, y: 0, w: 600, h: 30 }, regions: [reg('p2-l0-r0', 'text', 0, 'Trusted words here', 0.9), reg('p2-l0-r1', 'text', 300, 'garbled bit', 0.4)] },
+    { index: 0, box: { x: 0, y: 0, w: 600, h: 30 }, regions: [reg('p2-l0-r0', 'text', 0, TRUSTED, 0.9), reg('p2-l0-r1', 'text', 300, 'garbled bit', 0.4)] },
     { index: 1, box: { x: 0, y: 60, w: 600, h: 30 }, regions: [reg('p2-l1-r0', 'text', 0, 'Whole line unsure', 0.5)] },
     { index: 2, box: { x: 0, y: 120, w: 600, h: 30 }, regions: [reg('p2-l2-r0', 'math', 0, 'x^2', 0.3)] },
   ] };
   const page = { pageNumber: 2, width: 600, height: 800, lines: [], ink: { needsRecognition: true } };
   ocr.applyToPage(page, result);
-  check('ocr: unconfirmed low pieces are left out of the page lines', page.lines.length === 1 && page.lines[0].text === 'Trusted words here' && page.wordCount === 3, JSON.stringify(page.lines.map((l) => l.text)));
+  check('ocr: unconfirmed low pieces are left out of the page lines', page.lines.length === 1 && page.lines[0].text === TRUSTED && page.wordCount === 11, JSON.stringify(page.lines.map((l) => l.text)));
   check('ocr: low pieces stay in the result for review', ocr.lowConfidence(page).map((r) => r.id).join() === 'p2-l0-r1,p2-l1-r0,p2-l2-r0');
   check('ocr: includeLow returns everything (diagnostics)', ocr.toPageLines(result, page, { includeLow: true }).length === 3);
   ocr.applyCorrection(page, 'p2-l1-r0', 'Whole line unsure'); // "Looks right" ticked: same text, confirmed
   ocr.applyCorrection(page, 'p2-l0-r1', 'fixed bit');
-  check('ocr: confirmed and corrected pieces become study text', page.lines.map((l) => l.text).join('|') === 'Trusted words here fixed bit|Whole line unsure' && page.lines.every((l) => !l.ocr.low), JSON.stringify(page.lines.map((l) => l.text)));
+  check('ocr: confirmed and corrected pieces become study text', page.lines.map((l) => l.text).join('|') === `${TRUSTED} fixed bit|Whole line unsure` && page.lines.every((l) => !l.ocr.low), JSON.stringify(page.lines.map((l) => l.text)));
   check('ocr: only the unconfirmed math piece is still listed', ocr.lowConfidence(page).length === 1 && ocr.LOW_CONFIDENCE === 0.6);
 }
 

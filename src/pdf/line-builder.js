@@ -54,6 +54,7 @@
       });
     }
 
+    joinZeroWidthSpaces(rawSpans);
     const fb = need('formulaBuilder', './formula-builder.js');
     if (fb) rawSpans = fb.collapse(rawSpans, opts.rules || []);
 
@@ -70,6 +71,29 @@
       }
     });
     return main.concat(margin);
+  }
+
+  /**
+   * Monospace runs keep a former line-break position as a space that takes no room ("dou ble" drawn as
+   * "double"). In a fixed-pitch font every glyph has the same advance, so a run whose width only fits its
+   * non-space glyphs has zero-width spaces: they are removed. The pitch is the median of the page's
+   * space-free code runs (needs MIN_PITCH_SAMPLES of them).
+   */
+  const MIN_PITCH_SAMPLES = 3;
+  const PITCH_SLACK = 0.3; // glyph advances of tolerance before a space is counted as real
+
+  function joinZeroWidthSpaces(spans) {
+    // Advance per glyph as a share of the font size, so runs of different sizes share one pitch
+    const pitches = spans.filter((s) => s.isCode && !/\s/.test(s.text) && s.text.length >= 3 && s.x1 > s.x0 && s.fontSize)
+      .map((s) => (s.x1 - s.x0) / s.text.length / s.fontSize).sort((a, b) => a - b);
+    if (pitches.length < MIN_PITCH_SAMPLES) return;
+    const pitch = pitches[Math.floor(pitches.length / 2)];
+    for (const s of spans) {
+      if (!s.isCode || !s.fontSize || !/\S \S/.test(s.text.trim())) continue;
+      const t = s.text.trim();
+      const spaces = (t.match(/ /g) || []).length;
+      if (s.x1 - s.x0 <= (t.length - spaces + PITCH_SLACK) * pitch * s.fontSize) s.text = s.text.replace(/(\S) (?=\S)/g, '$1');
+    }
   }
 
   /**
@@ -94,6 +118,31 @@
       out.splice(out.indexOf(host), 1, left, right);
     }
     return out;
+  }
+
+  /**
+   * line.segments: runs of one row separated by a horizontal gap wider than CELL_GAP x body size, i.e. the
+   * cells of a table row ("T   F   T") or side-by-side items. Present only when a row has 2+ such runs.
+   * [{ text, x0, x1, fontSize }] in reading order; table-grid.js aligns them into columns.
+   */
+  const CELL_GAP = 1.5;
+
+  function cellSegments(spans, bodySize) {
+    const gap = Math.max(4, (bodySize || 10) * CELL_GAP);
+    const segs = [];
+    for (const s of spans) {
+      const t = String(s.tex ? `$${s.tex}$` : s.text || '').trim();
+      if (!t) continue;
+      const last = segs[segs.length - 1];
+      // A bullet glyph set apart from its text is that item's marker, never a cell of its own
+      const afterMarker = last && /^[•▪▸◦‣⁃∙◆◇➢➣➤✦✧❖■□●○]$/.test(last.text);
+      if (last && (s.x0 - last.x1 <= gap || afterMarker)) {
+        last.text = `${last.text} ${t}`;
+        last.x1 = Math.max(last.x1, s.x1);
+        last.fontSize = Math.max(last.fontSize, s.fontSize || 0);
+      } else segs.push({ text: t, x0: s.x0, x1: s.x1, fontSize: s.fontSize || 0 });
+    }
+    return segs.length >= 2 ? segs : null;
   }
 
   /** Groups one region's spans into baseline rows and formats each row as a line object. */
@@ -134,7 +183,9 @@
       const x0 = group.spans[0].x0;
       const textX0 = group.spans.length > 1 && BULLET_RE.test(group.spans[0].text.trim() + ' ') ? group.spans[1].x0 : x0;
       const body = group.spans.filter((s) => s.fontSize > group.bodySize * 0.82);
+      const segments = cellSegments(group.spans, group.bodySize);
       lines.push({
+        ...(segments ? { segments } : {}),
         text: trimmed, formattedText, cleanText: trimmed.replace(BULLET_RE, '').trim(),
         x0, textX0, x1: Math.max(...group.spans.map((s) => s.x1)),
         topY: Math.min(...group.spans.map((s) => s.topY)),

@@ -150,8 +150,13 @@ async function pipelineTests() {
   const client2 = src('hw', 'hw-client.js').create({ workerFactory: S.fakeWorkerFactory(eng, S.newStats()) });
   const r4 = await pipe.ensureRecognised(doc2, 1, 2, { client: client2, signal: ac2.signal, renderPage: async () => rowsPage(4) });
   const p1 = doc2.pageCache.get(1);
-  check('pipeline: cancel mid-page applies the partial page', r4.cancelled === true && p1.ink.recognised === true && p1.lines.length === 2, `${JSON.stringify(r4)} lines ${p1.lines.length}`);
-  check('pipeline: unread page skipped, stats.skipped === 1', doc2.pageCache.get(2).ink.skipped === true && r4.skipped === 1 && !p1.ink.skipped, JSON.stringify(r4));
+  check('pipeline: cancel mid-page puts the lines already read on the page', r4.cancelled === true && p1.lines.length === 2, `${JSON.stringify(r4)} lines ${p1.lines.length}`);
+  check('pipeline: the page that was cut short still counts as unread, so it is read again in full', p1.ink.recognised === false && p1.ink.skipped === true && p1.ink.raw.partial === true);
+  check('pipeline: both unfinished pages are skipped until the student asks for the rest', doc2.pageCache.get(2).ink.skipped === true && r4.skipped === 2, JSON.stringify(r4));
+  const client3 = src('hw', 'hw-client.js').create({ workerFactory: S.fakeWorkerFactory(S.mockEngine(), S.newStats()) });
+  const r5 = await pipe.ensureRecognised(doc2, 1, 2, { client: client3, retrySkipped: true, renderPage: async () => rowsPage(4) });
+  check('pipeline: "read the rest" reads the cut-short page to the end', r5.pages === 2 && p1.ink.recognised === true && p1.lines.length === 4 && !p1.ink.raw.partial && r5.skipped === 0, `${JSON.stringify(r5)} lines ${p1.lines.length}`);
+  client3.dispose();
   client2.dispose();
 }
 
@@ -183,8 +188,23 @@ function reviewTests() {
   const rv = src('ui', 'hw-review.js');
   check('notice: null and zero stats -> empty', rv.noticeHtml(null) === '' && rv.noticeHtml({ pages: 0, low: 0, skipped: 0, cancelled: false, engine: null }) === '');
   const h = rv.noticeHtml({ pages: 3, low: 2, skipped: 0, cancelled: false, engine: { available: true } });
-  check('notice: counts and data-hw-review button, no script', /3 pages/.test(h) && /2 pieces/.test(h) && h.includes('data-hw-review') && !/<script/i.test(h), h);
-  check('notice: no model -> "type it in"', /type it in/i.test(rv.noticeHtml({ pages: 2, low: 0, skipped: 0, engine: { available: false } })));
+  check('notice: counts and data-hw-review button, no script', /3 picture pages/.test(h) && /2 lines/.test(h) && h.includes('data-hw-review') && !/<script/i.test(h), h);
+  check('notice: wording for read pages and doubtful lines',
+    h.includes('Read text from 3 picture pages.') && h.includes('2 lines may be wrong and are left out until you check them.'), h);
+  check('notice: one page, one line', rv.noticeHtml({ pages: 1, low: 1, skipped: 0, engine: { available: true } })
+    .includes('Read text from 1 picture page. 1 line may be wrong and is left out until you check it.'));
+  check('notice: nothing doubtful', rv.noticeHtml({ pages: 2, low: 0, skipped: 0, engine: { available: true } }).includes('No lines look doubtful.'));
+  const noReader = rv.noticeHtml({ pages: 2, low: 0, skipped: 0, engine: { available: false } });
+  check('notice: no model -> "type it in"', /type it in/i.test(noReader) && noReader.includes('The page reader is not installed, so '), noReader);
+  // Progress while reading: the loading bar's title and line, never "handwriting" or "pieces"
+  const bar = [];
+  const L = { update: (...a) => bar.push(a.join(' | ')) };
+  rv.reportProgress(L, { phase: 'model', done: 1, total: 4 });
+  rv.reportProgress(L, { phase: 'page', pageNumber: 7, pageIndex: 1, pageCount: 3, done: 2, total: 9 });
+  check('progress: "Getting the page reader ready", then "Reading picture pages"',
+    /Getting the page reader ready/.test(bar[0]) && /Reading picture pages/.test(bar[1]), JSON.stringify(bar));
+  const words = bar.concat([h, noReader]).join(' ');
+  check('notice and progress: no "handwriting", no "pieces"', !/handwriting|piece/i.test(words), words);
   check('notice: skipped > 0 -> resume button', rv.noticeHtml({ pages: 1, low: 0, skipped: 2, engine: { available: true } }).includes('id="hwResumeBtn"'));
   const mk = (n, confs) => ({ pageNumber: n, ink: { recognised: true, result: { scale: 1, lines: confs.map((c, i) => ({ index: i, regions: [{ id: `p${n}-l${i}-r0`, kind: 'text', text: 't', confidence: c, box: { x: 0, y: 0, w: 1, h: 1 } }] })) } } });
   const doc = docOf([mk(1, [0.9, 0.2]), mk(2, [0.1, 0.95]), mk(5, [0.0])]);

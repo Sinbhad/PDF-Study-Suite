@@ -15,7 +15,16 @@
   const getLines = () => need('scopeLines', './scope-lines.js');
   const getFigures = () => need('figureFilter', './figure-filter.js');
 
+  const getLabels = () => need('blockLabels', './block-labels.js');
+  const getKinds = () => need('lineKinds', './line-kinds.js');
+  const getEmitter = () => need('scopeEmitter', './scope-emitter.js');
+  const getTex = () => need('mathProse', './math-prose.js');
+  const getTracker = () => need('scopeBlocks', './scope-blocks.js');
+  const getTables = () => need('tableGrid', './table-grid.js');
+
   const NOISE_LINE_RE = /^(?:Figure|Table)\s+(?:[A-Z]\.)?\d+(?:\.\d+)?\b/i;
+  // line.kind values (line-kinds.js) that never enter scope.text; code is kept, as a fenced block
+  const QUARANTINED_KINDS = new Set(['caption', 'folio', 'url', 'objective', 'biography']);
 
   function stripPublisherBoilerplate(text) {
     const nf = getNoiseFilter();
@@ -42,31 +51,24 @@
   function processSectionPages(pages) {
     const blocks = getBlocks();
     const pk = getPageKind();
+    // Rows a cleaned page sends where: tr (scope-blocks.js) owns blocks, code fences, tables and margin notes
     const nf = getNoiseFilter();
     const sl = getLines();
     const ff = getFigures();
-    const cleanLines = [];
-    const marginLines = [];
+    const lb = getLabels();
+    const lk = getKinds();
+    const tg = getTables();
+    const emitter = getEmitter().createEmitter();
+    const tr = getTracker().createTracker(emitter, stripPublisherBoilerplate);
     const exerciseLines = [];
-    const didacticBlocks = [];
     let inExercises = false;
     let inOpenerObjectives = false;
-    let activeBlock = null;
     let recentProse = [];
-    let codeRun = [];
     let box = null; // sidebar box being skipped: { top, bottom, x0 }
-
-    function flushCode() {
-      if (!codeRun.length) return;
-      cleanLines.push(sl.formatCodeFence(codeRun));
-      codeRun = [];
-    }
-
-    function flushBlock() {
-      const out = activeBlock ? blocks.finalize(activeBlock, stripPublisherBoilerplate) : null;
-      if (out) didacticBlocks.push(out);
-      activeBlock = null;
-    }
+    const flushCode = () => tr.flushCode();
+    const flushBlock = () => tr.flushBlock();
+    const startBlock = (heading, line, page, pageTitle) =>
+      tr.start(heading, line, page, recentProse.length ? Math.min(...recentProse) : null, pageTitle);
 
     const inBand = (line, h) => line.topY < h * 0.055 || line.topY > h * 0.95;
     function keepExercise(line, raw, plain, h) {
@@ -101,15 +103,36 @@
       const exerciseTicks = ff ? ff.markFigureText(page, bodySize, { ticksOnly: true }) : new Set();
       recentProse = [];
       flushCode();
+      const pageNumber = page.pageNumber;
+      tr.setPage(pageNumber);
+      const marginRows = [];
+      const labels = lb ? lb.alignMarginLabels(page.lines || []) : { byMain: new Map(), used: new Set() };
+      // Book tables: rows of aligned cells on one baseline each (table-grid.js); emitted where the first row stood
+      const pageTables = tg ? tg.fromSegments((page.lines || []).filter((l) => !l.isMargin && !l.isCode && !l.kind), pageNumber) : [];
+      const tableOf = new Map(pageTables.flatMap((t) => [...t.lines].map((l) => [l, t])));
+      const emittedTables = new Set();
 
       const firstMain = (page.lines || []).find((l) => !l.isMargin && l.topY >= h * 0.04);
       const pageTitle = firstMain && firstMain.isBold ? (firstMain.cleanText || firstMain.text || '').trim() : '';
 
       for (const line of page.lines || []) {
-        const raw = sl.stripPromo(stripPublisherBoilerplate(line.formattedText || line.text));
+        if (labels.used.has(line)) continue; // margin label: opens the block at its main row instead
+        const table = tableOf.get(line);
+        if (table) {
+          if (!emittedTables.has(table) && !inExercises) tr.table(tg.publicTable(table), line);
+          emittedTables.add(table);
+          if (!inExercises) continue;
+        }
+        const unwrapped = getTex() ? getTex().unwrapProse(line.formattedText || line.text) : line.formattedText || line.text;
+        const raw = sl.stripPromo(stripPublisherBoilerplate(lk ? lk.stripCredits(unwrapped) : unwrapped));
         const plain = raw.replace(/\*\*/g, '').trim();
         const hasTeX = raw.includes('$') || Boolean(line.hasMath);
         if (!plain || (plain.length < 2 && !hasTeX && !line.isCode)) continue;
+        // Non-content rows tagged at extraction (line-kinds.js) are listed in scope.lines but kept out of the text
+        if (QUARANTINED_KINDS.has(line.kind) && !inExercises) {
+          emitter.push(line, plain, { pageNumber, kind: line.kind, blockId: null, inText: false });
+          continue;
+        }
 
         if (pk && pk.isExerciseStart(plain)) {
           flushCode();
@@ -164,60 +187,79 @@
         if (figureText.has(line)) continue; // axis ticks, curve labels, diagram fragments
 
         if (line.isMargin) {
-          if (marginLines.lastPage !== page.pageNumber) marginLines.push('');
-          marginLines.lastPage = page.pageNumber;
-          sl.pushProseLine(marginLines, raw); // narrow notes hyphenate often: "contribu-" + "tions"
+          marginRows.push({ line, raw });
           continue;
         }
 
         // Wrapped 2nd line of an active didactic heading (e.g. "THEOREM 5.17 ..." + "Functions")
-        if (activeBlock && !activeBlock.bodyLines.length && blocks.extendHeading(activeBlock, line, plain)) {
-          cleanLines.push(raw);
+        if (tr.active && !tr.active.bodyLines.length && blocks.extendHeading(tr.active, line, plain)) {
+          emitter.push(line, raw, tr.meta('heading'));
+          continue;
+        }
+
+        // Numbered label ("Definition 1" in the margin beside this row, "**EXAMPLE 3**", "Syntax 5.1", "Proof:")
+        const label = labels.byMain.get(line) || (lb ? lb.matchLabelLine(line, bodySize) : null);
+        if (label) {
+          const headTitle = lb.headingFor(label, lb.stripLabel(raw, label));
+          startBlock(headTitle.heading, line, page, pageTitle);
+          const ownRow = labels.byMain.has(line) ? raw : headTitle.body;
+          if (!labels.byMain.has(line)) emitter.push(line, headTitle.body ? `**${headTitle.heading.title}**` : raw, tr.meta('heading'));
+          if (!ownRow) continue;
+          blocks.add(tr.active, line, ownRow, ownRow.replace(/\*\*/g, ''), page);
+          if (line.isCode || line.kind === 'code') tr.pushCode({ raw: ownRow, x0: line.x0, fontSize: line.fontSize, line });
+          else emitter.push(line, ownRow, tr.meta('prose'));
           continue;
         }
 
         const heading = blocks.matchHeading(plain, line, bodySize);
         if (heading) {
-          flushCode();
-          flushBlock();
-          const proseX0 = recentProse.length ? Math.min(...recentProse) : null;
-          activeBlock = blocks.start(heading, line, page, proseX0, pageTitle);
-          cleanLines.push(raw);
+          startBlock(heading, line, page, pageTitle);
+          emitter.push(line, raw, tr.meta('heading'));
           continue;
         }
 
-        if (activeBlock) {
-          if (blocks.ends(activeBlock, line, plain, page)) flushBlock();
-          else blocks.add(activeBlock, line, raw, plain, page);
+        if (tr.active) {
+          if (blocks.ends(tr.active, line, plain, page)) flushBlock();
+          else blocks.add(tr.active, line, raw, plain, page);
         }
-        if (!activeBlock && Number.isFinite(line.x0) && (line.wordCount || 0) >= 5 && !line.isCode) {
+        if (!tr.active && Number.isFinite(line.x0) && (line.wordCount || 0) >= 5 && !line.isCode) {
           recentProse = recentProse.concat(line.x0).slice(-3);
         }
 
-        if (line.isCode) {
-          codeRun.push({ raw, x0: line.x0, fontSize: line.fontSize });
+        if (line.isCode || line.kind === 'code') {
+          tr.pushCode({ raw, x0: line.x0, fontSize: line.fontSize, line });
           continue;
         }
         flushCode();
 
-        // Keep lines containing `$` (TeX math); drop small-print captions and bare number rows
-        if (!hasTeX && bodySize && line.fontSize && line.fontSize < bodySize * 0.85) continue;
+        // Keep small lines that state a formula; drop small-print captions, figure labels (even with a
+        // barred symbol in them: "SR S̄R̄ D with 1 Control") and bare number rows
+        const formula = hasTeX && /[=<>≤≥≠]|\\(?:le|ge|ne|frac|sqrt|sum|int)\b/.test(raw);
+        if (!formula && bodySize && line.fontSize && line.fontSize < bodySize * 0.85) continue;
         if (!hasTeX) {
           const digitRatio = (plain.match(/[\d.+-]/g) || []).length / plain.length;
           if (digitRatio > 0.55 && plain.length < 60) continue;
         }
 
-        for (const part of sl.splitEnumerated(raw)) sl.pushProseLine(cleanLines, part);
+        const kind = getEmitter().isHeadingLine(line, plain, bodySize) ? 'heading' : 'prose';
+        for (const part of sl.splitEnumerated(raw)) emitter.push(line, part, tr.meta(kind));
       }
       flushCode();
+      // Margin notes stay with their page: after the page's main flow, as their own paragraphs
+      tr.marginNotes(marginRows);
     }
     flushCode();
     flushBlock();
 
+    const found = tr.result();
+    const assembled = emitter.finish(stripPublisherBoilerplate, found.ids);
     return {
-      text: stripPublisherBoilerplate(cleanLines.concat(marginLines).join('\n')),
+      text: stripPublisherBoilerplate(assembled.text),
       exerciseText: stripPublisherBoilerplate(exerciseLines.join('\n')),
-      didacticBlocks,
+      didacticBlocks: found.didacticBlocks,
+      blocks: found.blocks,
+      tables: found.tables,
+      lines: assembled.lines,
     };
   }
 

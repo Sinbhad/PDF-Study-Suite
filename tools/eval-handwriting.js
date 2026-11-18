@@ -14,6 +14,7 @@
  *                       <out>/crops/<file>/page-boxes.png, one PNG per region crop, sheet-NN.png contact sheets
  *   --timeout=1200      seconds allowed per image
  *   --browser=path      Edge/Chrome executable (default: $BROWSER, then the usual install locations)
+ *   --no-isolation      serve without the COOP/COEP headers (one WebAssembly thread, as on a static host)
  * The images and results are test data: keep them in a git-ignored folder (for example under vendor/hw/).
  */
 const fs = require('fs');
@@ -60,7 +61,7 @@ function describe(rec) {
 async function runBrowser(files) {
   const exe = findBrowser(flags.browser);
   if (!exe) { console.error('No Edge/Chrome found; pass --browser=path'); process.exit(2); }
-  const app = await openApp({ exe, timeoutMs: TIMEOUT });
+  const app = await openApp({ exe, timeoutMs: TIMEOUT, env: flags['no-isolation'] ? { NO_ISOLATION: '1' } : {} });
   try {
     for (const f of files) {
       const outFile = path.join(flags.out, `${f}.json`);

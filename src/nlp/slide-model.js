@@ -7,6 +7,11 @@
  *   qa          [{ question, answer, context[], prompt }]  lecturer's own question -> revealed answer
  *   definitions [{ term, definition, statement, head, tail, family, page }]  first occurrence in the deck only
  *   labelled    [{ label, text }]  "Reflexive: ..." bullets;  prompt = the worked problem's instruction line
+ *   contentKind content-filter.js slideKind: only 'content' and 'question' slides yield definitions and Q&A
+ *   subject / aspect / entity   slide-subjects.js: what the slide is about ("Benzimidazoles", "Pharmacokinetics")
+ *   outline     [{ text, level, column }]  the kept outline lines, for flat "aspect line + facts" groups
+ * Bullets that are links, captions, references, remarks or extraction annotations are dropped here, and an
+ * outline group never takes children from another visual column (nestedBullets[].column when extraction sets it).
  * normalize(slides) -> { slides: [...], definitions: [...] }
  */
 (function (root) {
@@ -21,6 +26,10 @@
   const PROMPT_RE = /^(?:Prove|Show|Determine|Find|Compute|Solve|Evaluate|Is|Are|Does|Do|Can|What|Which|Why|How)\b/;
   const LABEL_RE = /^([A-Z][A-Za-z][A-Za-z -]{0,26}):\s+(\S.{6,})$/;
   const isQ = (s) => /\?\s*$/.test(s);
+  const QUESTION_WORD_RE =
+    /\b(?:what|which|why|how|when|where|who|whom|whose|is|are|was|were|does|do|did|can|could|should|would|will|true\s+or\s+false)\b/i;
+  // Candidate answers listed on a question slide: "R_1 = {...}", "(a) ...", "B. ..."
+  const CANDIDATE_RE = /^(?:[A-Za-z](?:_\{?\w+\}?|\d+)?\s*(?:=|:)\s*\S|\(?[a-eA-E][.)]\s+\S)/;
 
   const clean = (s) => tok().cleanMarkdown(String(s || '')).replace(/(?:\s*[✦✧▪◦‣•]\s*)+$/g, '').trim();
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -32,9 +41,20 @@
     return toks.filter((t) => /^[A-Za-z][A-Za-z'’-]{2,}[.,;:!?)]*$/.test(t)).length / toks.length;
   }
 
-  function bulletsOf(slide) {
+  /** Keeps the lines a slide teaches (content-filter.js): no links, captions, remarks or annotations. */
+  const lineFilter = (slide, ctx) => dep('contentFilter', './content-filter.js').slideLineFilter(slide, ctx, clean);
+
+  function bulletsOf(slide, ctx = {}) {
+    const keeps = lineFilter(slide, ctx);
     const src = (slide.bullets && slide.bullets.length ? slide.bullets : (slide.nestedBullets || []).map((b) => b.text)) || [];
-    return src.flatMap((b) => String(b || '').split(/\s*[✦✧▪◦‣]\s+(?=\S)/)).map(clean).filter(Boolean);
+    return src.flatMap((b) => String(b || '').split(/\s*[✦✧▪◦‣]\s+(?=\S)/)).map(clean).filter(Boolean).filter(keeps);
+  }
+
+  /** A "?" bullet with deeper bullets under it: the slide reveals the answer to its own question. */
+  function hasAnsweredQuestion(slide) {
+    if (Array.isArray(slide.qa) ? slide.qa.length : slide.qa) return true;
+    const nodes = (slide.nestedBullets || []).filter((b) => b && Number.isFinite(b.level));
+    return nodes.some((b, i) => isQ(clean(b.text)) && nodes[i + 1] && nodes[i + 1].level > b.level && !isQ(clean(nodes[i + 1].text)));
   }
 
   function looksTabular(slide, bullets) {
@@ -42,15 +62,71 @@
     return bullets.length >= 8 && bullets.filter((b) => b.length <= 4).length / bullets.length >= 0.5;
   }
 
-  /** Question bullets immediately followed by a non-question bullet are the slide's own Q -> A pairs. */
-  function inlineQa(bullets) {
+  /** Indent level of every bullet text, when the extractor kept the outline (nestedBullets). */
+  function levelLookup(slide) {
+    const levels = new Map();
+    for (const b of slide.nestedBullets || []) {
+      const text = clean(b && b.text);
+      if (text && !levels.has(text) && Number.isFinite(b.level)) levels.set(text, b.level);
+    }
+    return (text) => (levels.has(text) ? levels.get(text) : null);
+  }
+
+  /**
+   * Outline groups: a bullet with deeper bullets under it -> { head, items } (items = its direct children).
+   * Slides without outline levels have no groups.
+   */
+  /** The outline's kept lines with their indent level (and visual column when extraction sets one). */
+  function outlineNodes(slide, ctx = {}) {
+    const keeps = lineFilter(slide, ctx);
+    return (slide.nestedBullets || [])
+      .map((b) => ({ text: clean(b && b.text), level: b && b.level, column: b && b.column }))
+      .filter((n) => n.text && Number.isFinite(n.level) && keeps(n.text));
+  }
+
+  function outlineGroups(slide, ctx = {}) {
+    const nodes = outlineNodes(slide, ctx);
+    const groups = [];
+    // Bullets set in another visual column are never the children of this one, however they are indented.
+    const sameColumn = (a, b) => a.column == null || b.column == null || a.column === b.column;
+    nodes.forEach((node, i) => {
+      const below = [];
+      for (let k = i + 1; k < nodes.length && nodes[k].level > node.level && sameColumn(node, nodes[k]); k++) below.push(nodes[k]);
+      if (!below.length) return;
+      const childLevel = Math.min(...below.map((n) => n.level));
+      groups.push({ head: node.text, items: below.filter((n) => n.level === childLevel).map((n) => n.text) });
+    });
+    return groups;
+  }
+
+  /** A real question asks something; "Plant toxins – lilies, ivy, etc. Rodenticides?" is a list that ends in doubt. */
+  function asksSomething(bullet) {
+    if (!isQ(bullet) || bullet.length < 8 || !QUESTION_WORD_RE.test(bullet)) return false;
+    const opensAsking = /^(?:What|Which|Why|How|When|Where|Who)\b/i.test(bullet);
+    const onlyTailAsks = /[.!]\s+\S[^?]*\?\s*$/.test(bullet);
+    return opensAsking || !onlyTailAsks;
+  }
+
+  /**
+   * Question bullets and the bullet(s) that answer them are the slide's own Q -> A pairs. With outline levels
+   * the answer is everything nested under the question; a following bullet that is a sibling heading or sits
+   * higher in the outline is unrelated and never an answer. Without levels the next bullet answers.
+   */
+  function inlineQa(bullets, levelOf) {
     const qa = [];
     const used = new Set();
     for (let i = 0; i + 1 < bullets.length; i++) {
-      if (!isQ(bullets[i]) || isQ(bullets[i + 1]) || bullets[i].length < 8 || LABEL_RE.test(bullets[i + 1])) continue;
-      qa.push({ question: bullets[i], answer: bullets[i + 1] });
-      used.add(i).add(i + 1);
-      i++;
+      if (!asksSomething(bullets[i]) || isQ(bullets[i + 1]) || LABEL_RE.test(bullets[i + 1])) continue;
+      const asked = levelOf(bullets[i]);
+      const first = levelOf(bullets[i + 1]);
+      if (asked !== null && first !== null && first < asked) continue;
+      const answer = [bullets[i + 1]];
+      if (asked !== null && first !== null && first > asked) {
+        for (let k = i + 2; k < bullets.length && levelOf(bullets[k]) !== null && levelOf(bullets[k]) > asked && !isQ(bullets[k]); k++) answer.push(bullets[k]);
+      }
+      qa.push({ question: bullets[i], answer: answer.join('\n') });
+      for (let k = i; k <= i + answer.length; k++) used.add(k);
+      i += answer.length;
     }
     return { qa, rest: bullets.filter((_, i) => !used.has(i)) };
   }
@@ -67,9 +143,16 @@
     const out = [];
     const seenDefs = new Set();
     const allDefs = [];
+    const studyKinds = dep('contentFilter', './content-filter.js').slideKinds(list, { hasQa: (s) => hasAnsweredQuestion(s) });
+    const stamps = dep('contentFilter', './content-filter.js').deckStamps(list, clean);
+    const subjects = dep('slideSubjects', './slide-subjects.js').chain(list, studyKinds);
     list.forEach((slide, idx) => {
       let title = clean(slide.title);
-      const all = bulletsOf(slide);
+      const contentKind = studyKinds[idx];
+      // Title, objectives, contact, reference and case slides teach no definitions and ask nothing of their own.
+      const teaches = contentKind === 'content' || contentKind === 'question';
+      const lineCtx = { slideKind: contentKind, stamps };
+      const all = bulletsOf(slide, lineCtx);
       // A wrapped title whose tail landed in the first bullet ("... is an" + "equivalence relation on ...").
       if (all.length > 1 && /\b(?:an?|the|of|is|are|and|or|to|that)$/i.test(title) && /^[a-z]/.test(all[0])) title = `${title} ${all.shift()}`;
       const tabular = looksTabular(slide, all);
@@ -84,7 +167,7 @@
           title = m[1];
           if (prev && norm(prev.title) === norm(title) && !prev.qa.length) out.pop();
         }
-        const inl = inlineQa(all);
+        const inl = inlineQa(all, levelLookup(slide));
         if (inl.qa.length) { qa = qa.concat(inl.qa); bullets = inl.rest; }
       }
       const inferred = tabular ? 'table' : qa.length || isQ(title) ? 'question'
@@ -101,12 +184,15 @@
       const addDef = (d) => {
         const key = dm().termKey(d.term);
         if (!key || seenDefs.has(key)) return;
+        if (/\?/.test(d.definition)) return; // a bold word inside a list of questions is not defined there
         seenDefs.add(key);
         const rec = { head: '', tail: '', family: '', statement: d.definition, ...d, page }; // statement = shortest complete form
         defs.push(rec);
         allDefs.push(rec);
       };
-      if (Array.isArray(slide.definitions) && slide.definitions.length) {
+      if (!teaches) {
+        qa = [];
+      } else if (Array.isArray(slide.definitions) && slide.definitions.length) {
         for (const g of slide.definitions) {
           const term = clean(g && g.term), definition = dm().stripLead(clean(g && g.definition));
           if (!term || !definition) continue;
@@ -126,12 +212,18 @@
       // A problem-statement title ("Let R = {...}") is part of every question asked on the slide.
       const setup = qa.length && norm(title) !== norm(qa[0].question) && (PROBLEM_TITLE_RE.test(title) || RELATION_RE.test(title)) ? title : '';
       for (const q of qa) {
-        q.context = bullets.filter((b) => !/^Def(?:inition)?\b/i.test(b) && b !== q.question && b !== q.answer).slice(0, 8);
+        // Only the candidates the question chooses between belong to it; other bullets of the slide are unrelated.
+        q.context = bullets.filter((b) => CANDIDATE_RE.test(b) && b !== q.question && b !== q.answer).slice(0, 8);
         q.prompt = [setup, q.question, ...q.context.map((c) => `• ${c}`)].filter(Boolean).join('\n'); // full self-contained question
       }
       out.push({
         slideNumber: page, pages: slide.pages || (page ? [page] : []), title, kind, isExample, prompt, bullets, qa,
         definitions: defs, labelled, table: slide.table || null,
+        groups: tabular ? [] : outlineGroups(slide, lineCtx),
+        outline: tabular ? [] : outlineNodes(slide, lineCtx),
+        qualifiers: dep('contentFilter', './content-filter.js').lineQualifiers(slide, clean),
+        keyLines: teaches ? dep('contentFilter', './content-filter.js').keyLines(slide, clean) : [],
+        contentKind, ...subjects[idx],
       });
     });
     return { slides: out, definitions: allDefs };

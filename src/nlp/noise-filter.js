@@ -119,6 +119,8 @@
 
   /** True for extraction debris (interleaved exercise numbers / equation fragments): < 60% letters. */
   function isGarbled(text) {
+    // "¿" is the extraction's mark for notation it could not read (a complement bar or prefix lost)
+    if (/¿/.test(String(text || ''))) return true;
     const compact = String(text || '').replace(/\$[^$]*\$/g, 'math').replace(/\s+/g, '');
     if (compact.length < 12) return false;
     return (compact.match(/[A-Za-z]/g) || []).length / compact.length < 0.6;

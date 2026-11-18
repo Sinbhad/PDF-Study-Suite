@@ -30,6 +30,8 @@
     Τ: 'T', Χ: 'X',
   };
   for (const [g, n] of Object.entries(GREEK)) SYM[g] = n.length > 1 ? `\\${n}` : n;
+  // Script / calligraphic capitals (𝒫 for the power set) as \mathcal letters
+  [...'𝒜ℬ𝒞𝒟ℰℱ𝒢ℋℐ𝒥𝒦ℒℳ𝒩𝒪𝒫𝒬ℛ𝒮𝒯𝒰𝒱𝒲𝒳𝒴𝒵'].forEach((ch, i) => { SYM[ch] = `\\mathcal{${String.fromCharCode(65 + i)}}`; });
 
   const FUNCS = ['arcsin', 'arccos', 'arctan', 'arcsec', 'arccsc', 'arccot', 'sinh', 'cosh', 'tanh', 'sech', 'csch', 'coth',
     'sin', 'cos', 'tan', 'sec', 'csc', 'cot',

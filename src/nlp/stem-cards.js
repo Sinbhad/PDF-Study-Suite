@@ -47,7 +47,9 @@
     {
       category: 'Algorithm',
       re: new RegExp(`^(?:The\\s+)?${ALGO_NAME}\\s+(?:runs|executes|takes|operates|works)\\s+in\\s+(?:worst-case\\s+|expected\\s+|average\\s+)?${COMPLEXITY}\\s*(time|space)?`),
-      build: (m) => [`Time complexity of ${clean(m[1])}`, `${m[2].trim()} ${m[3] || 'time'}`.trim()],
+      // The back is the bare bound: with a unit word after it ("$O(n)$ time") it is no longer a complexity
+      // expression and its quiz distractors come from the wrong family. The resource goes in the front.
+      build: (m) => [`${m[3] === 'space' ? 'Space' : 'Time'} complexity of ${clean(m[1])}`, m[2].trim()],
     },
     {
       category: 'Algorithm',

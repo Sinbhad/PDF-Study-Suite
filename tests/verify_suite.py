@@ -1,13 +1,14 @@
 """
-Automated Verification Suite for the Offline Non-AI PDF Study Suite.
+Automated Verification Suite for the offline PDF Study Suite.
 Verifies:
-1. Strict 250-LOC Ceiling across all files in the repository.
+1. Files over the 250-line review trigger are listed (a prompt to check responsibilities, not a limit).
 2. Sample PDF generation (Class Slides & Textbook with Chapters/Sections).
 3. HTML stylesheet & script graph integrity and module export completeness.
 4. All Node fixture suites listed in verify_manifest.NODE_FIXTURES (quality, layout, math, handwriting, ...).
 5. Local HTTP server delivery of all assets, vendor libraries, and /local-larson.pdf.
-6. When the optional handwriting model is installed: a real recognition run in a headless browser
-   (tools/smoke-handwriting.js). Skipped with a message when the model, Pillow or a browser is missing.
+6. When the page reader's files are installed (vendor/hw/, PP-OCR; the TrOCR handwriting model is not
+   needed): a real reading run in a headless browser (tools/smoke-handwriting.js). Skipped with a message
+   when the files, Pillow or a browser is missing.
 """
 import http.server
 import os
@@ -29,31 +30,43 @@ from generate_sample_pdfs import generate_samples
 from verify_manifest import (
     EXPECTED_NAMESPACES,
     EXPECTED_SCRIPT_COUNT,
+    EXPECTED_SCRIPTS,
     HTTP_ENDPOINTS,
     NODE_FIXTURES,
+    PPOCR_FILES,
     STYLESHEET_PATHS,
     find_node as _find_node,
 )
 
-MAX_LOC = 250
+REVIEW_LOC = 250
+SKIP_DIRS = {"vendor", "node_modules", "__pycache__"}  # dot-directories are skipped as well
 for _stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252; fixtures print math symbols
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def test_loc_ceiling() -> None:
-    print("[1/6] Checking strict 250-LOC ceiling across all workspace files...")
+    """Line counts are a review trigger, not a limit: a long file is listed for a look at its responsibilities.
+
+    A file must never be shortened by joining statements or stripping comments to get under the number.
+    """
+    print(f"[1/6] Listing source files over the {REVIEW_LOC}-line review trigger...")
     checked = 0
-    for dirpath, _, filenames in os.walk(ROOT_DIR):
+    over = []
+    for dirpath, dirnames, filenames in os.walk(ROOT_DIR):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
         for fname in sorted(filenames):
             if fname.endswith((".py", ".js", ".html", ".css", ".bat")):
                 fpath = os.path.join(dirpath, fname)
                 rel = os.path.relpath(fpath, ROOT_DIR)
                 with open(fpath, "rb") as f:
                     line_count = sum(1 for _ in f)
-                assert line_count <= MAX_LOC, f"LOC violation: {rel} has {line_count} lines (> {MAX_LOC})"
-                print(f"   [OK] {rel:42s} : {line_count:3d} LOC")
+                if line_count > REVIEW_LOC:
+                    over.append((rel, line_count))
                 checked += 1
+    for rel, line_count in over:
+        print(f"   [REVIEW] {rel:42s} : {line_count:3d} lines - check it still has one responsibility")
+    print(f"   [OK] {checked} files checked, {len(over)} over the review trigger")
     assert checked >= 18, "Expected at least 18 project files"
 
 
@@ -79,10 +92,15 @@ def test_script_integrity() -> None:
     assert tuple(f"/{s}" for s in stylesheets) == STYLESHEET_PATHS, f"Unexpected stylesheets: {stylesheets}"
 
     scripts = [s.split("?")[0] for s in re.findall(r'<script\s+src="([^"]+)"', html)]
+    twice = sorted({s for s in scripts if scripts.count(s) > 1})
+    assert not twice, f"Scripts loaded more than once in index.html: {twice}"
+    missing = sorted(EXPECTED_SCRIPTS - set(scripts))
+    assert not missing, f"Scripts in tests/verify_manifest.py that index.html does not load: {missing}"
+    unlisted = sorted(set(scripts) - EXPECTED_SCRIPTS)
+    assert not unlisted, f"Scripts index.html loads that tests/verify_manifest.py does not list: {unlisted}"
     assert len(scripts) == EXPECTED_SCRIPT_COUNT, (
-        f"Expected {EXPECTED_SCRIPT_COUNT} script tags in index.html, found {len(scripts)}"
-    )
-    assert set(EXPECTED_NAMESPACES).issubset(set(scripts)), "Missing expected module scripts in index.html"
+        f"index.html loads {len(scripts)} scripts, tests/verify_manifest.py EXPECTED_SCRIPT_COUNT says {EXPECTED_SCRIPT_COUNT}")
+    print(f"   [OK] index.html loads the {len(scripts)} scripts the manifest lists")
 
     for scr in scripts:
         full_path = os.path.join(ROOT_DIR, scr.replace("/", os.sep))
@@ -135,17 +153,13 @@ def test_http_server() -> None:
 
 
 def test_handwriting_model() -> None:
-    """Optional extra: runs only when the model, Pillow, a handwriting-style font and Edge/Chrome are present."""
-    print("[6/6] Reading a synthetic handwritten page with the real model in a real browser...")
+    """Optional extra: runs only when the page reader, Pillow, a handwriting-style font and Edge/Chrome are present."""
+    print("[6/6] Reading a synthetic handwritten page with the real page reader in a real browser...")
     hw = os.path.join(ROOT_DIR, "vendor", "hw")
-    onnx = os.path.join(hw, "models", "trocr-small-handwritten", "onnx")
-    needed = ("transformers.min.mjs", "ort-wasm-simd-threaded.jsep.wasm",
-              os.path.join(onnx, "decoder_model_merged_quantized.onnx"))
-    # The full-precision encoder is the default; an older install with only the 8-bit one still runs
-    encoder = ("encoder_model.onnx", "encoder_model_quantized.onnx")
-    if not (all(os.path.exists(os.path.join(hw, n)) for n in needed)
-            and any(os.path.exists(os.path.join(onnx, n)) for n in encoder)):
-        print("   [SKIPPED] handwriting model not installed (tools/fetch-handwriting-model.py); step 4 covers type-it-in")
+    absent = [n for n in PPOCR_FILES if not os.path.exists(os.path.join(hw, *n.split("/")))]
+    if absent:
+        print(f"   [SKIPPED] the page reader is not installed (vendor/hw/{absent[0]} is missing; "
+              "run python tools/fetch-handwriting-model.py --ppocr-only); step 4 covers type-it-in")
         return
     try:
         import PIL  # noqa: F401

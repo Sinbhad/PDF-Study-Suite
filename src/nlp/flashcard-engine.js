@@ -1,6 +1,10 @@
 /**
  * Deterministic Rule-Based Flashcard Generator (Slides & STEM/Academic Textbooks)
  * Extracts Boxed Definitions, Named Theorems, Guidelines, Bold Key Terms, and Syntactic Definitions.
+ * Book text is read through content-spans.js first (no worked examples, biographies, captions); every card
+ * must stand alone (self-contained.js) and leaves with subject / sourceKind / page (card-fields.js).
+ * Sources by module: definition-rules.js (sentence patterns), prose-definitions.js (defining clauses),
+ * boxed-cards.js (tagged and numbered boxes), key-statements.js (facts without terms), contrast-cards.js.
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
@@ -15,31 +19,13 @@
     return { tokenizer, boldTerms, noiseFilter };
   }
 
-  const DEFINITION_RULES = [
-    {
-      type: 'glossary',
-      regex:
-        /^(?:\*\*|__)?(?<term>[A-Z][A-Za-z0-9\s\-\/]{1,42}?)(?:\*\*|__)?\s*(?:\((?<acronym>[A-Z0-9\-]{1,10})\))?\s*(?::|—|–|\s-\s)\s*(?<def>[A-Za-z0-9][^.!?\n]{12,260}[.!?]?)$/,
-    },
-    {
-      type: 'copula',
-      regex:
-        /^(?:The\s+|A\s+|An\s+)?(?:\*\*|__)?(?<term>[A-Z][A-Za-z0-9\s\-]{2,40}?)(?:\*\*|__)?\s+(?:\((?<acronym>[A-Z0-9\-]{2,10})\)\s+)?(?:is\s+defined\s+as|can\s+be\s+defined\s+as|refers\s+to|denotes|is\s+known\s+as|(?:is|are)\s+(?:a|an)\s+(?:type|kind|form|class|variety|branch)\s+of|is\s+(?:a|an|the)\s+(?:process|method|technique|mechanism|system|measure|phenomenon|structure|condition|state|ability|study|rate|ratio|principle|theory|law|rule|property|theorem|limit|derivative|integral|function)\s+(?:by\s+which|where|in\s+which|that|of|for))\s+(?<def>[^.!?\n]{10,250}[.!?]?)$/i,
-    },
-    {
-      type: 'reverse_def',
-      regex:
-        /^(?<def>[A-Z][^.!?\n]{15,210}?)\s+(?:is|are)\s+(?:called|known\s+as|referred\s+to\s+as|termed)\s+(?:the\s+|a\s+|an\s+)?(?:\*\*|__)?(?<term>[A-Za-z0-9\s\-]{2,38}?)(?:\*\*|__)?[.!?]?$/,
-    },
-    {
-      type: 'appositive',
-      regex:
-        /^(?:The\s+|A\s+|An\s+)?(?:\*\*|__)?(?<term>[A-Z][A-Za-z0-9\s\-]{2,34}?)(?:\*\*|__)?,\s+(?<def>(?:a|an|the)\s+[^,\n]{14,150}),\s+(?:is|are|was|were|plays|provides|allows|functions|serves|acts|consists|controls|regulates)\b/,
-    },
-  ];
-
   // Boilerplate/exercise noise comes from shared noise-filter.js; "second degree" ordinals are local.
   const DEGREE_TERM_RE = /\b(?:zeroth|first|second|third|fourth|nth)\s+degree\b/i;
+  // Two or more capitalised words, joined by nothing but "of / the / and": a proper name.
+  const PROPER_NAME_RE = /^[A-Z][\w'’-]*(?:\s+(?:(?:of|the|and)\s+)*[A-Z][\w'’-]*)+$/;
+  const NO_INVALID_STARTS = new Set();
+  const ORGANISATION_RE =
+    /\b(?:Institute|Association|Society|Organi[sz]ation|Committee|University|College|Corporation|Council|Foundation|Agency|Administration|Department|Bureau|Academy|Federation|Union|Board)\b/;
 
   const nf = () => getDeps().noiseFilter;
   const dep = (k, f) => PDFStudy[k] || (typeof require === 'function' ? require(f) : null);
@@ -61,76 +47,149 @@
     return true;
   }
 
-  function extractBookFlashcards(text, contextLabel = 'Book Section', didacticBlocks = []) {
-    if (dep('stemNoise', './stem-noise.js').isAnswerKeySection(text)) return [];
+  /**
+   * Cards of a textbook section. `opts.lines` (scope.lines from extraction: { text, kind, isAnnotation }) tags
+   * captions, sidebars and code when present; examples, biographies and code are found from the text otherwise.
+   */
+  function extractBookFlashcards(rawText, contextLabel = 'Book Section', didacticBlocks = [], opts = {}) {
+    if (dep('stemNoise', './stem-noise.js').isAnswerKeySection(rawText)) return [];
+    // Worked examples, biography sidebars, captions and stray code are not exposition (content-spans.js).
+    const text = dep('contentFilter', './content-filter.js').studyText(rawText, { tags: opts.lines });
     const { tokenizer, boldTerms } = getDeps();
     const { INVALID_TERM_STARTS, cleanMarkdown, splitSentences } = tokenizer;
     const cards = [];
     const seen = new Set();
+    const quality = dep('cardQuality', './card-quality.js');
+    const selfContained = dep('selfContained', './self-contained.js');
+    const topicOf = quality.topicFinder(text, contextLabel, tokenizer.isHeadingLine);
+
+    /** Appends a finished card; `source` is the sentence it came from, used to find its heading (topic). */
+    function pushCard(front, back, category, extra = {}) {
+      const pageNumber = extra.pageNumber || null;
+      cards.push({
+        id: `fc-${cards.length + 1}`,
+        front,
+        back,
+        context: pageNumber ? `${contextLabel} (p. ${pageNumber})` : contextLabel,
+        pageNumber,
+        category,
+        kind: extra.kind || stemCards().kindOf(category),
+        topic: extra.topic || topicOf(extra.source),
+        ...(extra.subject ? { subject: extra.subject } : {}),
+        ...(extra.sourceKind ? { sourceKind: extra.sourceKind } : {}),      });
+    }
+
+    const flat = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    /** Does a card made so far show this sentence (or does the sentence hold that card's whole back)? */
+    const restatesCard = (sentence) => {
+      const s = flat(sentence);
+      return s.length >= 20 && cards.some((c) => { const b = flat(c.back); return b.length >= 20 && (b.includes(s) || s.includes(b)); });
+    };
+
+    /** Cards that arrive whole (key statements, self-check Q&A, table cells): same key, same stand-alone gate. */
+    function addFact(card) {
+      const key = `fact:${boldTerms ? boldTerms.termKey(card.front) : card.front.toLowerCase()}`;
+      const list = card.sourceKind === 'table' || card.sourceKind === 'self-check';
+      if (seen.has(key) || selfContained.reason(card, { list })) return false;
+      // "The Richter scale is …": a statement about a worked example's prop.
+      const about = card.category === 'Key Statement' ? dep('keyStatements', './key-statements.js').subjectOf(card.front) : '';
+      if (about && quality.introducedByExample(about, text)) return false;
+      // A completion ("The null reference refers to … no object") of a sentence another card already shows whole
+      // asks one fact twice.
+      if (/…$/.test(card.front) && restatesCard(`${card.front.replace(/\s*…$/, '')} ${card.back}`)) return false;
+      seen.add(key);
+      pushCard(card.front, card.back, card.category, { ...card, pageNumber: card.page || null, source: card.sentence || card.back });
+      return true;
+    }
 
     // A card exists only when the text defines or states something: no keyword-frequency filler cards.
-    function addCard(front, back, category, pageNumber, boxed) {
+    function addCard(front, back, category, pageNumber, boxed, source, concise) {
       let fClean = cleanMarkdown(front).replace(/^(the|a|an)\s+/i, '').trim();
       if (/^[a-z]{2}/.test(fClean)) fClean = fClean[0].toUpperCase() + fClean.slice(1); // "infinite limit" -> "Infinite limit"
       const didactic = /^(?:Theorem|Definition|Guideline|Rule|Law|Corollary|Lemma|Algorithm|Formula|Summary)$/.test(category);
+      // A key term names one thing: "Four conditions must hold for it to arise" is a sentence start, not a term.
+      // A proper name ("Declaration of the Rights of Man and of the Citizen", "Third Estate") is one thing however long.
+      const properName = PROPER_NAME_RE.test(fClean);
+      if (category === 'Key Term' && !quality.goodFront(fClean, { maxWords: properName ? 10 : 6 })) return false;
       const lines = String(back || '').split('\n').map((l) => cleanMarkdown(l)).filter(Boolean).join('\n'); // list backs keep their lines
       let bClean = mathText().safeSlice(lines, didactic ? 950 : 460);
+      // "Primary Keys When designing a database, ...": a heading glued onto the sentence under it is cut off.
+      if (category === 'Key Term') bClean = dep('proseDefinitions', './prose-definitions.js').dropGluedHeading(bClean);
       if (/^[a-z]/.test(bClean)) bClean = bClean[0].toUpperCase() + bClean.slice(1);
       if (!mathText().isBalanced(bClean) || dep('stemNoise', './stem-noise.js').isFragment(bClean)) return false;
-      if (!isValidTerm(fClean, INVALID_TERM_STARTS, didactic ? 14 : 9)) return false;
+      if (!isValidTerm(fClean, properName ? NO_INVALID_STARTS : INVALID_TERM_STARTS, didactic ? 14 : properName ? 10 : 9)) return false;
       const realWords = bClean.match(/\b[A-Za-z]{3,}\b/g) || [];
       const formula = /^(?:Formula|Algorithm)$/.test(category) && mathText().hasMath(bClean);
-      const minWords = formula ? 0 : didactic && boxed ? 1 : 5;
-      if (realWords.length < minWords || bClean.length < (boxed || formula ? 6 : 24) || isNoise(boxed ? bClean.replace(/^\d{1,2}\.\s+/gm, '') : bClean)) return false; // a boxed "1. $...$" item is not an exercise
+      // `concise` = a defining clause cut out of its sentence ("A legal maximum price."): short but complete.
+      const minWords = formula ? 0 : didactic && boxed ? 1 : concise ? 2 : 5;
+      if (realWords.length < minWords || bClean.length < (boxed || formula ? 6 : concise ? 10 : 24) || isNoise(boxed ? bClean.replace(/^\d{1,2}\.\s+/gm, '') : bClean)) return false; // a boxed "1. $...$" item is not an exercise
       // "Theorem 1.2 — ..." == "Theorem 1.2: ..."; "Step functions" == "step function"; "Gibbs Free Energy (G)" == "Gibbs Free Energy"
       const thm = fClean.match(/^theorem\s+[A-Z0-9]+\.\d+/i);
       const key = thm ? thm[0].toLowerCase() : boldTerms ? boldTerms.termKey(fClean) : fClean.toLowerCase();
       if (seen.has(key)) return false;
+      if (category === 'Key Term' && (quality.restatesFront(bClean, fClean) || quality.leansBack(bClean))) return false;
+      // A prop of a worked example (the scale an example program measures with) is not a term of the section.
+      if (category === 'Key Term' && !boxed && quality.introducedByExample(fClean, text)) return false;
+      // A card is studied alone: no "this condition", "(here, 10)", praise, or the author talking to the reader.
+      // (A term the author set in bold may be named in the author's voice: "you need a limit called a **...**".)
+      const emphasised = text.toLowerCase().includes(`**${fClean.toLowerCase()}`) && /\b(?:called|known\s+as|termed|named)\b/i.test(bClean);
+      if (selfContained.reason({ front: fClean, back: bClean }, { prose: category === 'Key Term' && !boxed && !emphasised })) return false;
       seen.add(key);
-      const card = {
-        id: `fc-${cards.length + 1}`,
-        front: fClean,
-        back: bClean,
-        context: pageNumber ? `${contextLabel} (p. ${pageNumber})` : contextLabel,
-        pageNumber: pageNumber || null,
-        category,
-        kind: stemCards().kindOf(category),
-      };
-      cards.push(card);
+      pushCard(fClean, bClean, category, { pageNumber, source: source || back });
       return true;
     }
 
-    // 1. First-Class STEM Didactic Blocks (Definitions, Theorems, Rules, Algorithms...): boxed text is trusted as-is
-    for (const blk of didacticBlocks || []) {
+    /** Note-style cards are fragments by nature, so they skip the sentence gates above (note-patterns.js has its own). */
+    function addNoteCard(card) {
+      const front = /^[a-z]{3,}(?=[\s-]|$)/.test(card.front) ? card.front[0].toUpperCase() + card.front.slice(1) : card.front;
+      const key = boldTerms ? boldTerms.termKey(front) : front.toLowerCase();
+      if (seen.has(key) || isNoise(front)) return false;
+      seen.add(key);
+      pushCard(front, card.back, card.category, { kind: card.kind, topic: card.topic || contextLabel });
+      return true;
+    }
+
+    // 1. First-Class STEM Didactic Blocks (Definitions, Theorems, Rules, Algorithms...): boxed text is trusted as-is.
+    //    Blocks extraction tags as margin notes, self-checks, tables or syntax boxes become cards of their own kind;
+    //    examples and sidebars become none (boxed-cards.js).
+    const boxed = dep('boxedCards', './boxed-cards.js');
+    const tagged = boxed.fromBlocks(didacticBlocks);
+    for (const blk of tagged.didactic) {
       addCard(blk.title, stemCards().didacticBack(blk), blk.category, blk.pageNumber, true);
     }
+    // Numbered boxes ("Definition 4") are cards named by the term they define; the box wins over any prose
+    // sentence that defines the same term later.
+    for (const box of tagged.boxes) {
+      if (addFact(box)) seen.add(boldTerms ? boldTerms.termKey(box.front) : box.front.toLowerCase());
+    }
+    // 1a. "Definition 4 ..." / "Theorem 2 (Name) ..." boxes whose frame the extraction did not keep.
+    for (const c of boxed.fromText(text)) addCard(c.front, c.back, c.category, null, true);
     // 1b. Named theorems/rules, core formulas, complexities & recurrences stated in running text
     for (const sc of stemCards().extractStemCards(text, splitSentences)) addCard(sc.front, sc.back, sc.category);
+
+    // 1c. Line-shaped notes ("term - definition", arrows, headings over bullets) have no sentences to mine.
+    const notes = dep('notePatterns', './note-patterns.js');
+    if (notes.looksLikeNotes(text)) {
+      notes.extractNoteCards(text).forEach(addNoteCard);
+      addAbbreviationCards();
+      return finishBook();
+    }
 
     const lines = (text || '').split(/\n+/).map((l) => l.trim()).filter((l) => l.length >= 6);
 
     // 2. Multi-line Heading Scanner for plain-text inputs ("Definition of X" / "THEOREM X.Y")
-    for (let i = 0; i < lines.length - 1; i++) {
-      const plainLine = cleanMarkdown(lines[i]);
-      const defHead = plainLine.match(/^(Definitions?\s+of\s+[A-Z][A-Za-z0-9\s,\-()\/]{2,60})$/);
-      const thmHead = plainLine.match(/^THEOREM\s+([A-Z0-9]+\.\d+)\s*([A-Za-z0-9\s,\-()'\/]{0,55})$/i);
-      if (defHead || thmHead) {
-        const sub = thmHead && thmHead[2].trim();
-        const title = defHead ? defHead[1].trim() : sub ? `Theorem ${thmHead[1]} — ${sub}` : `Theorem ${thmHead[1]}`;
-        const bodyLines = [];
-        for (let k = i + 1; k < Math.min(lines.length, i + 25); k++) {
-          const nextPlain = cleanMarkdown(lines[k]);
-          if (/^(?:THEOREM\s+|Definitions?\s+of\b|EXAMPLE\s+\d+|Proof\b|REMARK\b|Solution\b)/i.test(nextPlain)) break;
-          if (tokenizer.isHeadingLine(lines[k])) break;
-          bodyLines.push(nextPlain);
-        }
-        if (bodyLines.length > 0) addCard(title, bodyLines.join(' '), defHead ? 'Definition' : 'Theorem');
-      }
-    }
+    const rules = dep('definitionRules', './definition-rules.js');
+    for (const h of rules.headingBlocks(lines, { cleanMarkdown, isHeadingLine: tokenizer.isHeadingLine })) addCard(h.title, h.body, h.category);
 
     const sentences = splitSentences(text);
     // Full sentences first (wrapped lines rejoined), then only lines that aren't a mid-sentence wrap
     const candidates = [...sentences, ...tokenizer.selfContainedLines(lines).filter((l) => l.length >= 20)];
+
+    // 2b. Terms the prose introduces, each with its defining clause (prose-definitions.js); strongest readings first.
+    const defined = dep('proseDefinitions', './prose-definitions.js').mine(sentences, { isNoise });
+    for (const d of [...defined].sort((a, b) => b.strength - a.strength)) {
+      if (d.strength >= 3 || !isBadSentence(d.back)) addCard(d.term, d.back, 'Key Term', null, false, d.sentence, d.strength >= 3);
+    }
 
     for (const item of candidates) {
       if (isBadSentence(item)) continue;
@@ -143,30 +202,9 @@
         continue;
       }
 
-      // 4. Syntactic & Punctuation Definition Rules
-      const cleanItem = cleanMarkdown(item);
-      for (const rule of DEFINITION_RULES) {
-        const m = cleanItem.match(rule.regex);
-        if (m && m.groups) {
-          const term = m.groups.term.trim();
-          const acro = m.groups.acronym ? ` (${m.groups.acronym.trim()})` : '';
-          let def = (m.groups.def || '').trim();
-          // "...converted to the Fahrenheit This gas is called a Bose-Einstein scale": the def is a glued fragment
-          if (rule.type === 'reverse_def' && /\b(?:This|These|That|Those|Such|It|They)(?:\s+\w+)?$/.test(def)) continue;
-          // "Power: lim [f(x)]^n = L^n" is a formula label inside a theorem, not a glossary entry
-          if (rule.type === 'glossary' && /[=→∞≠<>√]|^(?:lim|sin|cos|tan|log|ln)\b/.test(def.slice(0, 30))) continue;
-          if (rule.type === 'copula') {
-            const idx = cleanItem.indexOf(term);
-            if (idx !== -1) {
-              def = cleanItem
-                .slice(idx + term.length)
-                .replace(/^\s*\([^)]+\)\s*/, '')
-                .replace(/^\s*(?:is\s+defined\s+as|can\s+be\s+defined\s+as|refers\s+to|denotes|is|are)\s+/i, '')
-                .trim();
-            }
-          }
-          if (addCard(`${term}${acro}`, def, 'Key Term')) break;
-        }
+      // 4. Syntactic & Punctuation Definition Rules (definition-rules.js), strongest reading first
+      for (const r of rules.read(cleanMarkdown(item))) {
+        if (addCard(r.term, r.def, 'Key Term')) break;
       }
     }
 
@@ -185,7 +223,36 @@
       for (const bt of found) addCard(bt.term, bt.back, 'Key Term');
     }
 
-    return cards;
+    // 5b. Tagged boxes (margin notes, self-checks, tables), then the section's stand-alone key statements:
+    //     prose that teaches facts without naming terms still yields cards (key-statements.js).
+    tagged.cards.forEach(addFact);
+    const taken = new Set(cards.map((c) => quality.plain(c.back).toLowerCase()));
+    dep('keyStatements', './key-statements.js').extract(text, { taken }).forEach(addFact);
+    dep('contrastCards', './contrast-cards.js').fromSentences(sentences).forEach(addFact);
+
+    addAbbreviationCards();
+    return finishBook();
+
+    /** Contrast pairs over the finished cards, repeats dropped, and every card given subject / sourceKind / page. */
+    function finishBook() {
+      const contrasts = dep('contrastCards', './contrast-cards.js').fromCards(cards);
+      const fields = dep('cardFields', './card-fields.js');
+      // A card mined from running text gets the page its back is printed on (extraction's scope.lines).
+      const pageOf = fields.pageLocator(opts.lines);
+      const placed = (c) => (c.page || c.pageNumber ? c : { ...c, pageNumber: pageOf(c.back) || pageOf(c.front) || null });
+      return quality.dedupe([...cards, ...contrasts]).map((c, i) => fields.finish({ ...placed(c), id: `fc-${i + 1}` }, { topic: contextLabel }));
+    }
+
+    /** 6. "process control block (PCB)": the abbreviation gets a card unless a term card already shows it. */
+    function addAbbreviationCards() {
+      for (const { abbr, long } of dep('abbreviations', './abbreviations.js').find(text)) {
+        const shown = cards.some((c) => c.front === abbr || c.front.includes(`(${abbr})`));
+        // An organisation's initials ("Institute of Electrical and Electronics Engineers") are not a concept.
+        if (shown || seen.has(abbr.toLowerCase()) || ORGANISATION_RE.test(long)) continue;
+        seen.add(abbr.toLowerCase());
+        pushCard(abbr, `Stands for "${long}".`, 'Abbreviation', { source: `(${abbr})` });
+      }
+    }
   }
 
   // Slide decks + Anki export live in slide-cards.js (re-exported here for existing callers).

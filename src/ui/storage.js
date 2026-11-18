@@ -1,5 +1,7 @@
 /**
- * Offline Persistence & Study Export Utilities (localStorage + Anki TSV / Markdown Export)
+ * Small UI preferences in localStorage (theme, collapsed rail), file download and the Markdown
+ * study-guide export. Study progress lives per document in IndexedDB (doc-store.js / doc-session.js);
+ * the `knownCards` map that used to live here is only read once more, by takeLegacyKnown.
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
@@ -8,9 +10,9 @@
   function loadState() {
     try {
       const raw = root.localStorage && root.localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : { knownCards: {}, quizScores: {} };
+      return raw ? JSON.parse(raw) : {};
     } catch (_e) {
-      return { knownCards: {}, quizScores: {} };
+      return {};
     }
   }
 
@@ -24,17 +26,20 @@
     }
   }
 
-  function toggleCardKnown(docName, cardFront) {
+  /**
+   * Card fronts marked known for `docName` in the old `${docName}::${cardFront}` format. They are
+   * removed from localStorage as they are returned, so they move to the per-document store once.
+   */
+  function takeLegacyKnown(docName) {
     const state = loadState();
-    const key = `${docName}::${cardFront}`;
-    state.knownCards[key] = !state.knownCards[key];
+    const known = state.knownCards || {};
+    const prefix = `${docName}::`;
+    const mine = Object.keys(known).filter((k) => k.startsWith(prefix));
+    if (!mine.length) return [];
+    const fronts = mine.filter((k) => known[k]).map((k) => k.slice(prefix.length));
+    mine.forEach((k) => { delete known[k]; });
     saveState(state);
-    return !!state.knownCards[key];
-  }
-
-  function isCardKnown(docName, cardFront) {
-    const state = loadState();
-    return !!state.knownCards[`${docName}::${cardFront}`];
+    return fronts;
   }
 
   /** Small UI preferences (theme, collapsed rail) kept alongside the study state. */
@@ -61,7 +66,10 @@
     URL.revokeObjectURL(url);
   }
 
-  function exportStudyGuideMarkdown({ docName, scopeTitle, summary, flashcards, quiz }) {
+  function exportStudyGuideMarkdown({ docName, scopeTitle, summary, flashcards: generatedCards, quiz: generatedQuiz }) {
+    // What the student sees: their edits and own cards in, deleted cards and bad questions out.
+    const flashcards = PDFStudy.docSession ? PDFStudy.docSession.deck(generatedCards).cards : generatedCards;
+    const quiz = PDFStudy.quizCard ? (generatedQuiz || []).filter(PDFStudy.quizCard.isValid) : generatedQuiz;
     const blocks = (summary && summary.didacticBlocks) || [];
     const defs = ((summary && summary.definitions) || []).filter((d) => d && d.term && d.definition);
     const lines = [
@@ -99,8 +107,7 @@
   PDFStudy.storage = {
     loadState,
     saveState,
-    toggleCardKnown,
-    isCardKnown,
+    takeLegacyKnown,
     getPref,
     setPref,
     downloadFile,

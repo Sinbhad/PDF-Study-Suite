@@ -89,7 +89,7 @@
           const gw = Math.abs(((g.width || 500) / 1000) * m[0]);
           const cp = g.unicode ? g.unicode.codePointAt(0) : -1;
           if (g.unicode && cp >= 32) drawn.push({ u: g.unicode, fontId, m, w: gw });
-          else if (cp >= 9 && cp <= 13 && f && fam && (fam.isMath || fam.pi)) {
+          else if (((cp >= 9 && cp <= 13) || (fam && fam.calligraphy && cp < 32)) && f && fam && (fam.isMath || fam.pi)) {
             const gn = (f.differences && f.differences[g.originalCharCode]) || (f.defaultEncoding && f.defaultEncoding[g.originalCharCode]);
             if (gn && gn !== 'space') {
               const ch = G.decodeChar(g.unicode, fam, gn);

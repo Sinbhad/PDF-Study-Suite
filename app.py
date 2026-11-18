@@ -1,5 +1,5 @@
 """
-Zero-Dependency Local Launcher for the Offline Non-AI PDF Study Suite.
+Zero-Dependency Local Launcher for the PDF Study Suite (runs on your device; nothing is uploaded).
 Serves the workspace on http://127.0.0.1:8765 with strict no-cache headers
 and exposes /local-larson.pdf for instant loading.
 """
@@ -34,6 +34,12 @@ class StudySuiteHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=ROOT_DIR, **kwargs)
 
     def end_headers(self):
+        # Cross-origin isolation: the page gets shared memory, so the on-device page reader can use several
+        # WebAssembly threads. Everything the app loads is on this origin, so nothing is blocked by it.
+        # NO_ISOLATION=1 leaves the headers out, to measure the one-thread speed a static host would give.
+        if os.environ.get("NO_ISOLATION") != "1":
+            self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+            self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
@@ -80,7 +86,8 @@ def main() -> None:
     server = StudySuiteServer((HOST, port), StudySuiteHandler)
 
     print("=" * 64)
-    print(" Offline Non-AI PDF Study Suite (Slides & Textbooks)")
+    print(" PDF Study Suite (Slides & Textbooks)")
+    print(" Runs on your device; nothing is uploaded.")
     print(f" Running locally at: {url}")
     print(" Press Ctrl+C to stop.")
     print("=" * 64)

@@ -37,10 +37,16 @@ async function cropsInPage(a) {
   const prep = S.hwPagePrep;
   const res = a.result || { lines: [] };
   let lines; let cropOf; let mode;
+  let pageBoxOf = (box) => box;
   if (prep && prep.plan && prep.cropFor) {
-    const plan = prep.plan(gray, width, height);
+    // the app reads a crooked or turned page from an upright view (src/hw/upright.js): the same view is cut
+    // here, turned by the angle the result says was used, so the previews show what the recogniser was given
+    const U = S.hwUpright;
+    const view = U ? U.open(gray, width, height, typeof res.angle === 'number' ? res.angle : 0) : { gray, width, height, frame: null };
+    const plan = U ? U.planView(view, prep.plan) : prep.plan(gray, width, height);
     lines = plan.lines;
-    cropOf = (box) => prep.cropFor(plan, gray, width, height, box);
+    cropOf = (box) => prep.cropFor(plan, view.gray, view.width, view.height, box);
+    if (U) pageBoxOf = (box) => U.pageBox(view, box);
     mode = 'hwPagePrep';
   } else {
     // same steps as hw-worker-core.js before hwPagePrep existed
@@ -68,13 +74,13 @@ async function cropsInPage(a) {
   const items = [];
   lines.forEach((l, li) => (l.regions || []).forEach((r, ri) => {
     const got = (res.lines[li] && res.lines[li].regions && res.lines[li].regions[ri]) || {};
-    items.push({ n: items.length + 1, li, ri, box: r.box, text: got.text || '', conf: got.confidence, stats: got.stats || null });
+    items.push({ n: items.length + 1, li, ri, box: r.box, pageBox: pageBoxOf(r.box), text: got.text || '', conf: got.confidence, stats: got.stats || null });
   }));
   const page = canvasOf({ data: gray, w: width, h: height });
   const pctx = page.getContext('2d');
   pctx.lineWidth = 2; pctx.font = 'bold 18px sans-serif';
   for (const it of items) {
-    const { x, y, w, h } = it.box;
+    const { x, y, w, h } = it.pageBox; // on the page as given; `it.box` is in the upright view the crops come from
     pctx.strokeStyle = it.conf >= 0.6 ? '#0a8f3c' : '#d22';
     pctx.strokeRect(x, y, w, h);
     const label = String(it.n);

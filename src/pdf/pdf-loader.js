@@ -37,24 +37,59 @@
     const fd = mod('fontDecoder', './font-decoder.js');
     const pr = mod('pageRules', './page-rules.js');
     const decoders = fd ? fd.buildDecoders(page, textContent.items, fontNames, opList, lib.OPS) : null;
-    const allItems = fd && opList && fd.refineItems ? fd.refineItems(page, textContent.items, opList, lib.OPS) : textContent.items;
+    // Notes-app handwriting recognition is invisible text (render mode 3) over the pen strokes (invisible-text.js)
+    const inv = mod('invisibleText', './invisible-text.js');
+    const overlayFamilies = (pdfDoc.__overlayFamilies = pdfDoc.__overlayFamilies || new Set());
+    const marked = inv && opList ? inv.markItems(textContent.items, opList, lib.OPS, { fontNames, overlayFamilies }) : textContent.items;
+    const allItems = fd && opList && fd.refineItems ? fd.refineItems(page, marked, opList, lib.OPS) : marked;
     const rules = pr && opList ? pr.extractRules(opList, lib.OPS, viewport.viewBox) : [];
-    const lines = reconstructLines(allItems, textContent.styles, viewport.width, viewport.height, {
-      fontNames,
-      decoders,
-      rules,
-      viewBox: viewport.viewBox,
-    });
+    const lineOpts = { fontNames, decoders, rules, viewBox: viewport.viewBox };
+    const lines = reconstructLines(allItems.filter((it) => !(it && it.isAnnotation)), textContent.styles, viewport.width, viewport.height, lineOpts);
+    const annotationItems = allItems.filter((it) => it && it.isAnnotation);
+    const annotations = annotationItems.length
+      ? annotationLines(reconstructLines(annotationItems, textContent.styles, viewport.width, viewport.height, lineOpts), pageNum)
+      : [];
     const wordCount = lines.reduce((sum, l) => sum + l.wordCount, 0);
     const pageObj = {
       pageNumber: pageNum, width: viewport.width, height: viewport.height,
-      aspectRatio: viewport.width / Math.max(1, viewport.height), lines, wordCount,
+      aspectRatio: viewport.width / Math.max(1, viewport.height), lines, wordCount, annotations,
     };
+    // line.kind: caption / folio / url / objective / biography / code (line-kinds.js)
+    const lk = mod('lineKinds', './line-kinds.js');
+    if (lk) lk.tagPage(pageObj);
     const pk = mod('pageKind', './page-kind.js');
     if (pk) pageObj.kind = pk.classifyPage(pageObj);
     const ink = mod('inkDetect', './ink-detect.js');
-    if (ink) pageObj.ink = ink.assess(pageObj, ink.opStats(opList, lib.OPS));
+    if (ink) pageObj.ink = ink.assess(pageObj, ink.opStats(opList, lib.OPS), await inkEvidence(page, opList, viewport));
     return pageObj;
+  }
+
+  /**
+   * page.annotations: the reader's own notes (notes-app handwriting recognition), never slide or book content.
+   * [{ text, pageNumber, x0, x1, topY, bottomY, fontSize, isAnnotation: true }] in viewport points, top-left origin.
+   */
+  function annotationLines(lines, pageNumber) {
+    return lines.map((l) => ({
+      text: l.text, pageNumber, x0: l.x0, x1: l.x1, topY: l.topY, bottomY: l.bottomY, fontSize: l.fontSize, isAnnotation: true,
+    }));
+  }
+
+  /** Where the page's pictures, strokes and freehand annotations are (ink-geometry.js), for ink-detect's assess. */
+  async function inkEvidence(page, opList, viewport) {
+    const geo = mod('inkGeometry', './ink-geometry.js');
+    if (!geo) return null;
+    const lib = root.pdfjsLib || {};
+    // Ink drawn as annotations (pencil markup) is not in the content stream; listing annotations is cheap
+    let annotations = [];
+    try {
+      annotations = typeof page.getAnnotations === 'function' ? await page.getAnnotations() : [];
+    } catch (_err) {
+      annotations = [];
+    }
+    return {
+      annotationInk: geo.inkAnnotations(annotations, viewport.transform),
+      geometry: geo.measure(opList, lib.OPS, viewport.transform),
+    };
   }
 
   async function extractOutline(pdfDoc) {
@@ -90,18 +125,35 @@
     return resolveItems(rawOutline, 1);
   }
 
+  /**
+   * Starts parsing `numbers` (when, where and whether a page is parsed again: page-scheduler.js) and returns
+   * a Map from page number to the promise of its page.
+   */
+  function startParsing(pdfDoc, numbers) {
+    const scheduler = mod('pageScheduler', './page-scheduler.js');
+    const pending = scheduler.schedule(pdfDoc, numbers, parseSinglePage);
+    return new Map(numbers.map((n, i) => [n, pending[i]]));
+  }
+
+  const nextTask = () => mod('pageScheduler', './page-scheduler.js').nextTask();
+
   async function ensurePagesLoaded(parsedPdf, startPage, endPage, onProgress) {
     if (!parsedPdf || !parsedPdf.pdfDoc) return parsedPdf.pages || [];
     const s = Math.max(1, startPage);
     const e = Math.min(parsedPdf.numPages, endPage);
     const total = e - s + 1;
     const result = [];
+    const missing = [];
+    for (let p = s; p <= e; p++) if (!parsedPdf.pageCache.has(p)) missing.push(p);
+    const parsing = startParsing(parsedPdf.pdfDoc, missing);
 
+    // Pages go into the cache in page order, whatever order they were parsed in
     for (let p = s; p <= e; p++) {
       if (!parsedPdf.pageCache.has(p)) {
         if (onProgress) onProgress(p - s + 1, total, p);
-        const pageData = await parseSinglePage(parsedPdf.pdfDoc, p);
-        parsedPdf.pageCache.set(p, pageData);
+        const pageData = await parsing.get(p);
+        if (!parsedPdf.pageCache.has(p)) parsedPdf.pageCache.set(p, pageData);
+        await nextTask();
       }
       result.push(parsedPdf.pageCache.get(p));
     }
@@ -110,9 +162,12 @@
 
   async function loadPdfDocument(arrayBuffer, onProgress) {
     configureWorker();
+    const scheduler = mod('pageScheduler', './page-scheduler.js');
+    const schedulerToken = scheduler.begin(arrayBuffer); // before PDF.js takes the bytes
     // fontExtraProperties exposes glyph names / encodings so math fonts can be decoded correctly
     const loadingTask = root.pdfjsLib.getDocument({ data: arrayBuffer, fontExtraProperties: true });
     const pdfDoc = await loadingTask.promise;
+    scheduler.attach(pdfDoc, schedulerToken);
     const numPages = pdfDoc.numPages;
     const pageCache = new Map();
     const outline = await extractOutline(pdfDoc);
@@ -127,16 +182,25 @@
         );
 
     const pages = [];
+    const parsing = startParsing(pdfDoc, Array.from(new Set(pagesToInitialParse)));
     for (let i = 0; i < pagesToInitialParse.length; i++) {
       const pNum = pagesToInitialParse[i];
       if (onProgress) onProgress(i + 1, pagesToInitialParse.length, pNum);
       if (!pageCache.has(pNum)) {
-        pageCache.set(pNum, await parseSinglePage(pdfDoc, pNum));
+        pageCache.set(pNum, await parsing.get(pNum));
+        await nextTask();
       }
       pages.push(pageCache.get(pNum));
     }
 
-    return { pdfDoc, numPages, pages, pageCache, outline, isLazy: !isSmallDoc };
+    const parsed = { pdfDoc, numPages, pages, pageCache, outline, isLazy: !isSmallDoc };
+    // parsed.inkSummary: typed / needs reading / empty page counts, recounted as pages load (ink-summary.js)
+    const summary = mod('inkSummary', './ink-summary.js');
+    if (summary) {
+      summary.attach(parsed);
+      await summary.surveyIfTextless(parsed, (root.pdfjsLib || {}).OPS);
+    }
+    return parsed;
   }
 
   async function renderPageToCanvas(pdfDoc, pageNumber, canvas, scale = 1.35) {

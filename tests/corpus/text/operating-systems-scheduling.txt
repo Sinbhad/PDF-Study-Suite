@@ -1,0 +1,15 @@
+Chapter 5: CPU Scheduling
+
+A **process** is a program in execution. At any moment each process is in one of several states: it is **running** if it currently holds the CPU, **ready** if it could run but is waiting for its turn, and **blocked** if it is waiting for an event such as the completion of a disk read. The operating system records everything it needs to resume a process in a data structure called the **process control block** (PCB). This includes the program counter, the contents of the registers, and a list of open files.
+
+When the CPU is taken from one process and given to another, the kernel performs a **context switch**. It saves the state of the old process in its PCB and loads the saved state of the new one. A context switch does no useful work for the user, so if it happens too often the system spends more time switching than computing.
+
+The part of the kernel that decides which ready process runs next is the **scheduler**. Under **non-preemptive scheduling** a process keeps the CPU until it blocks or exits. Under **preemptive scheduling** the operating system can interrupt a running process, usually when a timer fires, and move it back to the ready queue. Almost all modern general-purpose systems are preemptive.
+
+Scheduling algorithms are compared using a few standard measures. **Turnaround time** is the interval from the submission of a job to its completion. **Waiting time** is the total time a process spends in the ready queue. **Response time** is the time from a request until the first response is produced, which matters most to interactive users. **Throughput** is the number of processes completed per unit of time.
+
+**First-come, first-served** (FCFS) runs processes in the order they arrive. It is simple, but it suffers from the **convoy effect**: short jobs get stuck behind a long one, and the average waiting time increases. **Shortest job first** (SJF) always picks the process with the smallest next CPU burst. It gives the minimum average waiting time, but the length of the next burst cannot be known in advance and has to be estimated from earlier ones. SJF can also cause **starvation**, in which a long process never runs because shorter ones keep arriving.
+
+**Round robin** gives each process a fixed slice of CPU time called a **time quantum**. If the process is still running when its quantum expires, it is preempted and placed at the back of the ready queue. A very large quantum makes round robin behave like FCFS. A very small one improves response time but increases the overhead of context switches.
+
+In **priority scheduling** each process is assigned a number and the CPU goes to the one with the highest priority. Low-priority processes may starve. The usual remedy is **aging**, which gradually raises the priority of a process the longer it waits. A **multilevel feedback queue** combines these ideas. It keeps several queues with different priorities and quanta, and it moves a process to a lower queue when it uses up its whole quantum. In this way it favors interactive jobs without having to be told which ones they are.

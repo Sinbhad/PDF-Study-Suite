@@ -1,0 +1,66 @@
+Networks lecture 3 + 4 notes
+
+OSI model (7 layers)
+- physical: bits on the wire
+- data link: frames, MAC addresses, switches
+- network: packets, IP, routers
+- transport: TCP/UDP, ports
+- session, presentation, application (usually lumped together)
+mnemonic: Please Do Not Throw Sausage Pizza Away
+
+Encapsulation: each layer wraps data from layer above with its own header
+segment -> packet -> frame -> bits
+
+Addressing
+MAC address = 48 bit hardware addr, burned into NIC
+IP address = logical addr, can change when you move network
+IPv4: 32 bits, written as 4 octets eg 192.168.1.10
+IPv6: 128 bits, hex
+subnet mask - says which part of the IP is network vs host
+/24 = 255.255.255.0 = 254 usable hosts
+default gateway: router that traffic goes to when dest is not on local subnet
+ARP - maps IP addr to MAC addr on the local network
+DHCP - hands out IP addresses automatically
+DNS = translates domain names to IP addresses
+NAT: lets many private addrs share 1 public IP
+
+TCP vs UDP
+TCP
+- connection oriented
+- reliable, in order delivery
+- 3 way handshake: SYN -> SYN-ACK -> ACK
+- flow control w/ sliding window
+- congestion control (slow start, then additive increase)
+- used for web, email, file transfer
+UDP
+- connectionless
+- no guarantee of delivery or order
+- less overhead so faster
+- used for DNS lookups, video calls, games
+
+port = 16 bit number that identifies an application on a host
+well known ports: HTTP 80, HTTPS 443, SSH 22, DNS 53
+socket = IP address + port
+
+Routing
+router - forwards packets between networks using a routing table
+routing table: list of dest networks + next hop
+longest prefix match -> most specific route wins
+static route = entered by admin
+dynamic routing - routers learn routes from each other
+OSPF: link state, used inside an organisation
+BGP: path vector, used between ISPs
+TTL - hop counter, decremented at each router, packet dropped at 0 (stops loops)
+
+Switching
+switch - forwards frames using MAC address table
+learns which MAC is on which port by looking at source addr
+unknown dest -> flood to all ports
+VLAN = logical separation of a switch into multiple broadcast domains
+collision domain vs broadcast domain - switch splits the first, router splits the second
+
+Misc
+latency = delay, bandwidth = max rate, throughput = actual rate
+MTU - largest frame payload, usually 1500 bytes on ethernet
+packet bigger than MTU -> fragmentation
+ICMP: error + diagnostic msgs (ping, traceroute)

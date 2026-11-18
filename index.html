@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PDF Study Suite</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233F37C9'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h9' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="styles/tokens.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/tokens.css?v=20261118d" />
   <link rel="stylesheet" href="styles/base.css?v=20261113a" />
-  <link rel="stylesheet" href="styles/controls.css?v=20261113a" />
-  <link rel="stylesheet" href="styles/shell.css?v=20261113a" />
-  <link rel="stylesheet" href="styles/study.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/controls.css?v=20261118d" />
+  <link rel="stylesheet" href="styles/shell.css?v=20261118d" />
+  <link rel="stylesheet" href="styles/study.css?v=20261118d" />
   <link rel="stylesheet" href="styles/math.css?v=20261113a" />
-  <link rel="stylesheet" href="styles/practice.css?v=20261113a" />
-  <link rel="stylesheet" href="styles/handwriting.css?v=20261113a" />
+  <link rel="stylesheet" href="styles/practice.css?v=20261118d" />
+  <link rel="stylesheet" href="styles/handwriting.css?v=20261118a" />
   <!-- Storage + theme load first so a pinned theme applies before first paint -->
   <script src="src/ui/storage.js?v=20261113a"></script>
   <script src="src/ui/theme.js?v=20261113a"></script>
@@ -39,7 +39,7 @@
     <div class="topbar-actions">
       <button class="btn btn-ghost btn-sm doc-only split-btn" id="splitViewToggleBtn" type="button" aria-pressed="false" title="Show the PDF page beside the study view">Split view</button>
       <button class="btn btn-ghost btn-sm doc-only export-btn" id="exportMarkdownBtn" type="button" data-export title="Download a Markdown study guide for this selection">Export</button>
-      <button class="btn btn-ghost btn-sm" id="themeToggleBtn" type="button" title="Switch between system, light and dark"><span><span class="btn-label-wide">Theme: </span><span id="themeLabel">Auto</span></span></button>
+      <button class="btn btn-ghost btn-sm" id="themeToggleBtn" type="button" title="Switch between system, light and dark"><span><span class="narrow-only">Theme</span><span class="btn-label-wide">Theme: <span id="themeLabel">Auto</span></span></span></button>
       <button class="btn btn-secondary btn-sm" id="openPdfBtn" type="button"><span>Open<span class="btn-label-wide"> PDF</span></span></button>
     </div>
   </header>
@@ -58,12 +58,15 @@
           <button class="btn-link" id="demoBookBtn" type="button">a calculus textbook</button>
         </p>
         <p class="hidden" id="larsonLine">Recent: <button class="btn-link" id="loadLarsonBtn" type="button">Larson Calculus</button></p>
+        <p class="hidden" id="photoHint">Photos of pages (JPEG or PNG) work too.</p>
       </div>
+      <p class="open-error hidden" id="openError" role="alert"></p>
       <div id="heroProgress"></div>
     </div>
   </section>
-  <input type="file" id="pdfFileInput" accept="application/pdf,.pdf" class="hidden" />
+  <input type="file" id="pdfFileInput" accept="application/pdf,.pdf,image/png,image/jpeg" multiple class="hidden" />
   <p class="status-line" id="uploadStatusText" role="status" aria-live="polite"></p>
+  <p class="sr-only" id="announcer" role="status" aria-live="polite"></p>
 
   <!-- Workspace: outline rail + study column (+ optional split-screen PDF reader) -->
   <div id="workspaceArea" class="workspace hidden">
@@ -74,6 +77,10 @@
     <div class="rail-scrim" id="railScrim"></div>
 
     <main class="main">
+      <p class="type-hint hidden" id="docTypeHint">
+        <span id="docTypeHintText"></span>
+        <button class="btn-link note-link" id="docTypeSwitchBtn" type="button">Switch</button>
+      </p>
       <div class="tabs" id="tabsBar" role="tablist" aria-label="Study views">
         <button class="tab" role="tab" id="tab-summary" data-tab="summary" aria-selected="true" tabindex="0">Summary</button>
         <button class="tab" role="tab" id="tab-flashcards" data-tab="flashcards" aria-selected="false" tabindex="-1">Flashcards <span class="tab-count" data-count="flashcards">0</span></button>
@@ -112,88 +119,229 @@
     </main>
   </div>
 
-  <!-- Bundled Offline PDF.js Engine + Modular Non-AI Study Scripts -->
+  <!-- Check what was read: the page image beside the lines read from it (src/ui/hw-check.js) -->
+  <dialog class="hw-check" id="hwCheck" aria-labelledby="hwCheckTitle">
+    <header class="hw-check-head">
+      <div class="hw-check-title">
+        <h2 class="hw-check-name" id="hwCheckTitle">Check what was read</h2>
+        <span class="doc-pages hw-check-doc" id="hwCheckDoc"></span>
+      </div>
+      <div class="reader-group hw-check-nav">
+        <button class="btn btn-secondary btn-sm" id="hwPrevPageBtn" type="button" data-act="prev-page" aria-label="Previous page"><span class="hw-wide">Previous page</span><span class="hw-narrow" aria-hidden="true">‹</span></button>
+        <label class="sr-only" for="hwPageSelect">Go to page</label>
+        <select class="input hw-page-select" id="hwPageSelect"></select>
+        <button class="btn btn-secondary btn-sm" id="hwNextPageBtn" type="button" data-act="next-page" aria-label="Next page"><span class="hw-wide">Next page</span><span class="hw-narrow" aria-hidden="true">›</span></button>
+      </div>
+      <p class="hw-check-status" id="hwCheckStatus"></p>
+      <button class="btn btn-secondary btn-sm" id="hwDoneBtn" type="button" data-act="done">Done</button>
+    </header>
+    <div class="hw-check-body">
+      <section class="reader-pane hw-image" id="hwImagePane" aria-label="Page image"></section>
+      <section class="hw-lines" id="hwLinesPane" aria-label="Lines">
+        <p class="hw-notice hw-store-note hidden" id="hwStoreNote">Your fixes can't be saved on this device, so they last only until you close this tab.</p>
+        <div id="hwLinesBody"></div>
+      </section>
+    </div>
+    <div id="hwCheckUndo"></div>
+    <p class="sr-only" id="hwCheckLive" role="status" aria-live="polite"></p>
+  </dialog>
+
+  <!-- Bundled offline PDF.js engine + the study modules (the optional page reader's files load from vendor/hw/ in its worker) -->
   <script src="vendor/pdf.min.js?v=20261113a"></script>
   <script src="src/pdf/math-glyphs.js?v=20261113a"></script>
   <script src="src/pdf/math-tex.js?v=20261113a"></script>
   <script src="src/pdf/font-decoder.js?v=20261113a"></script>
   <script src="src/pdf/page-rules.js?v=20261113a"></script>
   <script src="src/pdf/math-line.js?v=20261113a"></script>
+  <script src="src/pdf/overline-builder.js?v=20261118a"></script>
   <script src="src/pdf/formula-builder.js?v=20261113a"></script>
   <script src="src/pdf/column-layout.js?v=20261113a"></script>
   <script src="src/pdf/span-format.js?v=20261113a"></script>
   <script src="src/pdf/line-builder.js?v=20261113a"></script>
   <script src="src/pdf/page-kind.js?v=20261113a"></script>
+  <script src="src/pdf/ink-geometry.js?v=20261113a"></script>
   <script src="src/pdf/ink-detect.js?v=20261113a"></script>
+  <script src="src/pdf/ink-summary.js?v=20261113a"></script>
   <script src="src/pdf/ocr-canvas.js?v=20261113a"></script>
   <script src="src/pdf/ocr-canvas-scope.js?v=20261113a"></script>
-  <script src="src/pdf/ocr-lines.js?v=20261113a"></script>
-  <script src="src/pdf/pdf-loader.js?v=20261113a"></script>
-  <script src="src/pdf/classifier.js?v=20261113a"></script>
-  <script src="src/pdf/slide-lines.js?v=20261113a"></script>
-  <script src="src/pdf/slide-reveal.js?v=20261113a"></script>
-  <script src="src/pdf/slide-extractor.js?v=20261113a"></script>
+  <script src="src/pdf/ocr-noise.js?v=20261118b"></script>
+  <script src="src/pdf/ocr-merge.js?v=20261118b"></script>
+  <script src="src/pdf/ocr-lines.js?v=20261118b"></script>
+  <script src="src/pdf/ocr-edits.js?v=20261118a"></script>
+  <script src="src/pdf/ocr-page-edits.js?v=20261118a"></script>
+  <script src="src/pdf/ocr-edit-record.js?v=20261118a"></script>
+  <script src="src/pdf/invisible-text.js?v=20261118a"></script>
+  <script src="src/pdf/line-kinds.js?v=20261118a"></script>
+  <script src="src/pdf/parsed-page-cache.js?v=20261118a"></script>
+  <script src="src/pdf/page-scheduler.js?v=20261118a"></script>
+  <script src="src/pdf/pdf-loader.js?v=20261118a"></script>
+  <script src="src/pdf/classifier.js?v=20261118d"></script>
+  <script src="src/pdf/table-grid.js?v=20261118a"></script>
+  <script src="src/pdf/slide-columns.js?v=20261118c"></script>
+  <script src="src/pdf/slide-captions.js?v=20261118c"></script>
+  <script src="src/pdf/slide-lines.js?v=20261118e"></script>
+  <script src="src/pdf/slide-reveal.js?v=20261118c"></script>
+  <script src="src/pdf/slide-extractor.js?v=20261118c"></script>
   <script src="src/pdf/scope-lines.js?v=20261113a"></script>
   <script src="src/pdf/figure-filter.js?v=20261113a"></script>
   <script src="src/pdf/block-headings.js?v=20261113a"></script>
-  <script src="src/pdf/didactic-blocks.js?v=20261113a"></script>
+  <script src="src/pdf/block-labels.js?v=20261118a"></script>
+  <script src="src/pdf/didactic-blocks.js?v=20261118c"></script>
+  <script src="src/pdf/math-prose.js?v=20261118c"></script>
+  <script src="src/pdf/margin-notes.js?v=20261118a"></script>
+  <script src="src/pdf/scope-emitter.js?v=20261118a"></script>
+  <script src="src/pdf/scope-blocks.js?v=20261118a"></script>
   <script src="src/pdf/text-cleaner.js?v=20261113a"></script>
   <script src="src/pdf/scope-builder.js?v=20261113a"></script>
-  <script src="src/pdf/book-hierarchy.js?v=20261113a"></script>
+  <script src="src/pdf/book-hierarchy.js?v=20261118d"></script>
   <script src="src/nlp/math-text.js?v=20261113a"></script>
-  <script src="src/nlp/stem-noise.js?v=20261113a"></script>
+  <script src="src/nlp/stem-noise.js?v=20261118b"></script>
   <script src="src/nlp/noise-filter.js?v=20261113a"></script>
-  <script src="src/nlp/tokenizer.js?v=20261113a"></script>
+  <script src="src/nlp/tokenizer.js?v=20261118b"></script>
   <script src="src/nlp/bold-terms.js?v=20261113a"></script>
   <script src="src/nlp/definition-miner.js?v=20261113a"></script>
   <script src="src/nlp/keywords.js?v=20261113a"></script>
   <script src="src/nlp/key-terms.js?v=20261113a"></script>
   <script src="src/nlp/graph-rank.js?v=20261113a"></script>
   <script src="src/nlp/summarizer.js?v=20261113a"></script>
+  <script src="src/nlp/summary-statements.js?v=20261118b"></script>
+  <script src="src/nlp/page-lines.js?v=20261118b"></script>
+  <script src="src/nlp/book-sections.js?v=20261118b"></script>
+  <script src="src/nlp/book-blocks.js?v=20261118d"></script>
+  <script src="src/nlp/book-formulas.js?v=20261118d"></script>
+  <script src="src/nlp/book-outline.js?v=20261118d"></script>
+  <script src="src/nlp/deck-sections.js?v=20261118c"></script>
+  <script src="src/nlp/slide-units.js?v=20261118d"></script>
+  <script src="src/nlp/deck-terms.js?v=20261118d"></script>
+  <script src="src/nlp/deck-outline.js?v=20261118e"></script>
   <script src="src/nlp/stem-cards.js?v=20261113a"></script>
-  <script src="src/nlp/slide-model.js?v=20261113a"></script>
-  <script src="src/nlp/slide-cards.js?v=20261113a"></script>
-  <script src="src/nlp/flashcard-engine.js?v=20261113a"></script>
+  <script src="src/nlp/content-filter.js?v=20261118d"></script>
+  <script src="src/nlp/content-spans.js?v=20261118a"></script>
+  <script src="src/nlp/slide-kinds.js?v=20261118d"></script>
+  <script src="src/nlp/slide-subjects.js?v=20261118a"></script>
+  <script src="src/nlp/slide-model.js?v=20261118d"></script>
+  <script src="src/nlp/card-quality.js?v=20261118e"></script>
+  <script src="src/nlp/self-contained.js?v=20261118c"></script>
+  <script src="src/nlp/card-fields.js?v=20261118c"></script>
+  <script src="src/nlp/abbreviations.js?v=20261113a"></script>
+  <script src="src/nlp/note-patterns.js?v=20261113a"></script>
+  <script src="src/nlp/prose-definitions.js?v=20261118c"></script>
+  <script src="src/nlp/table-cards.js?v=20261118c"></script>
+  <script src="src/nlp/contrast-cards.js?v=20261118c"></script>
+  <script src="src/nlp/aspect-groups.js?v=20261118a"></script>
+  <script src="src/nlp/slide-line-shapes.js?v=20261118c"></script>
+  <script src="src/nlp/slide-structure-cards.js?v=20261118e"></script>
+  <script src="src/nlp/slide-cards.js?v=20261118d"></script>
+  <script src="src/nlp/definition-rules.js?v=20261118c"></script>
+  <script src="src/nlp/key-statements.js?v=20261118c"></script>
+  <script src="src/nlp/boxed-cards.js?v=20261118c"></script>
+  <script src="src/nlp/flashcard-engine.js?v=20261118c"></script>
   <script src="src/nlp/phrase-shape.js?v=20261113a"></script>
   <script src="src/nlp/quiz-gate.js?v=20261113a"></script>
   <script src="src/nlp/quiz-options.js?v=20261113a"></script>
   <script src="src/nlp/stem-distractors.js?v=20261113a"></script>
   <script src="src/nlp/slide-quiz.js?v=20261113a"></script>
-  <script src="src/nlp/block-quiz.js?v=20261113a"></script>
+  <script src="src/nlp/block-quiz.js?v=20261118c"></script>
   <script src="src/nlp/stem-questions.js?v=20261113a"></script>
-  <script src="src/nlp/quiz-engine.js?v=20261113a"></script>
-  <script src="src/nlp/test-engine.js?v=20261113a"></script>
+  <script src="src/nlp/option-sets.js?v=20261118a"></script>
+  <script src="src/nlp/sentence-terms.js?v=20261118a"></script>
+  <script src="src/nlp/quiz-content.js?v=20261118c"></script>
+  <script src="src/nlp/quiz-subjects.js?v=20261118b"></script>
+  <script src="src/nlp/fact-statements.js?v=20261118b"></script>
+  <script src="src/nlp/quiz-facts.js?v=20261118c"></script>
+  <script src="src/nlp/subject-claims.js?v=20261118b"></script>
+  <script src="src/nlp/subject-peers.js?v=20261118e"></script>
+  <script src="src/nlp/altered-statements.js?v=20261118e"></script>
+  <script src="src/nlp/quiz-kinds.js?v=20261118d"></script>
+  <script src="src/nlp/quiz-rank.js?v=20261118d"></script>
+  <script src="src/nlp/deck-facts.js?v=20261118b"></script>
+  <script src="src/nlp/structured-gate.js?v=20261118b"></script>
+  <script src="src/nlp/fact-questions.js?v=20261118d"></script>
+  <script src="src/nlp/marked-terms.js?v=20261118a"></script>
+  <script src="src/nlp/cloze-questions.js?v=20261118a"></script>
+  <script src="src/nlp/naming-questions.js?v=20261118b"></script>
+  <script src="src/nlp/recall-questions.js?v=20261118c"></script>
+  <script src="src/nlp/table-questions.js?v=20261118c"></script>
+  <script src="src/nlp/annotation-notes.js?v=20261118c"></script>
+  <script src="src/nlp/quiz-assembly.js?v=20261118c"></script>
+  <script src="src/nlp/quiz-scope.js?v=20261118c"></script>
+  <script src="src/nlp/quiz-engine.js?v=20261118c"></script>
+  <script src="src/nlp/test-engine.js?v=20261118c"></script>
+  <script src="src/nlp/study-keys.js?v=20261113a"></script>
+  <script src="src/nlp/doc-state.js?v=20261113a"></script>
+  <script src="src/nlp/deck-merge.js?v=20261113a"></script>
+  <script src="src/nlp/review-schedule.js?v=20261113a"></script>
+  <script src="src/nlp/deck-export.js?v=20261113a"></script>
   <script src="src/hw/raster.js?v=20261113a"></script>
   <script src="src/hw/segmenter.js?v=20261113a"></script>
   <script src="src/hw/null-engine.js?v=20261113a"></script>
-  <script src="src/hw/hw-client.js?v=20261113a"></script>
+  <script src="src/hw/hw-client.js?v=20261118b"></script>
+  <script src="src/hw/page-flatten.js?v=20261118a"></script>
+  <script src="src/hw/skew-angle.js?v=20261118a"></script>
+  <script src="src/hw/page-turn.js?v=20261118a"></script>
   <script src="src/hw/canvas-plan.js?v=20261113a"></script>
   <script src="src/hw/canvas-order.js?v=20261113a"></script>
   <script src="src/hw/canvas-read.js?v=20261113a"></script>
-  <script src="src/hw/hw-pipeline.js?v=20261113a"></script>
+  <script src="src/hw/hw-pipeline.js?v=20261118b"></script>
   <script src="src/ui/math-renderer.js?v=20261113a"></script>
   <script src="src/ui/rich-text.js?v=20261113a"></script>
   <script src="src/ui/rich-blocks.js?v=20261113a"></script>
-  <script src="src/ui/study-views.js?v=20261113a"></script>
-  <script src="src/ui/summary-view.js?v=20261113a"></script>
+  <script src="src/ui/study-views.js?v=20261118c"></script>
+  <script src="src/ui/slide-notes.js?v=20261118c"></script>
+  <script src="src/ui/summary-outline.js?v=20261118d"></script>
+  <script src="src/ui/summary-view.js?v=20261118d"></script>
+  <script src="src/ui/doc-store.js?v=20261113a"></script>
+  <script src="src/ui/doc-session.js?v=20261113a"></script>
+  <script src="src/ui/undo-bar.js?v=20261113a"></script>
+  <script src="src/ui/flashcard-deck.js?v=20261113a"></script>
+  <script src="src/ui/flashcard-form.js?v=20261113a"></script>
+  <script src="src/ui/due-badge.js?v=20261113a"></script>
+  <script src="src/ui/question-flags.js?v=20261113a"></script>
+  <script src="src/ui/attempt-log.js?v=20261113a"></script>
   <script src="src/ui/flashcard-faces.js?v=20261113a"></script>
   <script src="src/ui/flashcard-view.js?v=20261113a"></script>
-  <script src="src/ui/quiz-card.js?v=20261113a"></script>
-  <script src="src/ui/test-report.js?v=20261113a"></script>
-  <script src="src/ui/test-view.js?v=20261113a"></script>
-  <script src="src/ui/quiz-view.js?v=20261113a"></script>
+  <script src="src/ui/quiz-card.js?v=20261118d"></script>
+  <script src="src/ui/test-report.js?v=20261118d"></script>
+  <script src="src/ui/test-view.js?v=20261118d"></script>
+  <script src="src/ui/quiz-view.js?v=20261118d"></script>
   <script src="src/ui/demo-data.js?v=20261113a"></script>
-  <script src="src/ui/sidebar-tree.js?v=20261113a"></script>
+  <script src="src/ui/sidebar-tree.js?v=20261118d"></script>
   <script src="src/ui/reader-controls.js?v=20261113a"></script>
-  <script src="src/ui/hw-crops.js?v=20261113a"></script>
-  <script src="src/ui/hw-review.js?v=20261113a"></script>
-  <!-- Handwriting and scanned-page reading is in progress and hidden from the live app. -->
-  <script>window.PDFStudy = window.PDFStudy || {}; PDFStudy.ENABLE_HANDWRITING = false;</script>
-  <script src="src/ui/study-pipeline.js?v=20261113a"></script>
-  <script src="src/ui/main.js?v=20261113a"></script>
+  <script src="src/ui/hw-crops.js?v=20261118a"></script>
+  <script src="src/ui/hw-check-text.js?v=20261118d"></script>
+  <script src="src/ui/hw-review.js?v=20261118a"></script>
+  <script src="src/ui/hw-check-model.js?v=20261118a"></script>
+  <script src="src/ui/hw-check-keys.js?v=20261118a"></script>
+  <script src="src/ui/hw-page-geometry.js?v=20261118a"></script>
+  <script src="src/ui/hw-page-gestures.js?v=20261118a"></script>
+  <script src="src/ui/hw-page-view.js?v=20261118a"></script>
+  <script src="src/ui/hw-check-lines.js?v=20261118a"></script>
+  <script src="src/ui/hw-check-states.js?v=20261118a"></script>
+  <script src="src/ui/hw-check-undo.js?v=20261118a"></script>
+  <script src="src/ui/hw-check-actions.js?v=20261118a"></script>
+  <script src="src/ui/hw-check.js?v=20261118a"></script>
+  <script src="src/ui/hw-check-entry.js?v=20261118a"></script>
+  <!-- Scanned and handwritten pages are read only where the reader's files are installed (vendor/hw/). -->
+  <script src="src/hw/hw-availability.js?v=20261118b"></script>
+  <script src="src/ui/ocr-cache.js?v=20261118b"></script>
+  <script src="src/ui/study-reading.js?v=20261118b"></script>
+  <script src="src/ui/study-inputs.js?v=20261118c"></script>
+  <script src="src/ui/study-pipeline.js?v=20261118c"></script>
+  <script src="src/ui/doc-verdict.js?v=20261113a"></script>
+  <script src="src/ui/scope-pager.js?v=20261113a"></script>
+  <script src="src/ui/thin-results.js?v=20261118d"></script>
+  <script src="src/ui/study-states.js?v=20261118d"></script>
+  <script src="src/ui/scope-notes.js?v=20261113a"></script>
+  <script src="src/ui/image-pdf.js?v=20261113a"></script>
+  <script src="src/ui/image-import.js?v=20261113a"></script>
+  <script src="src/ui/open-messages.js?v=20261113a"></script>
+  <script src="src/ui/file-open.js?v=20261113a"></script>
+  <script src="src/ui/background-read.js?v=20261118b"></script>
+  <script src="src/ui/build-run.js?v=20261118d"></script>
+  <script src="src/ui/main.js?v=20261118d"></script>
   <script src="src/ui/events.js?v=20261113a"></script>
   <script src="src/ui/keys.js?v=20261113a"></script>
-  <script src="src/ui/loading.js?v=20261113a"></script>
+  <script src="src/ui/loading.js?v=20261118d"></script>
   <script src="src/ui/tabs.js?v=20261113a"></script>
   <script src="src/ui/shell.js?v=20261113a"></script>
 </body>

@@ -2,9 +2,8 @@
  * Practice Test tab: a full exam sheet grouped by section, untimed or timed, answers changeable
  * until "Submit test" (reveal questions are self-graded), then a score report by skill, review of
  * the missed items with explanations + source page jumps, and "Retry missed".
- * Generation: PDFStudy.testEngine.generateTest(text, { didacticBlocks, sections, ... }) per #9/#13
- * (-> { title, sections: [{ name, questions }], total }); falls back to generatePracticeTest, then
- * to quizEngine.generateQuiz. Grading/report: test-report.js.
+ * Generation: studyPipeline.practiceTest (testEngine.generateTest with the scope's cards, blocks and the
+ * student's flagged sources; -> { title, sections: [{ name, questions }], total }). Grading/report: test-report.js.
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
@@ -31,28 +30,15 @@
     return sections.length ? { raw: res, title: res.title || `Practice test: ${scopeTitle}`, sections } : null;
   }
 
+  /** A new test from the same inputs as the first build (study-pipeline.js: cards, blocks, flagged sources). */
   function generate(st, seed) {
-    const isSlide = st.activeMode === 'slide_deck';
-    const sc = st.selectedScope;
-    const slides = isSlide ? ((st.slideDeck && st.slideDeck.slides) || []).filter((s) => s.slideNumber >= sc.startPage && s.slideNumber <= sc.endPage) : [];
-    const text = isSlide
-      ? slides.map((s) => `${s.title}. ${(s.bullets || []).join('. ')}`).join('\n\n')
-      : (st.lastScopeObj && st.lastScopeObj.text) || '';
-    const didacticBlocks = (!isSlide && st.lastScopeObj && st.lastScopeObj.didacticBlocks) || [];
-    const mode = isSlide ? 'slides' : 'book';
-    const eng = PDFStudy.testEngine;
-    const gen = eng && (eng.generateTest || eng.generatePracticeTest);
-    if (gen) {
-      try {
-        const callOpts = { didacticBlocks, mode, slides, seedOffset: seed, maxQuestions: 20, scopeTitle: sc.title };
-        if (st.lastScopeObj && Array.isArray(st.lastScopeObj.sections)) callOpts.sections = st.lastScopeObj.sections;
-        const t = normalize(gen.call(eng, text, callOpts), sc.title);
-        if (t) return t;
-      } catch (_e) { /* fall back to the quiz engine */ }
+    const sp = PDFStudy.studyPipeline;
+    if (!sp || !sp.practiceTest) return null;
+    try {
+      return normalize(sp.practiceTest(st, seed), st.selectedScope.title);
+    } catch (_e) {
+      return null;
     }
-    const qe = PDFStudy.quizEngine;
-    if (!qe) return null;
-    return normalize(qe.generateQuiz(isSlide ? slides : text, { maxQuestions: 20, mode, didacticBlocks, seedOffset: seed + 7 }), sc.title);
   }
 
   function newSession(test, opts = {}) {
@@ -89,14 +75,27 @@
       draw();
       const rep = container.querySelector('.test-report');
       if (rep && rep.scrollIntoView) rep.scrollIntoView({ block: 'start' });
+      if (rep) rep.focus({ preventScroll: true }); // the Submit button is gone: keyboard focus starts at the score
+    }
+    /** After a redraw that removed the button just used, focus `sel` (or the first question's first control). */
+    function refocus(sel) {
+      const target = (sel && container.querySelector(sel)) || container.querySelector('.q-card .q-opt:not(:disabled), .q-card [data-show-qid]');
+      if (target) target.focus();
     }
 
     /** Re-render one question in place (keeps scroll position), then refresh the progress line. */
     function redrawCard(q) {
-      const card = container.querySelector(`[data-qcard="${root.CSS && CSS.escape ? CSS.escape(q.id) : q.id}"]`);
+      const sel = `[data-qcard="${root.CSS && CSS.escape ? CSS.escape(q.id) : q.id}"]`;
+      const card = container.querySelector(sel);
       if (card) {
+        // The card is replaced: put keyboard focus back on the same control (Show answer -> "I got it").
+        const had = card.contains(document.activeElement) ? document.activeElement : null;
+        const again = !had ? '' : had.hasAttribute('data-opt-idx') ? `[data-opt-idx="${had.getAttribute('data-opt-idx')}"]`
+          : had.hasAttribute('data-grade') ? `[data-grade="${had.getAttribute('data-grade')}"]` : had.hasAttribute('data-show-qid') ? '[data-grade="got"]' : '';
         card.outerHTML = QC.questionCard(q, S.questions.indexOf(q) + 1, cardState(q));
         QC.bindOptions(container, S.questions, pick, show);
+        const target = again && container.querySelector(`${sel} ${again}`);
+        if (target) target.focus();
       }
       const n = answeredCount();
       const lbl = container.querySelector('#testAnswered');
@@ -127,7 +126,7 @@
     function draw() {
       const head = (meta) => sv.viewHead(S.retry ? 'Practice test · retry' : 'Practice test', scopeTitle, meta);
       if (!S.test || !S.questions.length) {
-        container.innerHTML = head('') + sv.emptyState('Not enough material for a practice test', 'Pick a chapter or a longer page range with theorems, formulas or definitions.');
+        container.innerHTML = head('') + sv.whyEmpty('test', 'Not enough material for a practice test', 'Pick a chapter or a longer page range with theorems, formulas or definitions.');
         return;
       }
       const n = answeredCount();
@@ -146,7 +145,7 @@
         ${S.submitted ? `<h3 class="sec-title">${S.reviewAll ? 'All answers' : 'Missed items'}<span class="sec-count">${S.reviewAll ? total : S.result.missed.length}</span></h3>` : ''}
         <div class="test-sheet">${sheetHtml()}</div>
         ${S.submitted ? '' : '<div class="q-nav"><button class="btn btn-primary" id="testSubmitBtn" type="button">Submit test</button></div>'}`;
-      QC.bindOptions(container, S.questions, pick, show);
+      QC.bindOptions(container, S.questions, pick, show, { redraw: draw, answers: S.answers, retrying: S.retry });
       const $ = (sel) => container.querySelector(sel);
       if ($('#testSubmitBtn')) {
         $('#testSubmitBtn').onclick = () => {
@@ -162,10 +161,11 @@
         $('#testRetryMissedBtn').onclick = () => {
           S = newSession({ raw: null, sections: [{ name: 'Missed questions', questions: S.result.missed }] }, { key: S.key, seed: S.seed, minutes: S.minutes, retry: true });
           draw();
+          refocus();
         };
       }
-      if ($('#testReviewToggleBtn')) $('#testReviewToggleBtn').onclick = () => { S.reviewAll = !S.reviewAll; draw(); };
-      if ($('#testNewBtn')) $('#testNewBtn').onclick = () => { const seed = S.seed + 1; S = newSession(generate(st, seed), { key, seed, minutes: S.minutes }); draw(); };
+      if ($('#testReviewToggleBtn')) $('#testReviewToggleBtn').onclick = () => { S.reviewAll = !S.reviewAll; draw(); refocus('#testReviewToggleBtn'); };
+      if ($('#testNewBtn')) $('#testNewBtn').onclick = () => { const seed = S.seed + 1; S = newSession(generate(st, seed), { key, seed, minutes: S.minutes }); draw(); refocus(); };
       if ($('#testPrintBtn')) $('#testPrintBtn').onclick = () => root.print && root.print();
       if (S.minutes && !S.submitted) {
         ticker = setInterval(() => {
@@ -184,6 +184,9 @@
   /** Number of questions the practice test will actually show (drives the tab count). */
   const count = (res, scopeTitle) => { const t = normalize(res, scopeTitle); return t ? t.sections.reduce((n, s) => n + s.questions.length, 0) : 0; };
 
-  PDFStudy.testView = { renderTestView, count, _normalize: normalize, reset: () => { S = null; stopTicker(); } };
+  /** True when the student has answered or submitted the test on the sheet (a rebuild must not replace it unasked). */
+  const inProgress = () => !!(S && (S.submitted || Object.keys(S.answers).length > 0));
+
+  PDFStudy.testView = { renderTestView, count, inProgress, _normalize: normalize, reset: () => { S = null; stopTicker(); } };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.testView;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -78,7 +78,9 @@
       !text.startsWith('$') &&
       !text.startsWith('`')
     ) {
-      out[out.length - 1] = `${m[1]}${nextWord[1]}`;
+      // A break inside a hyphenated compound keeps its hyphen: "cause-and-" + "effect" -> "cause-and-effect"
+      const inCompound = /[A-Za-z]+-[a-z]+$/.test(m[1]);
+      out[out.length - 1] = `${m[1]}${inCompound ? '-' : ''}${nextWord[1]}`;
       return;
     }
     out.push(text);

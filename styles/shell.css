@@ -36,13 +36,21 @@ body.rail-collapsed .rail { display: none; }
 .rail-head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--sp-2) var(--sp-3); color: var(--text-muted); }
 .rail-scrim { display: none; }
 .main { min-width: 0; }
+/* One quiet line under the top bar when the slides/textbook call is doubtful */
+.type-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-2); padding: var(--sp-1) var(--sp-6); color: var(--text-muted); font-size: var(--fs-sm); border-bottom: 1px solid var(--border); }
 .study-pane { max-width: calc(var(--measure) + 2 * var(--sp-6)); margin: 0 auto; padding: var(--sp-6) var(--sp-6) 96px; min-width: 0; }
 
 /* Outline tree: 32px rows, selected = primary-soft + 2px primary left rule */
 .tree-tools { display: grid; gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-3); }
-.tree-range summary { color: var(--text-muted); font-size: var(--fs-sm); list-style: none; }
+/* "Study a page range" opens like the chapter rows: a chevron and a full 32px row to click */
+.tree-range summary {
+  display: flex; align-items: center; gap: var(--sp-2); min-height: 32px; padding: 0 var(--sp-2); border-radius: var(--r-sm);
+  color: var(--text-soft); font-size: var(--fs-sm); list-style: none; cursor: pointer;
+}
 .tree-range summary::-webkit-details-marker { display: none; }
-.tree-range summary:hover { color: var(--text); }
+.tree-range summary::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; margin-right: 2px; border-right: 1.5px solid var(--text-muted); border-bottom: 1.5px solid var(--text-muted); transform: translateY(-1px) rotate(-45deg); }
+.tree-range[open] summary::before { transform: translateY(-2px) rotate(45deg); }
+.tree-range summary:hover { background: var(--hover); color: var(--text); }
 .tree-range-row { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); font-size: var(--fs-sm); color: var(--text-muted); }
 .tree-row { position: relative; display: flex; align-items: stretch; border-radius: var(--r-sm); border-left: 2px solid transparent; }
 .tree-row:hover { background: var(--hover); }
@@ -56,9 +64,9 @@ body.rail-collapsed .rail { display: none; }
 .tree-label .math-inline { font-size: 1em; }
 .tree-num, .tree-meta { flex: 0 0 auto; color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tree-num { min-width: 2.9em; }
-.tree-quiz { flex: 0 0 auto; display: none; align-self: center; margin-right: 6px; padding: 3px var(--sp-2); border-radius: var(--r-sm); color: var(--primary); font: 600 var(--fs-xs)/1.3 var(--font-ui); }
+.tree-quiz { flex: 0 0 auto; display: none; align-self: center; align-items: center; min-height: 24px; margin-right: 6px; padding: 0 var(--sp-2); border-radius: var(--r-sm); color: var(--primary); font: 600 var(--fs-xs)/1.3 var(--font-ui); }
 .tree-quiz:hover { background: var(--primary-soft); }
-.tree-row:hover .tree-quiz, .tree-row:focus-within .tree-quiz, .tree-row.is-selected .tree-quiz { display: block; }
+.tree-row:hover .tree-quiz, .tree-row:focus-within .tree-quiz, .tree-row.is-selected .tree-quiz { display: inline-flex; }
 .tree-row:hover .tree-meta, .tree-row:focus-within .tree-meta, .tree-row.is-selected .tree-meta { display: none; }
 .tree-sub .tree-main { padding-left: var(--sp-5); }
 .tree-row.is-strong .tree-main { color: var(--text); font-weight: 600; }
@@ -109,6 +117,7 @@ body.rail-collapsed .rail { display: none; }
   /* The tab row scrolls sideways on phones; the fade hints that there is more to the right. */
   .tabs { padding: 0 var(--sp-6) 0 var(--sp-4); gap: var(--sp-4); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
   .study-pane, .split-active .study-pane { padding: var(--sp-5) var(--sp-4) var(--sp-8); }
+  .type-hint { padding: var(--sp-1) var(--sp-4); }
   .split-active { display: block; }
   .split-active .reader-pane { display: none; }
   .reader-canvas-wrap { padding: var(--sp-3); }
@@ -119,7 +128,7 @@ body.rail-collapsed .rail { display: none; }
   .narrow-only { display: inline-block; }
 }
 @media print {
-  .topbar, .rail, .tabs, .reader-pane, .status-line, .view-tools, .q-nav { display: none !important; }
+  .topbar, .rail, .tabs, .reader-pane, .status-line, .view-tools, .q-nav, .type-hint, .scope-pager { display: none !important; }
   .workspace { display: block; }
   body { background: #fff; }
 }

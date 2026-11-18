@@ -1,133 +1,58 @@
 /**
- * Handwriting crops for the review panel. Pages are rendered one at a time, only when a row that needs them
- * scrolls into view, to an offscreen canvas that is released as soon as its rows are drawn.
+ * The line strip of the "Check what was read" screen: on a phone the page image has no room beside the
+ * lines, so the line being checked is shown on its own, cut out of the rendered page with a little of
+ * what is above and below it. The page itself is rendered by hw-page-view.js; this only crops from it.
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
 
-  const PAD = 6; // rendered pixels of margin around each crop
-  const BATCH = 40; // rows drawn per page render
-  const MAX_SCALE = 3;
-  const MAX_W = 640; // widest row canvas in px
+  const MAX_W = 1200; // widest strip canvas in px (a phone at 3x is narrower than this)
 
-  /** Draw one region of the rendered page onto a row canvas (white card, dark ink). */
-  function drawCrop(src, canvas, box) {
-    const x = Math.max(0, Math.floor(box.x - PAD));
-    const y = Math.max(0, Math.floor(box.y - PAD));
-    const w = Math.max(1, Math.min(src.width - x, Math.ceil(box.w + 2 * PAD)));
-    const h = Math.max(1, Math.min(src.height - y, Math.ceil(box.h + 2 * PAD)));
-    const k = Math.min(1, MAX_W / w); // downscale wide crops, keep aspect
-    const dw = Math.max(1, Math.round(w * k));
-    const dh = Math.max(1, Math.round(h * k));
+  /** Draw rectangle `rect` of the rendered page onto `canvas` (white paper, never upscaled past the source). */
+  function drawCrop(src, canvas, rect) {
+    const k = Math.min(1, MAX_W / rect.w);
+    const dw = Math.max(1, Math.round(rect.w * k));
+    const dh = Math.max(1, Math.round(rect.h * k));
     canvas.width = dw;
     canvas.height = dh;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, dw, dh);
-    ctx.drawImage(src, x, y, w, h, 0, 0, dw, dh);
-    canvas.setAttribute('data-ready', 'true');
+    ctx.drawImage(src, rect.x, rect.y, rect.w, rect.h, 0, 0, dw, dh);
   }
 
   /**
-   * cropper = createCropper(pdfDoc); cropper.watch(canvas, { pageNumber, box, scale });
-   * cropper.dispose() stops all pending work (called when the panel closes).
+   * strip = createStrip(host)
+   *   strip.show(source, box)   source: the rendered page canvas; box: the line's box in that canvas's pixels
+   *   strip.clear(note)         nothing to show (no page image, or a line with no place on the page)
    */
-  function createCropper(pdfDoc) {
-    const pending = new Map(); // pageNumber -> [{ canvas, box, scale }]
-    let running = false;
-    let dead = false;
-    let observer = null;
-    const jobs = new WeakMap();
+  function createStrip(host) {
+    host.innerHTML = '<canvas class="hw-strip-canvas" aria-hidden="true"></canvas><p class="hw-strip-note"></p>';
+    const canvas = host.querySelector('canvas');
+    const note = host.querySelector('.hw-strip-note');
 
-    let cached = null; // { n, canvas }: the last rendered page, kept for consecutive batches
-    function release() {
-      if (cached) { cached.canvas.width = 0; cached.canvas.height = 0; }
-      cached = null;
+    function clear(text) {
+      canvas.classList.add('hidden');
+      note.textContent = text || '';
     }
 
-    async function drawBatch(pageNumber, batch) {
-      try {
-        const scale = Math.min(MAX_SCALE, batch[0].scale || 1);
-        if (!cached || cached.n !== pageNumber) {
-          release();
-          const big = document.createElement('canvas');
-          cached = { n: pageNumber, canvas: big };
-          await PDFStudy.pdfLoader.renderPageToCanvas(pdfDoc, pageNumber, big, scale);
-        }
-        if (dead) return;
-        const ratio = batch[0].scale ? scale / batch[0].scale : 1; // 1 unless the recognition scale exceeded the cap
-        for (const j of batch) {
-          const b = j.box;
-          drawCrop(cached.canvas, j.canvas, { x: b.x * ratio, y: b.y * ratio, w: b.w * ratio, h: b.h * ratio });
-        }
-      } catch (_err) {
-        release();
-        for (const j of batch) j.canvas.setAttribute('data-failed', 'true');
-      } finally {
-        if (dead) release();
-      }
-    }
-
-    function nextPage() {
-      if (cached && pending.has(cached.n)) return [cached.n, pending.get(cached.n)];
-      return pending.entries().next().value;
-    }
-
-    async function pump() {
-      if (running) return;
-      running = true;
-      try {
-        while (!dead && pending.size) {
-          const [n, list] = nextPage();
-          const batch = list.splice(0, BATCH);
-          if (!list.length) pending.delete(n);
-          await drawBatch(n, batch);
-        }
-      } finally {
-        running = false;
-      }
-    }
-
-    function request(job) {
-      if (dead || job.canvas.hasAttribute('data-ready')) return;
-      if (!pdfDoc || !PDFStudy.pdfLoader || !PDFStudy.pdfLoader.renderPageToCanvas) {
-        job.canvas.setAttribute('data-failed', 'true');
+    function show(source, box) {
+      const w = host.clientWidth;
+      const h = host.clientHeight;
+      const G = PDFStudy.hwPageGeometry;
+      const rect = source && box && w > 0 && h > 0 ? G.stripRect(box, { w: source.width, h: source.height }, w / h) : null;
+      if (!rect || rect.w < 1 || rect.h < 1) {
+        clear(source && !box ? 'This line has no place on the page.' : '');
         return;
       }
-      const list = pending.get(job.pageNumber) || [];
-      if (!list.includes(job)) list.push(job);
-      pending.set(job.pageNumber, list);
-      pump();
+      note.textContent = '';
+      canvas.classList.remove('hidden');
+      drawCrop(source, canvas, rect);
     }
 
-    if (typeof IntersectionObserver === 'function') {
-      observer = new IntersectionObserver((entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          observer.unobserve(e.target);
-          const job = jobs.get(e.target);
-          if (job) request(job);
-        }
-      }, { rootMargin: '200px' });
-    }
-
-    function watch(canvas, spec) {
-      const job = { canvas, pageNumber: spec.pageNumber, box: spec.box, scale: spec.scale };
-      jobs.set(canvas, job);
-      if (observer) observer.observe(canvas);
-      else request(job);
-    }
-
-    function dispose() {
-      dead = true;
-      pending.clear();
-      if (!running) release();
-      if (observer) observer.disconnect();
-    }
-
-    return { watch, dispose };
+    return { show, clear };
   }
 
-  PDFStudy.hwCrops = { createCropper, drawCrop, PAD, BATCH };
+  PDFStudy.hwCrops = { createStrip, drawCrop, MAX_W };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.hwCrops;
 })(typeof window !== 'undefined' ? window : globalThis);

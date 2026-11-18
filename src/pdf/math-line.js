@@ -17,12 +17,14 @@
   const OPERATOR_END_RE = /[=<>≤≥≠≈+\-−×÷⋅·/^_]$/;
   const SENTENCE_GLUE_RE = /\b([a-z]{3,}[.!?])([A-Z][a-z]{2,})/g;
   const OPERATOR_START_RE = /^[=<>≤≥≠≈+\-−×÷⋅·/^_)\]]/;
+  // End-of-example / end-of-proof marks set larger and lower than the line: never its base size
+  const END_MARK_RE = /^[◂◃◀∎□■▪]$/;
 
   /** Base font size of a span group: upper non-delimiter tier so multi-char exponents (x^{10}, 2^{k+1}) never outvote x. */
   function baseSize(spans) {
     const plain = spans.filter((s) => !s.tex && s.fontSize > 0);
     if (!plain.length) return Math.max(10, ...spans.map((s) => s.fontSize || 10));
-    const nonDelim = plain.filter((s) => !TALL_DELIM_RE.test((s.text || '').trim()));
+    const nonDelim = plain.filter((s) => !TALL_DELIM_RE.test((s.text || '').trim()) && !END_MARK_RE.test((s.text || '').trim()));
     const pool = nonDelim.length ? nonDelim : plain;
     const top = Math.max(...pool.map((s) => s.fontSize));
     const counts = new Map();
@@ -45,7 +47,9 @@
     const baseY = ys[Math.floor(ys.length / 2)];
     return spans.map((s) => {
       // A shrunken comma / period is an authoring slip, never a real sub- or superscript
-      if (s.tex || s.fontSize > base * 0.82 || /^[\s.,;:!?]+$/.test(s.text || '')) return 'base';
+      // A footnote mark set small and raised ("deer†") is a mark on the word, not an exponent
+      if (s.tex || s.fontSize > base * 0.82 || /^[\s.,;:!?]+$/.test(s.text || '') || END_MARK_RE.test((s.text || '').trim()) ||
+        /^[†‡§¶*]+$/.test((s.text || '').trim())) return 'base';
       if (s.baselineY < baseY - base * 0.12) return 'sup';
       if (s.baselineY > baseY + base * 0.08) return 'sub';
       return 'base';
@@ -99,6 +103,20 @@
     const okPrev = !prev || (apart(prev, s) && !OPERATOR_END_RE.test((prev.text || '').trim()));
     const okNext = !next || (apart(s, next) && !OPERATOR_START_RE.test((next.text || '').trim()));
     return Boolean(prev || next) && okPrev && okNext;
+  }
+
+  /**
+   * A letter that is the start of the next word ("D" + "ipylidium" drawn as two items) or an abbreviated
+   * genus before its species ("E." + "granulosus"): part of the prose, not a variable.
+   */
+  function wordPiece(spans, i) {
+    const s = spans[i];
+    const next = spans[i + 1];
+    const t = (s.text || '').trim();
+    if (!next || next.tex || s.tex) return false;
+    const n = (next.text || '').trim();
+    if (/^[A-Za-z]$/.test(t)) return next.x0 - s.x1 < s.fontSize * 0.15 && /^[a-z]{2,}/.test(n);
+    return /^[A-Z]\.$/.test(t) && s.isItalic && next.isItalic && /^[a-z]{3,}\b/.test(n) && next.x0 - s.x1 < s.fontSize * 0.6;
   }
 
   /** Builds TeX for a group of spans (a math run, a numerator, a bound). */
@@ -177,7 +195,7 @@
     spans.forEach((s, i) => {
       const scripted = role[i + 1] && role[i + 1] !== 'base' && spans[i + 1].x0 - s.x1 < s.fontSize * 0.4 &&
         (s.__scriptBase || /^[A-Za-z0-9()]+$/.test((s.text || '').trim()));
-      const prose = !s.tex && role[i] === 'base' && !scripted && (isProse(s) || isShortProseWord(spans, i));
+      const prose = !s.tex && role[i] === 'base' && !scripted && (isProse(s) || isShortProseWord(spans, i) || wordPiece(spans, i));
       const last = pieces[pieces.length - 1];
       if (!prose && last && last.math) {
         last.spans.push(s);

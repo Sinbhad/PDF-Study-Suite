@@ -48,6 +48,10 @@
         text: cleaned.text,
         exerciseText: cleaned.exerciseText || '',
         didacticBlocks: cleaned.didacticBlocks,
+        // blocks: every labelled / didactic block with block.kind; lines: [{ text, pageNumber, kind, blockId, paragraph, inText }]
+        blocks: cleaned.blocks || cleaned.didacticBlocks || [],
+        tables: cleaned.tables || [], // [{ kind: 'table', header, rows, pageNumber, text }]
+        lines: cleaned.lines || [],
       };
     }
     const paragraphs = pages.map((p) =>
@@ -57,6 +61,9 @@
       text: paragraphs.join('\n\n'),
       exerciseText: '',
       didacticBlocks: [],
+      blocks: [],
+      tables: [],
+      lines: [],
     };
   }
 

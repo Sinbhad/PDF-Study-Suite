@@ -88,6 +88,9 @@
         if (prev.qa) prev.qa.answer = `${prev.qa.answer}\n${answer}`;
         else if (question) prev.qa = { question, answer };
         else {
+          // A title-only frame (a picture under the title) followed by the frame with the text: the text's page is
+          // the slide's page, so a card or question links to where its words are printed.
+          if (!prev.bullets.length && !prev.table) prev.slideNumber = slide.slideNumber;
           prev.title = slide.title;
           prev.formattedTitle = slide.formattedTitle;
           prev.bullets = slide.bullets.slice();
@@ -103,6 +106,8 @@
       }
       prev.pages.push(slide.slideNumber);
       prev.endSlideNumber = slide.slideNumber;
+      // Notes written on a later build of the slide stay with the merged slide (each keeps its pageNumber)
+      prev.annotations = (prev.annotations || []).concat(slide.annotations || []);
       prev.rawText = [prev.title, ...prev.bullets].join('. ');
       lastFrame = slide;
     }

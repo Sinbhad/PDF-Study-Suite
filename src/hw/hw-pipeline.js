@@ -3,6 +3,9 @@
  * the worker and applies the result to the page lines. An ordinary page goes as one gray bitmap and is read line
  * by line. A canvas page (tiny writing in separate islands, canvas-plan.js) is rendered again enlarged, tile by
  * tile, and read by the tile reader; so is a page the line reader gives up on for having too many pieces.
+ * A photographed or scanned page that lies crooked is measured here once (skew-angle.js) and both readers
+ * straighten it by that angle; the line reader also reads two columns one after the other (columns.js), so an
+ * ordinary page in columns stays with it.
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
@@ -13,8 +16,15 @@
     try { return mod(key, file); } catch (_err) { return null; }
   };
   const IDLE_MS = 90000;
+  /**
+   * Names the reader as a whole: the models, the page preparation and the reading rules in src/hw/. Results
+   * remembered between sessions (ui/ocr-cache.js) are kept under it, so change it whenever a page could read
+   * differently, and every remembered page is read afresh.
+   */
+  const READER_VERSION = 'ppocr-v5.2026-11-18';
   let sharedClient = null;
   let idleTimer = null;
+  let lastRun = Promise.resolve();
 
   /** Module-level shared client (created lazily; no worker starts until init()). */
   function getClient() {
@@ -74,16 +84,29 @@
   const hasText = (result) => result.lines.some((l) => l.regions.some((r) => r.text));
 
   /**
-   * Recognise handwritten pages in [startPage, endPage]. A cancelled page keeps the regions already read
-   * (err.partial); pages not read because of a cancel get ink.skipped and are ignored until retrySkipped.
+   * Read the pages of [startPage, endPage] that need it. A page that was being read when the reading was cut
+   * short keeps the lines already read (err.partial) but stays unread, so it is read again in full later.
+   * Pages not read to the end because the student stopped get ink.skipped and are ignored until retrySkipped.
+   * A run that was only replaced by a newer one (isCurrent() false) leaves them unread instead.
    * @param {object} parsedPdf
    * @param {number} startPage
    * @param {number} endPage
-   * @param {{onProgress?:function, onPageLoad?:function, signal?:AbortSignal, renderPage?:function, client?:object, retrySkipped?:boolean}} [opts]
+   * @param {{onProgress?:function, onPageLoad?:function, onResult?:function, signal?:AbortSignal, isCurrent?:function, renderPage?:function, client?:object, retrySkipped?:boolean}} [opts]
    *   onPageLoad(cur, total, pageNumber) keeps the ordinary page-reading progress alive for lazy documents.
+   *   onResult(pageNumber, result) is called once a page's result has been applied to the page.
    * @returns {Promise<{pages:number,regions:number,low:number,skipped:number,cancelled:boolean,engine:?object,errors?:object[]}>}
+   *   regions and low count the pieces kept on the pages (picture noise is not counted: pdf/ocr-noise.js)
    */
-  async function ensureRecognised(parsedPdf, startPage, endPage, opts) {
+  function ensureRecognised(parsedPdf, startPage, endPage, opts) {
+    if (opts && opts.client) return readRange(parsedPdf, startPage, endPage, opts);
+    // one reading at a time on the shared worker: a run that replaces another waits until that one has let
+    // go of the page it was on (a stopped run ends at its next piece)
+    const run = lastRun.then(() => readRange(parsedPdf, startPage, endPage, opts));
+    lastRun = run.catch(() => {});
+    return run;
+  }
+
+  async function readRange(parsedPdf, startPage, endPage, opts) {
     const o = opts || {};
     const out = { pages: 0, regions: 0, low: 0, skipped: 0, cancelled: false, engine: null };
     const loader = optional('pdfLoader', '../pdf/pdf-loader.js');
@@ -117,9 +140,17 @@
     client.onModelProgress = (m) => progress({ phase: 'model', pageNumber: needed[0], pageIndex: 0, pageCount: needed.length, done: m.loaded, total: m.total });
     const errors = [];
     const count = (result) => {
-      lines.applyToPage(getPage(parsedPdf, result.pageNumber), result);
+      const page = getPage(parsedPdf, result.pageNumber);
+      lines.applyToPage(page, result);
       out.pages++;
-      for (const l of result.lines) for (const r of l.regions) { out.regions++; if (r.confidence < LOW_CONFIDENCE) out.low++; }
+      const kept = (page && page.ink && page.ink.result) || result;
+      for (const l of kept.lines) {
+        for (const r of l.regions) {
+          out.regions++;
+          if (r.confidence < LOW_CONFIDENCE) out.low++;
+        }
+      }
+      if (o.onResult) o.onResult(result.pageNumber, result);
     };
     const note = (info) => { if (info && !(out.engine && out.engine.available)) out.engine = info; };
     let lineReader = null;
@@ -135,15 +166,25 @@
     };
     /** Overview first; then the tile reader for a canvas page, else the line reader (tiles if it gives up). */
     const readSurveyed = async (n, pageObj, onPage) => {
+      const t0 = Date.now();
       const shot = await canvas.renderOverview(parsedPdf.pdfDoc, n, 1650);
+      const t1 = Date.now();
       try {
         if (out.cancelled) return null;
         const survey = planner.survey(shot.rgba, shot.width, shot.height);
+        const raster = mod('hwRaster', './raster.js');
+        const drawn = !!(pageObj.ink && !pageObj.ink.imageOps);
+        // drawn ink on a white page keeps its pen colours' contrast; a photo or scan is grayed by brightness
+        const gray = (drawn ? raster.inkGray : raster.toGray)(shot.rgba, shot.width, shot.height);
+        // a photo or scan can lie crooked: its angle is measured once and both readers straighten by it;
+        // a drawn page is exported level
+        const skew = optional('hwSkewAngle', './skew-angle.js');
+        const angle = skew && !drawn ? skew.estimate(gray, shot.width, shot.height).angle : 0;
         const readTiles = async () => {
           const info = await Promise.race([client.initCanvas(), aborted]);
           note(info);
           if (!info || !info.available) return null;
-          const r = await canvas.readPage(shot, survey, { pageNumber: n, client, onProgress: onPage, isCancelled: () => out.cancelled });
+          const r = await canvas.readPage(shot, survey, { pageNumber: n, client, angle, onProgress: onPage, isCancelled: () => out.cancelled });
           return r.lines.length ? r : null;
         };
         if (survey.dense) {
@@ -152,10 +193,12 @@
         }
         await startLines();
         if (out.cancelled) return null;
-        const raster = mod('hwRaster', './raster.js');
-        // drawn ink on a white page keeps its pen colours' contrast; a photo or scan is grayed by brightness
-        const gray = (pageObj.ink && !pageObj.ink.imageOps ? raster.inkGray : raster.toGray)(shot.rgba, shot.width, shot.height);
-        const result = await client.recognisePage({ pageNumber: n, gray, width: shot.width, height: shot.height, scale: shot.scale }, onPage);
+        const t2 = Date.now();
+        // a page that also holds typed text is the right way up: no lines need reading to find that out
+        const upright = !!(pageObj.ink && pageObj.ink.reason === 'mixed');
+        const result = await client.recognisePage({ pageNumber: n, gray, width: shot.width, height: shot.height, scale: shot.scale, angle, upright }, onPage);
+        // main-thread share of the page (ms): drawing it, then the survey, graying and angle
+        if (result.timing) Object.assign(result.timing, { render: t1 - t0, survey: t2 - t1, worker: Date.now() - t2 });
         return (result.skippedReason === 'too-many-regions' && (await readTiles())) || result;
       } finally {
         canvas.release(shot.page);
@@ -188,7 +231,8 @@
       if (signal) signal.removeEventListener('abort', onAbort);
       client.onModelProgress = prevHook;
     }
-    if (out.cancelled) {
+    const replaced = typeof o.isCurrent === 'function' && !o.isCurrent();
+    if (out.cancelled && !replaced) {
       for (const n of needed) {
         const p = getPage(parsedPdf, n);
         if (p && p.ink && !p.ink.recognised) p.ink.skipped = true;
@@ -200,6 +244,6 @@
     return out;
   }
 
-  PDFStudy.hwPipeline = { ensureRecognised, renderPageGray, getClient, dispose };
+  PDFStudy.hwPipeline = { ensureRecognised, renderPageGray, getClient, dispose, READER_VERSION };
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.hwPipeline;
 })(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this);

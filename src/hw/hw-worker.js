@@ -1,10 +1,12 @@
 /**
  * Classic Web Worker shell for handwriting recognition. All logic lives in the importScripts modules.
- * Paths are relative to this file. If the model engine cannot load (its files under vendor/hw/ are not
- * installed, or the browser is too old) the null engine takes over: regions come back empty to type in.
- * The PP-OCR engine (printed pages, tiles, second opinions) loads on first use; without it those paths fall back.
+ * Paths are relative to this file. Two engines, each optional: the PP-OCR page reader (engine-ppocr.js), which
+ * is enough on its own, and the TrOCR handwriting model (engine-model.js), which reads handwriting when it is
+ * installed and leaves printed pages, tiles and second opinions to PP-OCR. When the handwriting model cannot
+ * load, the null engine stands in for it and the core reads every page with PP-OCR; with neither installed,
+ * regions come back empty to type in.
  */
-importScripts('raster.js', 'page-flatten.js', 'rule-strip.js', 'clean.js', 'segmenter.js', 'line-split.js', 'islands.js', 'slant-split.js', 'columns.js', 'print-detect.js', 'page-prep.js', 'null-engine.js', 'hw-worker-core.js');
+importScripts('raster.js', 'page-flatten.js', 'rule-strip.js', 'clean.js', 'segmenter.js', 'line-split.js', 'islands.js', 'slant-split.js', 'columns.js', 'print-detect.js', 'page-prep.js', 'skew-angle.js', 'page-turn.js', 'upright.js', 'wasm-threads.js', 'null-engine.js', 'hw-worker-core.js');
 
 (function () {
   const PDFStudy = self.PDFStudy;

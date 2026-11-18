@@ -1,17 +1,23 @@
 /**
- * Loading state: a progress bar rendered into a container, plus a lock that disables
- * interactive controls while work is in flight.
+ * Loading state: a progress bar rendered into a container, with a Cancel button whenever the
+ * caller can stop the work, plus a lock that disables interactive controls while work is in
+ * flight. Opening a document locks everything; building a selection leaves the outline usable,
+ * so picking another section is always a way out.
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
-  const LOCK_SELECTOR = '.topbar button:not(#themeToggleBtn):not(#railToggleBtn), #pdfDropzone button, #pdfFileInput, #workspaceArea button:not(#loadingCancelBtn), #workspaceArea input';
+  const LOCK_CHROME = '.topbar button:not(#themeToggleBtn):not(#railToggleBtn), #pdfDropzone button, #pdfFileInput';
+  const LOCK_STUDY = '#workspaceArea .main button:not(#loadingCancelBtn), #workspaceArea .main input';
+  const LOCK_OUTLINE = '#outlineRail button, #outlineRail input';
   let locked = [];
   let host = null;
   let busy = false;
+  let focusCancel = false;
 
-  function lock() {
+  function lock(keepOutline) {
     unlock();
-    document.querySelectorAll(LOCK_SELECTOR).forEach((el) => {
+    const selector = [LOCK_CHROME, LOCK_STUDY].concat(keepOutline ? [] : [LOCK_OUTLINE]).join(', ');
+    document.querySelectorAll(selector).forEach((el) => {
       if (el.disabled) return;
       el.disabled = true;
       locked.push(el);
@@ -27,10 +33,15 @@
 
   function find(sel) { return host ? host.querySelector(sel) : null; }
 
-  /** Show a progress bar inside `target` (indeterminate until update() gets a total). */
+  /**
+   * Show a progress bar inside `target` (indeterminate until update() gets a total).
+   * opts: { onCancel?: () => void, keepOutline?: boolean }
+   */
   function start(target, label, opts) {
     host = target;
     busy = true;
+    // A button in the panel started this (Try again, Read the rest): the bar replaces it, so Cancel takes focus.
+    focusCancel = !!(host && host.contains(document.activeElement));
     if (host) {
       host.innerHTML = `
         <div class="loading">
@@ -41,7 +52,7 @@
           <p class="loading-detail"></p>
         </div>`;
     }
-    lock();
+    lock(!!(opts && opts.keepOutline));
     if (opts && opts.onCancel) showCancel(opts.onCancel);
   }
 
@@ -60,6 +71,7 @@
       onCancel();
     });
     box.appendChild(btn);
+    if (focusCancel) btn.focus();
   }
 
   function update(cur, total, detail, label) {

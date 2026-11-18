@@ -21,6 +21,9 @@
     return arr;
   }
 
+  /** "$O(n \log n)$", "Θ(n) space": an asymptotic bound, with or without a unit word after it. */
+  const GROWTH_BOUND_RE = /^\$?\s*(?:O|o|Θ|Ω|\\Theta|\\Omega)\s*\(/;
+
   const LADDER = ['1', '\\log n', '\\sqrt{n}', 'n', 'n \\log n', 'n^{2}', 'n^{3}', '2^{n}', 'n!'];
   const ladderKey = (s) => s.replace(/\\/g, '').replace(/[\s{}]/g, '').replace(/lg|log_?2|logn/g, (m) => (m === 'logn' ? 'logn' : 'log'));
 
@@ -57,9 +60,12 @@
   /** Mathematically plausible wrong versions of a formula, each distinct and bracket-balanced. */
   function formulaDistractors(answer, count = 3) {
     const s = String(answer);
-    const fenced = /^\$[\s\S]*\$$/.test(s);
-    const body = fenced ? s.slice(1, -1) : s;
-    const wrap = (b) => (fenced ? `$${b}$` : b);
+    const fence = (s.match(/^(\$\$?)[^$]*\1$/) || [])[1] || '';
+    // A formula with words around it ("$O(n)$ time") cannot be perturbed as one expression: a sign
+    // would land outside the fence ("-$O(n)$ time"). Such an answer gets no generated distractors.
+    if (!fence && s.includes('$')) return [];
+    const body = fence ? s.slice(fence.length, -fence.length) : s;
+    const wrap = (b) => `${fence}${b}${fence}`;
     const out = [];
     const add = (v) =>
       v && v !== s && mt().isBalanced(v) && !/[\^_]\s*[+\-−=)}\]]|[\s+\-−=()[\]0-9]\{[^{}]*\}/.test(v) &&
@@ -121,6 +127,8 @@
       const sib = complexityDistractors(tClean, count);
       if (sib.length >= count) return sib;
     }
+    // A growth bound never takes calculus perturbations (a sign flip, \ln for \log) as distractors.
+    if (GROWTH_BOUND_RE.test(tClean)) return [];
     if (mt().isFormula(tClean)) {
       const tk = mt().formulaKey(tClean);
       const isEq = tClean.includes('='), fam = formulaFamily(tClean);

@@ -1,0 +1,446 @@
+{
+ "corpus": "tests/corpus/manifest.json",
+ "documents": [
+  {
+   "id": "sample-textbook",
+   "kind": "pdf",
+   "words": 584,
+   "requested": 30,
+   "generated": 24,
+   "quiz": 10,
+   "test": 14,
+   "defective": 10,
+   "defectPct": 41.7,
+   "overlap": {
+    "count": 9,
+    "of": 14
+   },
+   "lints": {
+    "option_number_mix": 3,
+    "quiz_test_overlap": 9
+   },
+   "flashcards": 18,
+   "per1000": 41.1,
+   "gold": {
+    "hit": 16,
+    "total": 20,
+    "pct": 80,
+    "missing": [
+     "limit",
+     "continuity",
+     "Fundamental Theorem of Calculus",
+     "Dijkstra's algorithm"
+    ]
+   },
+   "guess": {
+    "n": 24,
+    "expected": 6.833,
+    "byChance": 7.333,
+    "accuracy": 28.5,
+    "chance": 30.6,
+    "tells": 5
+   }
+  },
+  {
+   "id": "sample-slides",
+   "kind": "pdf",
+   "words": 261,
+   "requested": 30,
+   "generated": 20,
+   "quiz": 10,
+   "test": 10,
+   "defective": 9,
+   "defectPct": 45,
+   "overlap": {
+    "count": 9,
+    "of": 10
+   },
+   "lints": {
+    "quiz_test_overlap": 9
+   },
+   "flashcards": 17,
+   "per1000": 76.6,
+   "gold": {
+    "hit": 15,
+    "total": 15,
+    "pct": 100,
+    "missing": []
+   },
+   "guess": {
+    "n": 20,
+    "expected": 5.75,
+    "byChance": 6.25,
+    "accuracy": 28.8,
+    "chance": 31.3,
+    "tells": 5
+   }
+  },
+  {
+   "id": "bio-respiration",
+   "kind": "text",
+   "words": 443,
+   "requested": 30,
+   "generated": 12,
+   "quiz": 6,
+   "test": 6,
+   "defective": 5,
+   "defectPct": 41.7,
+   "overlap": {
+    "count": 5,
+    "of": 6
+   },
+   "lints": {
+    "quiz_test_overlap": 5
+   },
+   "flashcards": 8,
+   "per1000": 27.1,
+   "gold": {
+    "hit": 8,
+    "total": 16,
+    "pct": 50,
+    "missing": [
+     "pyruvate",
+     "NADH",
+     "acetyl-CoA",
+     "citric acid cycle",
+     "oxidative phosphorylation",
+     "feedback inhibition",
+     "mitochondria",
+     "phosphofructokinase"
+    ]
+   },
+   "guess": {
+    "n": 12,
+    "expected": 2.167,
+    "byChance": 4.167,
+    "accuracy": 18.1,
+    "chance": 34.7,
+    "tells": 4
+   }
+  },
+  {
+   "id": "psych-memory",
+   "kind": "text",
+   "words": 502,
+   "requested": 30,
+   "generated": 17,
+   "quiz": 9,
+   "test": 8,
+   "defective": 7,
+   "defectPct": 41.2,
+   "overlap": {
+    "count": 6,
+    "of": 8
+   },
+   "lints": {
+    "duplicate_fact": 1,
+    "quiz_test_overlap": 6
+   },
+   "flashcards": 9,
+   "per1000": 33.9,
+   "gold": {
+    "hit": 9,
+    "total": 24,
+    "pct": 37.5,
+    "missing": [
+     "sensory memory",
+     "short-term memory",
+     "central executive",
+     "phonological loop",
+     "visuospatial sketchpad",
+     "episodic buffer",
+     "long-term memory",
+     "explicit memory",
+     "implicit memory",
+     "episodic memory",
+     "semantic memory",
+     "procedural memory",
+     "hippocampus",
+     "levels of processing",
+     "encoding specificity principle"
+    ]
+   },
+   "guess": {
+    "n": 17,
+    "expected": 5.583,
+    "byChance": 6.083,
+    "accuracy": 32.8,
+    "chance": 35.8,
+    "tells": 7
+   }
+  },
+  {
+   "id": "econ-supply-demand",
+   "kind": "text",
+   "words": 507,
+   "requested": 30,
+   "generated": 15,
+   "quiz": 7,
+   "test": 8,
+   "defective": 9,
+   "defectPct": 60,
+   "overlap": {
+    "count": 7,
+    "of": 8
+   },
+   "lints": {
+    "tf_double_antonym": 3,
+    "quiz_test_overlap": 7
+   },
+   "flashcards": 11,
+   "per1000": 29.6,
+   "gold": {
+    "hit": 12,
+    "total": 20,
+    "pct": 60,
+    "missing": [
+     "normal good",
+     "inferior good",
+     "complements",
+     "shortage",
+     "invisible hand",
+     "inelastic",
+     "deadweight loss",
+     "total surplus"
+    ]
+   },
+   "guess": {
+    "n": 15,
+    "expected": 4.25,
+    "byChance": 6.25,
+    "accuracy": 28.3,
+    "chance": 41.7,
+    "tells": 10
+   }
+  },
+  {
+   "id": "linalg-eigen",
+   "kind": "text",
+   "words": 500,
+   "requested": 30,
+   "generated": 7,
+   "quiz": 3,
+   "test": 4,
+   "defective": 1,
+   "defectPct": 14.3,
+   "overlap": {
+    "count": 1,
+    "of": 4
+   },
+   "lints": {
+    "quiz_test_overlap": 1
+   },
+   "flashcards": 7,
+   "per1000": 14,
+   "gold": {
+    "hit": 7,
+    "total": 17,
+    "pct": 41.2,
+    "missing": [
+     "characteristic equation",
+     "characteristic polynomial",
+     "null space",
+     "algebraic multiplicity",
+     "trace",
+     "determinant",
+     "diagonal matrix",
+     "linearly independent",
+     "symmetric matrix",
+     "orthogonal matrix"
+    ]
+   },
+   "guess": {
+    "n": 7,
+    "expected": 2.583,
+    "byChance": 3.083,
+    "accuracy": 36.9,
+    "chance": 44,
+    "tells": 5
+   }
+  },
+  {
+   "id": "os-scheduling",
+   "kind": "text",
+   "words": 526,
+   "requested": 30,
+   "generated": 22,
+   "quiz": 10,
+   "test": 12,
+   "defective": 9,
+   "defectPct": 40.9,
+   "overlap": {
+    "count": 9,
+    "of": 12
+   },
+   "lints": {
+    "quiz_test_overlap": 9
+   },
+   "flashcards": 22,
+   "per1000": 41.8,
+   "gold": {
+    "hit": 19,
+    "total": 19,
+    "pct": 100,
+    "missing": []
+   },
+   "guess": {
+    "n": 22,
+    "expected": 8,
+    "byChance": 7.5,
+    "accuracy": 36.4,
+    "chance": 34.1,
+    "tells": 7
+   }
+  },
+  {
+   "id": "history-french-rev",
+   "kind": "text",
+   "words": 494,
+   "requested": 30,
+   "generated": 10,
+   "quiz": 5,
+   "test": 5,
+   "defective": 4,
+   "defectPct": 40,
+   "overlap": {
+    "count": 4,
+    "of": 5
+   },
+   "lints": {
+    "quiz_test_overlap": 4
+   },
+   "flashcards": 12,
+   "per1000": 20.2,
+   "gold": {
+    "hit": 11,
+    "total": 19,
+    "pct": 57.9,
+    "missing": [
+     "National Assembly",
+     "Declaration of the Rights of Man and of the Citizen",
+     "Civil Constitution of the Clergy",
+     "First Republic",
+     "Louis XVI",
+     "Maximilien Robespierre",
+     "Girondins",
+     "Coup of 18 Brumaire"
+    ]
+   },
+   "guess": {
+    "n": 10,
+    "expected": 1,
+    "byChance": 4,
+    "accuracy": 10,
+    "chance": 40,
+    "tells": 6
+   }
+  },
+  {
+   "id": "notes-chem-bonding",
+   "kind": "text",
+   "words": 399,
+   "requested": 30,
+   "generated": 16,
+   "quiz": 8,
+   "test": 8,
+   "defective": 7,
+   "defectPct": 43.8,
+   "overlap": {
+    "count": 7,
+    "of": 8
+   },
+   "lints": {
+    "quiz_test_overlap": 7
+   },
+   "flashcards": 37,
+   "per1000": 40.1,
+   "gold": {
+    "hit": 19,
+    "total": 21,
+    "pct": 90.5,
+    "missing": [
+     "trigonal planar",
+     "tetrahedral"
+    ]
+   },
+   "guess": {
+    "n": 16,
+    "expected": 5.5,
+    "byChance": 5.5,
+    "accuracy": 34.4,
+    "chance": 34.4,
+    "tells": 6
+   }
+  },
+  {
+   "id": "notes-networking",
+   "kind": "text",
+   "words": 423,
+   "requested": 30,
+   "generated": 29,
+   "quiz": 10,
+   "test": 19,
+   "defective": 9,
+   "defectPct": 31,
+   "overlap": {
+    "count": 9,
+    "of": 19
+   },
+   "lints": {
+    "quiz_test_overlap": 9
+   },
+   "flashcards": 43,
+   "per1000": 68.6,
+   "gold": {
+    "hit": 31,
+    "total": 31,
+    "pct": 100,
+    "missing": []
+   },
+   "guess": {
+    "n": 29,
+    "expected": 7.75,
+    "byChance": 9.75,
+    "accuracy": 26.7,
+    "chance": 33.6,
+    "tells": 10
+   }
+  }
+ ],
+ "total": {
+  "id": "TOTAL",
+  "documents": 10,
+  "words": 4639,
+  "requested": 300,
+  "generated": 172,
+  "quiz": 78,
+  "test": 94,
+  "defective": 70,
+  "defectPct": 40.7,
+  "lints": {
+   "option_number_mix": 3,
+   "quiz_test_overlap": 66,
+   "duplicate_fact": 1,
+   "tf_double_antonym": 3
+  },
+  "overlap": {
+   "count": 66,
+   "of": 94
+  },
+  "flashcards": 184,
+  "per1000": 37.1,
+  "gold": {
+   "hit": 147,
+   "total": 202,
+   "pct": 72.8
+  },
+  "guess": {
+   "n": 172,
+   "expected": 49.416,
+   "byChance": 59.916,
+   "accuracy": 28.7,
+   "chance": 34.8,
+   "tells": 65
+  }
+ }
+}

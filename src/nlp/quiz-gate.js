@@ -86,9 +86,13 @@
     const words = p.toLowerCase().split(' ');
     if (words.length > 5) return false;
     const { tokenizer } = getDeps();
-    const stop = tokenizer ? tokenizer.STOPWORDS : new Set();
-    if (stop.has(words[0]) || stop.has(words[words.length - 1])) return false;
-    return words.some((w) => w.length >= 4 && !stop.has(w) && !GENERIC_WORDS.has(w));
+    // Function words may not open or close a term. Publisher nouns may ("property rights", "truth
+    // table"), except a callout label in front ("figure caption") and a phrase of nothing else.
+    const edge = tokenizer ? tokenizer.PHRASE_BREAK_WORDS : new Set();
+    const weightless = tokenizer ? tokenizer.STOPWORDS : new Set();
+    if (edge.has(words[0]) || edge.has(words[words.length - 1])) return false;
+    if (tokenizer && tokenizer.CALLOUT_WORDS.has(words[0])) return false;
+    return words.some((w) => w.length >= 4 && !weightless.has(w) && !GENERIC_WORDS.has(w));
   }
 
   function splitHeadings(text) {

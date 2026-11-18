@@ -7,6 +7,7 @@
  * Everything is de-duplicated by lemma ("Equivalence Classes" == "equivalence class") and a later,
  * weaker candidate never displaces or repeats an earlier one.
  * rank({ definitions, text, titles, blockNames, max }) -> string[]
+ * realTerm(term, sourceText?) -> boolean: the one test every Summary key term passes (outlines use it too)
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
@@ -46,6 +47,36 @@
     return term.split(/\s+/).every((w) => !/[a-z][A-Z]/.test(w) && /^[A-Za-z][A-Za-z'’-]*$/.test(w));
   }
 
+  // Words that name a part of a lecture or a book, never a concept it teaches ("Learning Objectives",
+  // "Kahoot Question", "Problem Statement", "Clinical signs" as a slide heading). Structure, not subject.
+  const FURNITURE_RE = /^(?:learning\s+)?(?:objectives?|targets?|outcomes?)$|^(?:summary|overview|introduction|intro|review|recap|references?|questions?|answers?|quiz|kahoot(?:\s+question)?|poll|case(?:\s+\d+)?|example|exercises?|figure|table|note|notes|tip|error|errors|warning|problem(?:\s+statement)?|solution|discussion|conclusions?|background|using|left(?:\s+side)?|right(?:\s+side)?|reality|clinical\s+signs|signs|treatment|diagnosis|prognosis|adverse\s+effects?(?:\s+\w+)?|indications|contraindications|pros|cons|definition(?:\s+\d+)?|theorem(?:\s+\d+)?|terms?|words?|items?|values?)$/i;
+  const MAX_TERM_WORDS = 5;
+
+  /**
+   * A term a student could look up: a name of at most five words, made of words (an optional trailing number
+   * as in "Hansen's type 1"), not a code identifier ("CookieCost", "sec01/File.java", "x_max"), not part of a
+   * word split by a lost line-end hyphen ("Tab char-", "Acters"), not lecture furniture. `sourceText` (optional)
+   * is the text the term came from: a term that only occurs as the tail of a hyphen break is a fragment.
+   */
+  function realTerm(raw, sourceText) {
+    const t = tidy(raw).replace(/\$[^$]*\$/g, (m) => m.slice(1, -1));
+    if (t.length < 3 || t.length > 48) return false;
+    const words = t.split(/\s+/);
+    if (words.length > MAX_TERM_WORDS || FURNITURE_RE.test(t)) return false;
+    if (/^[-‐‑]|[-‐‑]$|[a-z][-‐‑]\s|[_/\\{}[\]<>=;#@|]|\(\)/.test(t)) return false;
+    if (!words.every((w, i) => /^[A-Za-z][A-Za-z'’.-]*$/.test(w) || (i > 0 && /^\d{1,2}[a-z]?$/.test(w)))) return false;
+    if (words.some((w) => /[a-z][A-Z]/.test(w))) return false; // camelCase identifier
+    if (!/[A-Za-z]{3,}/.test(t)) return false;
+    if (sourceText) {
+      const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '(?:\\s|\\*\\*)+');
+      const tail = new RegExp(`[a-z][-‐‑](?:\\*\\*)?\\s+(?:\\*\\*)?${esc}\\b`, 'i');
+      const whole = new RegExp(`(?:^|[^A-Za-z-‐‑])${esc}\\b`, 'i');
+      const src = String(sourceText);
+      if (tail.test(src) && !whole.test(src.replace(new RegExp(tail.source, 'gi'), ' '))) return false;
+    }
+    return true;
+  }
+
   function rank(input = {}) {
     const { definitions = [], text = '', titles = [], blockNames = [], max = 12 } = input;
     const nf = dep('noiseFilter', './noise-filter.js');
@@ -59,7 +90,7 @@
       const term = concept(raw);
       const key = dm().termKey(term);
       if (!term || term.length < 3 || term.length > 48 || !key || seen.has(key)) return;
-      if (sn && sn.isLabelTerm(term)) return;
+      if ((sn && sn.isLabelTerm(term)) || !realTerm(term, text)) return;
       // A candidate that only re-words a stronger term adds nothing ("Tangent line" after "Tangent Line with Slope m").
       const head = key.split(' ');
       const within = (a, b) => a.every((w) => b.includes(w));
@@ -91,7 +122,7 @@
     return out.slice(0, max);
   }
 
-  const api = { rank, boldTerms, concept };
+  const api = { rank, boldTerms, concept, realTerm };
   PDFStudy.keyTerms = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

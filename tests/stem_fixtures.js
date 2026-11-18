@@ -62,7 +62,12 @@
   check('dangling pronoun rejected', sn.isUnusableSentence('This means that the slope is positive.'));
   const labels = ['Solution', 'Proof', 'Remark', 'Note', 'Example 2', 'Theorem 1.3', 'Check', 'Step 1', 'Exploration', 'x', 'Case 1', 'Base Case', 'CSCI 2226', 'The'];
   check('structural labels never terms', labels.every((l) => sn.isLabelTerm(l)), labels.filter((l) => !sn.isLabelTerm(l)).join(','));
-  check('real STEM terms survive', ['Mean Value Theorem', 'Spanning tree', 'Derivative of $\\tan x$'].every((t) => !sn.isLabelTerm(t)));
+  check('real STEM terms survive', ['Mean Value Theorem', 'Spanning tree', 'Derivative of $\\tan x$', 'Key', 'Graph theory', 'Graph coloring'].every((t) => !sn.isLabelTerm(t)),
+    ['Key', 'Graph theory', 'Graph coloring'].filter((t) => sn.isLabelTerm(t)).join(', '));
+  check('"Key points" is still a label', sn.isLabelTerm('Key Points') && sn.isLabelTerm('Key Terms'));
+  check('"Graph the function" is still an exercise', sn.isExercisePrompt('Graph the function $y = x^{2}$.') && !sn.isExercisePrompt('Graph theory studies vertices and edges.'));
+  check('a statement ending in a number is no answer key', !sn.isAnswerKey('The array declared above has length 10.') && sn.isAnswerKey('Nonremovable discontinuity at x = 2 41.'));
+  check('"third" may open a term', !S.tokenizer.INVALID_TERM_STARTS.has('third'));
   check('real definition sentence survives', !sn.isUnusableSentence('A graph is a set of vertices together with a set of edges that join pairs of vertices.'));
 
   // 3. STEM flashcards
@@ -73,7 +78,10 @@
   check('Quotient Rule formula card with exact TeX', qr && qr.kind === 'formula' && qr.back.includes('[g(x)]^{2}'), show);
   check('derivative card "Derivative of $\\tan x$"', (byFront(/^Derivative of \$\\tan x\$$/) || {}).back === '$\\sec^{2} x$');
   check('Mean Value Theorem theorem card', (byFront(/^Mean Value Theorem$/) || {}).kind === 'theorem');
-  check('merge sort complexity card', /O\(n \\log n\)/.test((byFront(/^Time complexity of Merge sort$/i) || {}).back || ''));
+  const msCard = byFront(/^Time complexity of Merge sort$/i) || {};
+  check('merge sort complexity card', /O\(n \\log n\)/.test(msCard.back || ''));
+  // The back is the bare bound: with "time" after it the distractors came from calculus ("-$O(n \log n)$ time").
+  check('complexity card back is a complexity expression', S.mathText.isComplexity(msCard.back || ''), msCard.back);
   check('merge sort recurrence card', /T\(n\) = 2T\(n\/2\)/.test((byFront(/^Recurrence for merge sort$/i) || {}).back || ''));
   check('no garbage fronts', !cards.some((c) => sn.isLabelTerm(c.front) || /^(?:Find|Evaluate|This|As shown)/.test(c.front)), show);
   check('no exercise backs', !cards.some((c) => /Find the derivative|Exercises 1|Figure 2\.3|born in/.test(c.back)));
@@ -85,6 +93,8 @@
   check('formula answer gets 3 formula distractors', fd.length === 3 && fd.every((d) => S.mathText.isFormula(d) && d !== qAns), fd.join(' ; '));
   const cd = sd.selectDistractors('$O(n \\log n)$', [], '', 3);
   check('complexity answer gets sibling classes', cd.length === 3 && cd.every((d) => /^\$O\(/.test(d)) && cd.some((d) => /n\^\{2\}|\(n\)/.test(d)), cd.join(' ; '));
+  const unitDist = sd.selectDistractors('$O(n \\log n)$ time', ['$\\sec^{2} x$'], '', 3);
+  check('a bound with a unit word never gets a sign prefix or calculus distractors', !unitDist.some((d) => /^-|sec|\\ln/.test(d)), unitDist.join(' ; '));
   const pd = sd.typedPool('spanning tree', ['$O(n)$', 'binary heap', '$x^{2}$']);
   check('prose answer never gets formula distractors', pd.length === 1 && pd[0] === 'binary heap');
 
@@ -94,16 +104,24 @@
   check('quiz contains formula/complexity questions', formulaQs.length >= 1, quiz.map((q) => q.question.split('\n')[0]).join(' | '));
   check('formula questions have only formula options', formulaQs.every((q) => q.options.every((o) => S.mathText.isFormula(o))));
   check('no quiz stem from exercises/callouts', !quiz.some((q) => /Find the derivative|Figure 2\.3|This means|Exercises 1/.test(q.question)));
+  check('no malformed formula option', !quiz.some((q) => q.options.some((o) => /^-\s*\$/.test(o) || !S.mathText.isBalanced(o))));
   const test = S.testEngine.generateTest('', { maxQuestions: 12, sections: [{ name: 'Calculus', text: CALC }, { name: 'Algorithms', text: CS }] });
   check('practice test has sections and questions', test.sections.length >= 1 && test.total >= 4, `${test.total} q, skills ${JSON.stringify(test.skills)}`);
   check('practice test ids unique', new Set(test.questions.map((q) => q.id)).size === test.total);
   check('practice test mixes skills', Object.keys(test.skills).length >= 2, JSON.stringify(test.skills));
-  const perfect = Object.fromEntries(test.questions.map((q) => [q.id, q.answer]));
+  // A self-graded question is answered "I got it"; every other one with its answer.
+  const perfect = Object.fromEntries(test.questions.map((q) => [q.id, q.type === 'reveal' ? 'got' : q.answer]));
   const g1 = S.testEngine.gradeTest(test, perfect);
   const g0 = S.testEngine.gradeTest(test, {});
   check('gradeTest perfect = 100%', g1.percent === 100 && g1.missed.length === 0);
   check('gradeTest blank = 0% with missed review', g0.score === 0 && g0.missed.length === test.total && Object.keys(g0.bySkill).length >= 1);
   check('generatePracticeTest alias', S.testEngine.generatePracticeTest === S.testEngine.generateTest);
+  // The practice test of a scope is not its quiz over again: it asks only facts the quiz did not ask. This
+  // scope has six formula facts and the quiz asks all six, so its test is empty rather than a re-run.
+  const sameScope = S.testEngine.generateTest(CALC + '\n' + CS, { maxQuestions: 10 });
+  const quizFacts = new Set(quiz.map((q) => q.factKey));
+  check('practice test asks no fact the quiz of the same scope asks', sameScope.questions.every((q) => !quizFacts.has(q.factKey)),
+    `${sameScope.total} test questions`);
 
   // 6. Real-PDF regression checks (#26)
   const sliced = S.mathText.safeSlice('First derivative is ' + 'very '.repeat(50) + '$y\'\'\', \\quad f^{(4)}(x) = 0$ end.', 260);
@@ -173,7 +191,11 @@
   const sQuiz = S.quizEngine.generateQuiz(DECK, { mode: 'slides', maxQuestions: 10 });
   const optsOk = (q) => q.type === 'reveal' ? q.options.length === 0 && q.answer.length > 0
     : q.options.length >= 2 && new Set(q.options.map((o) => o.toLowerCase())).size === q.options.length && q.options.includes(q.answer) && q.options.every((o) => o.trim());
-  check('slide quiz: a real section quiz with ids, pages and sound options', sQuiz.length >= 8 && sQuiz.every((q, i) => q.id === `q-${i + 1}` && q.page && optsOk(q)), `${sQuiz.length}: ${sQuiz.filter((q) => !optsOk(q)).map((q) => q.question).join(' | ')}`);
+  // Seven, not ten: the deck defines five terms, and a second "complete the definition" with the same four
+  // conditions, or a True/False that restates the cloze beside it, is the same question asked again.
+  check('slide quiz: a real section quiz with ids, pages and sound options', sQuiz.length >= 7 && sQuiz.every((q, i) => q.id === `q-${i + 1}` && q.page && optsOk(q)), `${sQuiz.length}: ${sQuiz.filter((q) => !optsOk(q)).map((q) => q.question).join(' | ')}`);
+  const sSets = sQuiz.filter((q) => q.options.length >= 3).map((q) => [...q.options].sort().join(' | '));
+  check('slide quiz: no option set is offered twice', new Set(sSets).size === sSets.length, sSets.join(' || '));
   const completion = sQuiz.find((q) => /^Complete the definition/.test(q.question));
   check('slide quiz: definition completion offers sibling conditions only', completion && completion.options.length === 4 && completion.options.every((o) => /xR|reflexive, symmetric/.test(o)), completion && completion.options.join(' | '));
   const lecture = sQuiz.find((q) => q.badge === 'Lecture Question' && /Reflexive\?/.test(q.question));
@@ -202,7 +224,10 @@
   check('block quiz: 8+ questions from four theorems, every question sound', bQuiz.length >= 8 && bQuiz.every(optsOk), `${bQuiz.length}: ${bQuiz.map((q) => q.badge).join(',')}`);
   check('block quiz: formula completion pits formula against formula', fQs.length >= 2 && fQs.every((q) => /= ________$/.test(q.question) && q.options.every((o) => /^\$[^$]+\$$/.test(o) && S.mathText.isBalanced(o))), fQs.map((q) => q.options.join(' ; ')).join(' | '));
   const which = bQuiz.filter((q) => /^Which theorem/.test(q.question));
-  check('block quiz: theorem <-> statement / formula matching uses theorem titles only', which.length >= 2 && which.every((q) => q.options.every((o) => /^Theorem 1\.\d/.test(o))), which.map((q) => q.options.join(' ; ')).join(' | '));
+  // With four theorems every title-matching question would offer the same four titles, so one is asked.
+  check('block quiz: theorem <-> statement / formula matching uses theorem titles only', which.length >= 1 && which.every((q) => q.options.every((o) => /^Theorem 1\.\d/.test(o))), which.map((q) => q.options.join(' ; ')).join(' | '));
+  const bSets = bQuiz.filter((q) => q.options.length >= 3).map((q) => [...q.options].sort().join(' | '));
+  check('block quiz: no option set is offered twice', new Set(bSets).size === bSets.length, bSets.join(' || '));
   check('block quiz: which-property, true/false and step-recall items', bQuiz.some((q) => q.type === 'true_false' && /^True or False \(/.test(q.question)) && bQuiz.some((q) => q.type === 'reveal' && /^1\. Learn[^\n]+\n2\. /.test(q.answer)) &&
     S.blockQuiz.build(BLOCKS, { maxQuestions: 30 }).some((q) => /which property/.test(q.question) && q.options.includes('Product')));
   const chain = S.blockQuiz.splitEq('\\lim_{x \\to c}r(x) = r(c) = \\frac{p(c)}{q(c)}.');

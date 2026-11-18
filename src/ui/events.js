@@ -1,45 +1,30 @@
 /**
- * DOM event bindings: open/drop a PDF (the whole window is a drop target), sample documents,
- * Larson shortcut, slides/textbook mode toggle, export.
- * (Tabs live in tabs.js, the rail and theme in shell.js / theme.js, loading UI in loading.js.)
+ * DOM event bindings: open/drop a PDF or photos (the whole window is a drop target), sample
+ * documents, Larson shortcut, slides/textbook mode toggle, export, and the status line.
+ * (Opening itself lives in file-open.js, tabs in tabs.js, the rail and theme in shell.js / theme.js.)
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
   const LARSON_NAME = 'Larson Calculus of a Single Variable (10th Ed.).pdf';
 
+  /** Notices fade after a few seconds; an error stays until it is dismissed or replaced. */
   function setStatus(msg, isError) {
     const el = document.getElementById('uploadStatusText');
     if (!el) return;
-    el.textContent = msg || '';
-    el.classList.toggle('status-error', !!isError);
     clearTimeout(setStatus.timer);
-    if (msg) setStatus.timer = setTimeout(() => { el.textContent = ''; }, isError ? 9000 : 4000);
-  }
-
-  async function loadPdfBuffer(name, buffer) {
-    const L = PDFStudy.loading;
-    const hasDoc = document.body.classList.contains('has-doc');
-    setStatus('');
-    // First open: progress inside the dropzone. Replacing a document: progress in the study pane.
-    if (hasDoc) document.getElementById('activeStudyPanel').classList.remove('hidden');
-    L.start(document.getElementById(hasDoc ? 'activeStudyPanel' : 'heroProgress'), `Opening ${name}`);
-    let parsed;
-    try {
-      parsed = await PDFStudy.pdfLoader.loadPdfDocument(buffer, (cur, total) => {
-        L.update(cur, total, `Reading page ${cur} of ${total}`);
-      });
-    } catch (err) {
-      L.end();
-      if (hasDoc) PDFStudy.main.renderActiveTab();
-      const why = String((err && err.message) || err);
-      setStatus(/password/i.test(why) ? 'That PDF is password-protected. Remove the password and try again.'
-        : /invalid pdf|missing pdf|unexpected/i.test(why) ? "That file isn't a readable PDF. Try exporting it as a PDF again."
-        : `Couldn't read that PDF: ${why}`, true);
-      return false;
+    el.textContent = msg || '';
+    el.classList.toggle('status-error', !!isError && !!msg);
+    if (!msg) return;
+    if (!isError) {
+      setStatus.timer = setTimeout(() => { el.textContent = ''; }, 4000);
+      return;
     }
-    L.end();
-    await PDFStudy.main.processLoadedDocument(name, parsed);
-    return true;
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'btn-link status-dismiss';
+    dismiss.textContent = 'Dismiss';
+    dismiss.onclick = () => setStatus('');
+    el.appendChild(dismiss);
   }
 
   async function larsonAvailable() {
@@ -59,7 +44,7 @@
       setStatus('Fetching Larson Calculus from local disk…');
       const resp = await fetch('/local-larson.pdf');
       if (!resp.ok) throw new Error('not found');
-      return await loadPdfBuffer(LARSON_NAME, await resp.arrayBuffer());
+      return await PDFStudy.fileOpen.openBuffer(LARSON_NAME, await resp.arrayBuffer(), {});
     } catch (_e) {
       setStatus("Couldn't find the Larson PDF on this computer. Choose it with Open PDF instead.", true);
       return false;
@@ -67,8 +52,17 @@
   }
 
   function loadDemo(name, build) {
-    setStatus('');
+    PDFStudy.fileOpen.clearError();
     PDFStudy.main.processLoadedDocument(name, build());
+  }
+
+  /**
+   * "Photos of pages work too" is only offered while this build can read pictures of text.
+   * That can change while the app is open, so it is checked again whenever the start screen is used.
+   */
+  function syncPhotoHint() {
+    const hint = document.getElementById('photoHint');
+    if (hint) hint.classList.toggle('hidden', !PDFStudy.ENABLE_HANDWRITING);
   }
 
   function bindUpload() {
@@ -77,25 +71,23 @@
     const chooseBtn = document.getElementById('choosePdfBtn');
     let dragDepth = 0;
 
-    async function handleFile(file) {
-      if (!file || PDFStudy.loading.isBusy()) return;
-      if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
-        setStatus('That file is not a PDF.', true);
-        return;
-      }
-      await loadPdfBuffer(file.name, await file.arrayBuffer());
-    }
-
     [openBtn, chooseBtn].forEach((btn) => { if (btn && fileInput) btn.onclick = () => fileInput.click(); });
+    const dropzone = document.getElementById('pdfDropzone');
+    if (dropzone) {
+      dropzone.addEventListener('pointerenter', syncPhotoHint);
+      dropzone.addEventListener('focusin', syncPhotoHint);
+    }
+    syncPhotoHint();
     if (fileInput) {
       fileInput.addEventListener('change', (e) => {
-        if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+        const picked = Array.from(e.target.files || []);
         e.target.value = '';
+        PDFStudy.fileOpen.openFiles(picked);
       });
     }
     const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
     const setDrag = (on) => document.body.classList.toggle('drag-active', on);
-    document.addEventListener('dragenter', (e) => { if (hasFiles(e)) { dragDepth += 1; setDrag(true); } });
+    document.addEventListener('dragenter', (e) => { if (hasFiles(e)) { dragDepth += 1; setDrag(true); syncPhotoHint(); } });
     document.addEventListener('dragleave', (e) => { if (hasFiles(e)) { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) setDrag(false); } });
     document.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
     document.addEventListener('drop', (e) => {
@@ -103,7 +95,7 @@
       e.preventDefault();
       dragDepth = 0;
       setDrag(false);
-      handleFile(e.dataTransfer.files[0]);
+      PDFStudy.fileOpen.openFiles(e.dataTransfer.files);
     });
   }
 
@@ -122,19 +114,25 @@
     }
   }
 
+  /** Slides <-> textbook, from the badge panel or the "Wrong? Switch" hint. */
+  async function switchMode() {
+    const M = PDFStudy.main;
+    const st = M.appState;
+    if (!st.parsedPdf || PDFStudy.loading.isBusy()) return;
+    st.activeMode = st.activeMode === 'slide_deck' ? 'book' : 'slide_deck';
+    st.typeChosen = true; // the student has decided, so the hint has done its job
+    if (PDFStudy.sidebarTree.resetFilter) PDFStudy.sidebarTree.resetFilter();
+    M.setDefaultScope();
+    M.renderDocumentHeader();
+    M.renderSidebarScopeTree();
+    await M.recomputeStudyMaterials();
+  }
+
   function bindDocActions() {
-    const toggleModeBtn = document.getElementById('toggleModeBtn');
-    if (toggleModeBtn) {
-      toggleModeBtn.onclick = async () => {
-        const st = PDFStudy.main.appState;
-        st.activeMode = st.activeMode === 'slide_deck' ? 'book' : 'slide_deck';
-        if (PDFStudy.sidebarTree.resetFilter) PDFStudy.sidebarTree.resetFilter();
-        PDFStudy.main.setDefaultScope();
-        PDFStudy.main.renderDocumentHeader();
-        PDFStudy.main.renderSidebarScopeTree();
-        await PDFStudy.main.recomputeStudyMaterials();
-      };
-    }
+    ['toggleModeBtn', 'docTypeSwitchBtn'].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.onclick = switchMode;
+    });
     document.querySelectorAll('[data-export]').forEach((btn) => {
       btn.onclick = () => {
         const st = PDFStudy.main.appState;
@@ -160,5 +158,5 @@
     document.addEventListener('DOMContentLoaded', initEventListeners);
   }
 
-  PDFStudy.events = { initEventListeners, tryLoadLocalLarson, setStatus };
+  PDFStudy.events = { initEventListeners, tryLoadLocalLarson, setStatus, switchMode };
 })(typeof window !== 'undefined' ? window : globalThis);

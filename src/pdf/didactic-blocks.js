@@ -22,6 +22,15 @@
   const NEEDS_BOX_OR_LIST_RE = /^(?:Guideline|Rule|Formula|Summary)$/;
   const MAX_BODY_LINES = 40;
 
+  const getEnds = () => PDFStudy.blockLabels || (typeof require === 'function' ? require('./block-labels.js') : null);
+
+  /** block.kind for the heading categories of block-headings.js. */
+  function kindOfCategory(category) {
+    if (category === 'Definition') return 'definition';
+    if (category === 'Summary' || category === 'Guideline') return 'key-concept';
+    return 'theorem'; // Theorem, Corollary, Lemma, Law, Rule, Formula, Algorithm: stated results
+  }
+
   function matchHeading(plain, line, bodySize) {
     return getHeadings().matchHeading(plain, line, bodySize);
   }
@@ -34,6 +43,8 @@
         : heading.title;
     const blk = {
       category: heading.category,
+      kind: heading.kind || kindOfCategory(heading.category),
+      labeled: Boolean(heading.labeled), // opened by a numbered label (block-labels.js): label-specific end rules
       title,
       inlineStatement: Boolean(heading.inlineBody),
       pageNumber: page.pageNumber,
@@ -49,6 +60,7 @@
       mathLines: heading.inlineBody && heading.inlineBody.includes('$') ? 1 : 0,
       lastTop: line.topY,
       lastBottom: line.bottomY,
+      lastPage: page.pageNumber,
       clip: Number.isFinite(line.topY)
         ? { page: page.pageNumber, top: line.topY, bottom: line.bottomY, left: line.x0, right: line.x1 }
         : null,
@@ -75,6 +87,7 @@
   /** True when `line` is no longer part of the block (call before add). */
   function ends(block, line, plain, page) {
     if (line.isMargin) return true;
+    if (block.labeled) return getEnds().endsLabeled(block, line, plain, page);
     if (BLOCK_END_RE.test(plain) || block.bodyLines.length >= MAX_BODY_LINES) return true;
     const samePage = page.pageNumber === block.pageNumber;
     if (!samePage && (block.boxed || block.inlineStatement)) return true;
@@ -112,7 +125,12 @@
       if (Number.isFinite(line.x1)) block.clip.right = Math.max(block.clip.right, line.x1);
       block.lastTop = line.topY;
       block.lastBottom = Math.max(block.lastBottom, line.bottomY);
+    } else if (block.labeled && Number.isFinite(line.topY)) {
+      // A labelled example or sidebar continues on the next page: measure gaps from its rows there
+      block.lastTop = line.topY;
+      block.lastBottom = line.bottomY;
     }
+    getEnds().noteAdded(block, line, plain, page);
 
     const fmt = String(formattedRaw || plain || '').trim();
     const sl = getLines();
@@ -169,8 +187,11 @@
     if (!block || !block.bodyLines.length) return null;
     const NL = String.fromCharCode(10);
     const joined = block.bodyLines.map((l, i) => (i ? (block.breaks[i] ? NL : ' ') : '') + l).join('');
+    // Words the formula builder wrapped in math ("$Ais a$") leave it here as they do in the running text.
+    const prose = (PDFStudy.mathProse || (typeof require === 'function' ? require('./math-prose.js') : null));
     const body = joined.split(NL)
       .map((l) => (cleanText ? cleanText(l) : l).replace(/\*\*/g, '').replace(/\s+/g, ' ').trim())
+      .map((l) => (prose ? prose.unwrapProse(l) : l))
       .filter(Boolean).join(NL);
     if (body.length < 18 && !block.formulas.length) return null;
 
@@ -184,6 +205,8 @@
 
     const out = {
       category: block.category,
+      kind: block.kind,
+      id: block.id || null,
       title: block.title.replace(/\*\*/g, '').trim(),
       body,
       formulas: block.formulas.slice(),

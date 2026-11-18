@@ -47,13 +47,28 @@
 
   function cleanTerm(raw) {
     return String(raw || '')
+      .replace(/\s+\([^)]*$/, '') // "first normal form (1NF" with the ")" set in regular type
       .replace(/^[\s("'“]+|[\s)"'”.,;:!?]+$/g, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
 
+  /** One bold run broken over two lines, hyphenated or not: "**transitive depen-** **dency**" -> "**transitive dependency**". */
+  function joinWrapped(raw) {
+    return String(raw || '').replace(/([a-z])-\*\*\s+\*\*(?=[a-z])/g, '$1').replace(/\*\*\s+\*\*/g, ' ');
+  }
+
+  /** The bold terms of one raw sentence, cleaned and term-shaped. */
+  function runs(raw) {
+    return [...joinWrapped(raw).matchAll(/\*\*([^*]{2,80}?)\*\*/g)].map((m) => cleanTerm(m[1])).filter(isTermShape);
+  }
+
   function isTermShape(term) {
     if (!term || term.length < 3 || term.length > 50) return false;
+    // Formula fragments ("(OrderNumber, SKU) S Price"), box labels ("EXAMPLE CODE") and stutters ("4NF 4NF") are not terms
+    if ((term.match(/\(/g) || []).length !== (term.match(/\)/g) || []).length || /^[A-Z\d\s.]+$/.test(term)) return false;
+    const words = term.toLowerCase().split(/\s+/);
+    if (new Set(words.map((w) => w.replace(/(?:ies|es|s)$/, ''))).size !== words.length) return false;
     if ((term.match(/[A-Za-z]/g) || []).length < 3 || !/[a-z]{2}/i.test(term)) return false;
     if (term.split(/\s+/).length > 6 || LABEL_RE.test(term)) return false;
     // Emphasis on a verb phrase ("fails to exist", "not", "must") is not a term
@@ -80,7 +95,7 @@
   function extractBoldTermCards(text, deps) {
     const { tokenizer } = deps;
     // Bold runs broken by a line wrap ("**limit from the** **right**") are one term
-    const sentences = tokenizer.splitSentences(text || '').map((s) => s.replace(/\*\*\s+\*\*/g, ' '));
+    const sentences = tokenizer.splitSentences(text || '').map(joinWrapped);
     const best = new Map();
     const plainOf = sentences.map((s) => tokenizer.cleanMarkdown(s));
 
@@ -156,7 +171,62 @@
     }));
   }
 
-  PDFStudy.boldTerms = { extractBoldTermCards, termKey, isTermShape };
+  const dep = (k, f) => PDFStudy[k] || (typeof require === 'function' ? require(f) : null);
+  const OPTIONAL_ABBR = '(?:\\s+\\([A-Za-z][A-Za-z0-9-]{0,9}\\))?';
+  const MAX_INTRODUCTION_CHARS = 460;
+
+  /**
+   * How one sentence introduces each of its bold terms, for the terms no definition pattern explained
+   * (prose-definitions.js calls this last). Strength 3.5 = a clause cut out for the term, 1.5 = the sentence.
+   *   "The part of the kernel that ... is the **scheduler**."   -> the subject
+   *   "**aging**, which raises ..." / "the **convoy effect**: ..." -> the clause after the term
+   *   "where a **non-prime attribute** is an attribute that ..."  -> the predicate
+   *   "it is **running** if it currently holds the CPU"           -> the condition
+   *   "he defined **first normal form** as the set of ..."        -> what it was defined as
+   *   "**Round robin** gives each process ..." / "performs a **context switch**" -> the whole sentence
+   * A bold term that is only mentioned ("the behavior of **step functions**") gets nothing.
+   * ctx: { plain, bold[], next, dangling }; explained: Set of front keys that already have a reading.
+   */
+  function introductions(ctx, explained) {
+    const quality = dep('cardQuality', './card-quality.js');
+    const abbreviations = dep('abbreviations', './abbreviations.js');
+    const { plain, bold, next, dangling } = ctx;
+    const out = [];
+    for (const term of bold) {
+      const named = abbreviations.attach(term, plain);
+      if (explained.has(quality.frontKey(named)) || !isTermShape(term) || !quality.goodFront(named)) continue;
+      const t = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const push = (back, strength) => {
+        const answer = quality.withoutAsides(back);
+        if (!answer || answer.length > MAX_INTRODUCTION_CHARS || !quality.goodBack(answer, named)) return;
+        out.push({ term: /^[a-z]/.test(named) ? named[0].toUpperCase() + named.slice(1) : named, back: answer, strength });
+      };
+      const find = (source, flags = 'i') => plain.match(new RegExp(source, flags));
+      const reverse = find(`^(.{12,220}?)\\s+(?:is|are)\\s+(?:(?:the|an?)\\s+)?${t}\\.?$`);
+      const after = find(`${t}${OPTIONAL_ABBR}(?::\\s+|,\\s+(?=(?:in\\s+which|which|where|whereby|an?|the)\\s))([^;]{12,260})$`);
+      const inner = find(`\\b(?:an?|the)\\s+${t}${OPTIONAL_ABBR}\\s+(?:is|are)\\s+((?:an?|the|any)\\s+[^;.]{8,220})`);
+      const condition = find(`(?:^|[\\s,])${t}\\s+((?:if|when)\\s+[^,;.]{8,160})`);
+      const definedAs = find(`\\bdefine[sd]?\\s+(?:the\\s+|an?\\s+)?${t}${OPTIONAL_ABBR}\\s+(?:as|to\\s+be)\\s+([^;.]{8,220})`);
+      // The verb follows the term in lower case; a capital means a label glued to the next sentence ("**Problem Statement** The ...").
+      const leads = find(`^(?:(?:A|An|The|Under|In|With|During)\\s+)?${t}${OPTIONAL_ABBR}\\s+[a-z(]`);
+      const introduced = find(`\\ban?\\s+${t}(?![\\w-])`);
+
+      if (reverse && !dangling) push(quality.tidyClause(reverse[1]), 3.5);
+      else if (after) push(quality.tidyClause(after[1]), 3.5); // the clause stands on its own, whatever opens the sentence
+      else if (inner) push(quality.tidyClause(inner[1]), 3.5);
+      else if (definedAs) push(quality.tidyClause(definedAs[1]), 3.5);
+      else if (condition) push(quality.tidyClause(condition[1]), 3.5);
+      else if (leads && !dangling) {
+        // "A multilevel feedback queue combines these ideas. It keeps several queues ...": the next sentence says what it is.
+        const subject = find(`^(?:(?:A|An|The)\\s+)?${t}`);
+        const pointsBack = subject && /\b(?:this|these|those|such)\b/i.test(plain) && next && /^(?:It|They)\s/.test(next);
+        push(pointsBack ? `${subject[0]} ${next.replace(/^(?:It|They)\s+/, '')}` : quality.tidySentence(plain), 1.5);
+      } else if (introduced && !dangling) push(quality.tidySentence(plain), 1.5);
+    }
+    return out;
+  }
+
+  PDFStudy.boldTerms = { extractBoldTermCards, termKey, isTermShape, introductions, runs, joinWrapped };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = PDFStudy.boldTerms;
   }

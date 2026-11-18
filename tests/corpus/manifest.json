@@ -1,0 +1,137 @@
+{
+  "note": "Corpus for tools/eval-quiz.js. The entries of kind \"text\" with \"authored\": true are stand-ins written for this eval to imitate real student material (dense prose, math, bold terms, hand-typed notes); they are not excerpts from real textbooks or lecture notes. Real PDFs can be added later as entries of kind \"pdf\" (see tests/corpus/README.md). Paths are relative to the repository root.",
+  "quizCount": 10,
+  "testCount": 20,
+  "entries": [
+    {
+      "id": "sample-textbook",
+      "kind": "pdf",
+      "path": "samples/sample_textbook_chapters.pdf",
+      "pages": [1, 3],
+      "mode": "book",
+      "goldTerms": [
+        "limit", "continuity", "indeterminate form", "Squeeze Theorem", "derivative", "Quotient Rule", "Chain Rule",
+        "Riemann sum", "antiderivative", "Fundamental Theorem of Calculus", "integration by parts", "geometric series",
+        "Taylor series", "asymptotic complexity", "merge sort", "binary search", "Master Theorem",
+        "directed acyclic graph", "binary heap", "Dijkstra's algorithm"
+      ]
+    },
+    {
+      "id": "sample-slides",
+      "kind": "pdf",
+      "path": "samples/sample_class_slides.pdf",
+      "pages": [1, 4],
+      "mode": "slides",
+      "goldTerms": [
+        "merge sort", "heapsort", "quicksort", "binary search", "Big-O bound", "Big-Theta bound", "loop invariant",
+        "breadth-first search", "depth-first search", "Dijkstra algorithm", "topological sort", "Quotient Rule",
+        "Chain Rule", "Fundamental Theorem", "gradient descent"
+      ]
+    },
+    {
+      "id": "bio-respiration",
+      "kind": "text",
+      "authored": true,
+      "title": "Cellular Respiration",
+      "path": "tests/corpus/text/biology-cellular-respiration.txt",
+      "goldTerms": [
+        "cellular respiration", "ATP", "glycolysis", "pyruvate", "NADH", "acetyl-CoA", "citric acid cycle",
+        "Krebs cycle", "oxidative phosphorylation", "electron transport chain", "ATP synthase", "chemiosmosis",
+        "fermentation", "feedback inhibition", "mitochondria", "phosphofructokinase"
+      ]
+    },
+    {
+      "id": "psych-memory",
+      "kind": "text",
+      "authored": true,
+      "title": "How Memory Works",
+      "path": "tests/corpus/text/psychology-memory.txt",
+      "goldTerms": [
+        "encoding", "storage", "retrieval", "sensory memory", "short-term memory", "chunking", "working memory",
+        "central executive", "phonological loop", "visuospatial sketchpad", "episodic buffer", "long-term memory",
+        "explicit memory", "implicit memory", "episodic memory", "semantic memory", "procedural memory",
+        "hippocampus", "levels of processing", "encoding specificity principle", "forgetting curve",
+        "proactive interference", "retroactive interference", "misinformation effect"
+      ]
+    },
+    {
+      "id": "econ-supply-demand",
+      "kind": "text",
+      "authored": true,
+      "title": "Supply, Demand, and Market Equilibrium",
+      "path": "tests/corpus/text/economics-supply-demand.txt",
+      "goldTerms": [
+        "market", "law of demand", "law of supply", "normal good", "inferior good", "substitutes", "complements",
+        "equilibrium price", "surplus", "shortage", "invisible hand", "price elasticity of demand", "elastic",
+        "inelastic", "price ceiling", "price floor", "deadweight loss", "consumer surplus", "producer surplus",
+        "total surplus"
+      ]
+    },
+    {
+      "id": "linalg-eigen",
+      "kind": "text",
+      "authored": true,
+      "title": "Eigenvalues and Eigenvectors",
+      "path": "tests/corpus/text/linear-algebra-eigenvalues.txt",
+      "goldTerms": [
+        "eigenvector", "eigenvalue", "characteristic equation", "characteristic polynomial", "eigenspace",
+        "null space", "algebraic multiplicity", "geometric multiplicity", "trace", "determinant", "diagonalizable",
+        "diagonal matrix", "linearly independent", "symmetric matrix", "Spectral Theorem", "orthogonal matrix",
+        "orthogonally diagonalizable"
+      ]
+    },
+    {
+      "id": "os-scheduling",
+      "kind": "text",
+      "authored": true,
+      "title": "CPU Scheduling",
+      "path": "tests/corpus/text/operating-systems-scheduling.txt",
+      "goldTerms": [
+        "process", "process control block", "context switch", "scheduler", "non-preemptive scheduling",
+        "preemptive scheduling", "turnaround time", "waiting time", "response time", "throughput",
+        "first-come, first-served", "convoy effect", "shortest job first", "starvation", "round robin",
+        "time quantum", "priority scheduling", "aging", "multilevel feedback queue"
+      ]
+    },
+    {
+      "id": "history-french-rev",
+      "kind": "text",
+      "authored": true,
+      "title": "The French Revolution",
+      "path": "tests/corpus/text/history-french-revolution.txt",
+      "goldTerms": [
+        "Estates-General", "Third Estate", "National Assembly", "Tennis Court Oath", "Bastille",
+        "Declaration of the Rights of Man and of the Citizen", "Civil Constitution of the Clergy",
+        "National Convention", "First Republic", "Louis XVI", "Jacobins", "Maximilien Robespierre",
+        "Committee of Public Safety", "Reign of Terror", "Girondins", "Thermidorian Reaction", "Directory",
+        "Napoleon Bonaparte", "Coup of 18 Brumaire"
+      ]
+    },
+    {
+      "id": "notes-chem-bonding",
+      "kind": "text",
+      "authored": true,
+      "title": "Bonding notes",
+      "path": "tests/corpus/text/notes-chemistry-bonding.txt",
+      "goldTerms": [
+        "ionic bond", "covalent bond", "metallic bond", "polar covalent", "electronegativity", "octet rule",
+        "valence electrons", "lone pair", "bonding pair", "formal charge", "resonance", "VSEPR theory",
+        "trigonal planar", "tetrahedral", "London dispersion", "dipole-dipole", "hydrogen bond", "bond energy",
+        "bond order", "sigma bond", "pi bond"
+      ]
+    },
+    {
+      "id": "notes-networking",
+      "kind": "text",
+      "authored": true,
+      "title": "Networking notes",
+      "path": "tests/corpus/text/notes-networking.txt",
+      "goldTerms": [
+        "OSI model", "encapsulation", "MAC address", "IP address", "IPv4", "IPv6", "subnet mask", "default gateway",
+        "ARP", "DHCP", "DNS", "NAT", "TCP", "UDP", "port", "socket", "router", "routing table",
+        "longest prefix match", "static route", "dynamic routing", "OSPF", "BGP", "TTL", "switch", "VLAN", "latency",
+        "bandwidth", "throughput", "MTU", "ICMP"
+      ]
+    }
+  ]
+}

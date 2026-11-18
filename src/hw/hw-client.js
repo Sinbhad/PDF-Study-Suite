@@ -120,13 +120,14 @@
     }
 
     /**
-     * Recognise one page. `gray.buffer` is transferred (the array is unusable afterwards).
+     * Recognise one page. `gray.buffer` is transferred (the array is unusable afterwards). `angle` (degrees) and
+     * `upright` (true: known to be the right way up) are passed on when the caller has them.
      * @returns {Promise<object>} the page result; rejects with name 'AbortError' when cancelled
      */
     async function recognisePage(payload, onProgress) {
       const info = await init();
-      const { pageNumber, gray, width, height, scale } = payload;
-      return job(info, 'page', { pageNumber, gray, width, height, scale }, [gray.buffer], onProgress);
+      const { pageNumber, gray, width, height, scale, angle, upright } = payload;
+      return job(info, 'page', { pageNumber, gray, width, height, scale, angle, upright }, [gray.buffer], onProgress);
     }
 
     /**
@@ -136,8 +137,8 @@
      */
     async function readTile(payload) {
       const info = await initCanvas();
-      const { pageNumber, rgba, width, height, lineHeight } = payload;
-      return job(info, 'tile', { pageNumber, rgba, width, height, lineHeight }, [rgba.buffer]);
+      const { pageNumber, rgba, width, height, lineHeight, angle } = payload;
+      return job(info, 'tile', { pageNumber, rgba, width, height, lineHeight, angle }, [rgba.buffer]);
     }
 
     /** Ask the worker to stop the running job (honoured between regions). */

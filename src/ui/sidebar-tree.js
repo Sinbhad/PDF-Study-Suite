@@ -13,10 +13,16 @@
 
   const range = (a, b) => (b > a ? `${a}–${b}` : `${a}`);
 
+  /** The outline row to mark: a "next 25 pages" window keeps its chapter or section selected. */
+  function selectedId(appState) {
+    const scope = appState.selectedScope;
+    return scope.parent ? scope.parent.id : scope.id;
+  }
+
   /** One selectable row; registers its scope so clicks need no lookups. */
   function row(key, scope, page, o = {}) {
     const sv = PDFStudy.studyViews;
-    const sel = PDFStudy.main.appState.selectedScope.id === scope.id;
+    const sel = selectedId(PDFStudy.main.appState) === scope.id;
     scopes.set(key, { scope, page });
     const t = PDFStudy.richBlocks.title(o.label, 120);
     const cls = ['tree-row', sel ? 'is-selected' : '', o.sub ? 'tree-sub' : '', o.cls || ''].filter(Boolean).join(' ');
@@ -60,7 +66,7 @@
 
   function chapterNode(rawCh, appState, forceOpen) {
     const ch = { ...rawCh, title: calm(rawCh.title) };
-    const selId = appState.selectedScope.id;
+    const selId = selectedId(appState);
     const chScope = { id: ch.id, type: 'chapter', title: ch.title, startPage: ch.startPage, endPage: ch.endPage };
     const meta = `p. ${range(ch.startPage, ch.endPage)}`;
     const secs = ch.sections || [];
@@ -115,9 +121,14 @@
     const total = appState.parsedPdf.numPages;
     const isSlides = appState.activeMode === 'slide_deck';
     const q = searchQuery.trim().toLowerCase();
-    const openRange = appState.selectedScope.type === 'custom_range';
+    const openRange = appState.selectedScope.type === 'custom_range' && !appState.selectedScope.parent;
     scopes = new Map();
+    const refocus = focusedControl(treeEl);
     if (headingEl) headingEl.textContent = isSlides ? 'Slides' : 'Contents';
+    if (appState.verdict && appState.verdict.kind === 'blank') { // nothing to list: no made-up "Pages 1–15" chapters
+      treeEl.innerHTML = '<p class="tree-empty">Every page of this PDF is blank, so there is nothing to list here.</p>';
+      return;
+    }
 
     treeEl.innerHTML = `
       <div class="tree-tools">
@@ -125,13 +136,13 @@
                aria-label="${isSlides ? 'Filter slides' : 'Filter chapters and sections'}" value="${esc(searchQuery)}" />
         <details class="tree-range" ${openRange ? 'open' : ''}>
           <summary>Study a page range</summary>
-          <div class="tree-range-row">
+          <form class="tree-range-row" id="customRangeForm">
             <label class="sr-only" for="customStartPage">From page</label>
             <input type="number" id="customStartPage" min="1" max="${total}" value="${appState.selectedScope.startPage}" class="input input-num" />
             <label for="customEndPage">to</label>
             <input type="number" id="customEndPage" min="1" max="${total}" value="${Math.min(total, appState.selectedScope.endPage)}" class="input input-num" />
-            <button class="btn btn-secondary btn-sm" id="applyCustomRangeBtn" type="button">Study</button>
-          </div>
+            <button class="btn btn-secondary btn-sm" id="applyCustomRangeBtn" type="submit">Study</button>
+          </form>
         </details>
       </div>
       <nav id="chapterTreeList" aria-label="${isSlides ? 'Slides' : 'Contents'}">${isSlides ? slideTree(appState, q) : bookTree(appState, q)}</nav>`;
@@ -144,7 +155,9 @@
       const next = document.getElementById('sidebarSearchInput');
       if (next) { next.focus(); next.setSelectionRange(pos, pos); }
     };
-    treeEl.querySelector('#applyCustomRangeBtn').onclick = () => {
+    // A form, so Enter in either page box studies the range as well as the Study button.
+    treeEl.querySelector('#customRangeForm').onsubmit = (ev) => {
+      ev.preventDefault();
       const s = Math.max(1, Math.min(total, parseInt(treeEl.querySelector('#customStartPage').value, 10) || 1));
       const e = Math.max(s, Math.min(total, parseInt(treeEl.querySelector('#customEndPage').value, 10) || s));
       onSelectScope({ id: `custom-${s}-${e}`, type: 'custom_range', title: `Pages ${range(s, e)}`, startPage: s, endPage: e }, s);
@@ -155,8 +168,21 @@
         if (hit) onSelectScope(hit.scope, hit.page, btn.hasAttribute('data-quiz') ? 'quiz' : undefined);
       };
     });
+    // Picking a row or a page range redraws the outline: keyboard focus stays on the control that was used.
+    const again = refocus && treeEl.querySelector(refocus);
+    if (again) again.focus({ preventScroll: true });
     const current = treeEl.querySelector('.is-selected');
     if (current && current.scrollIntoView && !treeEl.contains(document.activeElement)) current.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** A selector for the outline control that has keyboard focus, to find it again after a redraw ('' if none). */
+  function focusedControl(treeEl) {
+    const el = document.activeElement;
+    if (!el || !treeEl.contains(el) || el.id === 'sidebarSearchInput') return ''; // the filter box restores itself
+    const key = el.getAttribute('data-key');
+    if (key) return `button[data-key="${CSS.escape(key)}"]${el.hasAttribute('data-quiz') ? '[data-quiz]' : ':not([data-quiz])'}`;
+    if (el.closest('#customRangeForm')) return '#applyCustomRangeBtn';
+    return el.id ? `#${CSS.escape(el.id)}` : '';
   }
 
   PDFStudy.sidebarTree = { renderSidebarScopeTree, resetFilter: () => { searchQuery = ''; } };

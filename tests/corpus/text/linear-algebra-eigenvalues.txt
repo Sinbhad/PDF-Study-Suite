@@ -1,0 +1,15 @@
+5.1 Eigenvalues and Eigenvectors
+
+Let $A$ be an $n \times n$ matrix. A nonzero vector $v$ is called an eigenvector of $A$ if $Av = \lambda v$ for some scalar $\lambda$. The scalar $\lambda$ is called the eigenvalue corresponding to $v$. Geometrically, multiplying by $A$ does not change the direction of an eigenvector; it only stretches or shrinks it by the factor $\lambda$, and reverses it when $\lambda$ is negative.
+
+To find the eigenvalues we rewrite the equation as $(A - \lambda I)v = 0$. This homogeneous system has a nonzero solution exactly when the matrix $A - \lambda I$ is singular, that is, when $\det(A - \lambda I) = 0$. This equation is called the characteristic equation of $A$, and the polynomial $p(\lambda) = \det(A - \lambda I)$ is the characteristic polynomial. Its degree is $n$, so $A$ has at most $n$ distinct eigenvalues.
+
+For a given eigenvalue $\lambda$, the set of all solutions of $(A - \lambda I)v = 0$ is a subspace of $\mathbb{R}^{n}$. It is called the eigenspace of $\lambda$, and it equals the null space of $A - \lambda I$. The algebraic multiplicity of $\lambda$ is the number of times it appears as a root of the characteristic polynomial. The geometric multiplicity is the dimension of its eigenspace. The geometric multiplicity is never greater than the algebraic multiplicity.
+
+Example. Let $A = \begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix}$. Then $\det(A - \lambda I) = (2 - \lambda)^{2} - 1 = \lambda^{2} - 4\lambda + 3$, which factors as $(\lambda - 1)(\lambda - 3)$. The eigenvalues are therefore $\lambda_{1} = 1$ and $\lambda_{2} = 3$. Solving $(A - 3I)v = 0$ gives the eigenvector $v = (1, 1)$, and solving $(A - I)v = 0$ gives $v = (1, -1)$.
+
+Two facts make the eigenvalues easy to check. The trace of $A$, which is the sum of its diagonal entries, equals the sum of the eigenvalues: $\operatorname{tr}(A) = \lambda_{1} + \cdots + \lambda_{n}$. The determinant equals their product: $\det(A) = \lambda_{1} \lambda_{2} \cdots \lambda_{n}$. It follows that $A$ is invertible if and only if zero is not an eigenvalue of $A$.
+
+A matrix $A$ is diagonalizable if there is an invertible matrix $P$ and a diagonal matrix $D$ such that $A = PDP^{-1}$. The columns of $P$ are eigenvectors of $A$, and the diagonal entries of $D$ are the corresponding eigenvalues. An $n \times n$ matrix is diagonalizable if and only if it has $n$ linearly independent eigenvectors. In particular, eigenvectors that correspond to distinct eigenvalues are linearly independent, so a matrix with $n$ distinct eigenvalues is always diagonalizable. Diagonalization makes powers cheap to compute, because $A^{k} = PD^{k}P^{-1}$.
+
+Symmetric matrices behave especially well. If $A = A^{T}$, then every eigenvalue of $A$ is real, and eigenvectors from different eigenspaces are orthogonal. The Spectral Theorem states that every real symmetric matrix can be written as $A = QDQ^{T}$, where $Q$ is an orthogonal matrix. Such a matrix is said to be orthogonally diagonalizable.

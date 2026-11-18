@@ -98,7 +98,8 @@
 
   function loadModules() {
     if (IS_NODE) {
-      ['tokenizer', 'noise-filter', 'keywords', 'summarizer', 'flashcard-engine', 'quiz-gate', 'quiz-options', 'quiz-engine']
+      ['tokenizer', 'noise-filter', 'keywords', 'summarizer', 'flashcard-engine', 'quiz-gate', 'quiz-options', 'option-sets', 'quiz-facts',
+        'fact-questions', 'cloze-questions', 'quiz-engine']
         .forEach((m) => require(`../src/nlp/${m}.js`));
       require('../src/pdf/text-cleaner.js');
       require('../src/pdf/book-hierarchy.js');
@@ -155,8 +156,15 @@
       const dumbQ = quiz.filter((q) => /"\s*(?:Use|Find|Complete|Determine)\b|\?"$/.test(q.question));
       check(`[${label}] quiz has no imperative/question stems`, dumbQ.length === 0, dumbQ.map((q) => q.question).join(' | '));
       check(`[${label}] quiz still produced`, quiz.length >= 2, `${quiz.length} questions`);
-      const trues = quiz.filter((q) => q.type === 'true_false' && q.answer === 'True').length;
-      check(`[${label}] unperturbed True questions capped`, trues <= 2, `${trues} True questions`);
+      // A True statement is the source's own sentence, so it is only sound beside a False of the same
+      // construction (a sibling's term or definition swapped in); a True never stands alone.
+      const tf = quiz.filter((q) => q.type === 'true_false');
+      const trues = tf.filter((q) => q.answer === 'True').length;
+      check(`[${label}] True statements never outnumber False by more than one`, trues <= tf.length - trues + 1, `${trues} True of ${tf.length}`);
+      const firstTrue = tf.findIndex((q) => q.answer === 'True');
+      const firstFalse = tf.findIndex((q) => q.answer === 'False');
+      check(`[${label}] no True before a False built the same way`, firstTrue === -1 || (firstFalse !== -1 && firstFalse < firstTrue));
+      check(`[${label}] False statements say what was swapped`, tf.filter((q) => q.answer === 'False').every((q) => /swapped|belongs to|not "/.test(q.explanation)));
     });
 
     checkQuizShape(S, check);
@@ -183,7 +191,7 @@
   function checkQuizShape(S, check) {
     for (const seed of [0, 1, 2]) {
       const quiz = S.quizEngine.generateQuiz(BIO_SECTION, { maxQuestions: 10, seedOffset: seed });
-      const choice = quiz.filter((q) => q.type !== 'true_false');
+      const choice = quiz.filter((q) => q.type !== 'true_false' && q.type !== 'reveal');
       const opts = choice.flatMap((q) => q.options);
       const badShape = opts.filter((o) => BAD_TAIL_RE.test(o) || BAD_LEAD_RE.test(o) || GENERIC_RE.test(o));
       check(`[bio seed ${seed}] answers/options are noun phrases`, badShape.length === 0, badShape.join(' | '));
@@ -197,7 +205,12 @@
         q.options.some((o) => o.split(' ').length < 2 && !/^[A-Z0-9-]{2,8}$/.test(o)));
       check(`[bio seed ${seed}] multi-word answers get multi-word distractors`, misShaped.length === 0,
         misShaped.map((q) => `${q.answer}: ${q.options.join('/')}`).join(' | '));
-      check(`[bio seed ${seed}] still produces a few questions`, quiz.length >= 3, `${quiz.length} questions`);
+      // Three defined terms, one of which repeats a word of its own definition: two can be asked.
+      check(`[bio seed ${seed}] still produces questions`, quiz.length >= 2, `${quiz.length} questions`);
+      const optionSets = choice.map((q) => [...q.options].sort().join(' | '));
+      check(`[bio seed ${seed}] no option set offered twice`, new Set(optionSets).size === optionSets.length, optionSets.join(' || '));
+      const antonymOnly = quiz.filter((q) => q.type === 'true_false' && /the source text states "/.test(q.explanation));
+      check(`[bio seed ${seed}] no antonym-swap True/False`, antonymOnly.length === 0, antonymOnly.map((q) => q.question).join(' | '));
     }
   }
 

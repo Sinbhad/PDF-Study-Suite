@@ -6,6 +6,10 @@
 }
 .view-title .math-inline { font-size: 1em; }
 .view-meta { margin-top: var(--sp-2); color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+/* Selection notes under the title (scope-notes.js): which pages are showing, why a quiz is short */
+.scope-pager { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin-top: var(--sp-3); color: var(--text-soft); font-size: var(--fs-sm); }
+.scope-pager-text { margin-right: var(--sp-1); }
+.view-note { margin-top: var(--sp-3); color: var(--text-soft); font-size: var(--fs-sm); line-height: 1.55; }
 .view-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3) var(--sp-5); margin-bottom: var(--sp-4); }
 
 .sec { margin-top: var(--sp-7); }
@@ -62,6 +66,64 @@
 .slide.is-section { padding-top: var(--sp-5); }
 .slide.is-section .slide-title { font-size: var(--fs-xl); }
 
+/* Outline summary: lead line, collapsible parts in the material's own order, every line linked to its page */
+.sum-lead { margin-top: calc(-1 * var(--sp-2)); color: var(--text-soft); font-size: var(--fs-md); line-height: 1.5; }
+.sum-outline { border-bottom: 1px solid var(--border); }
+.sum-sec { border-top: 1px solid var(--border); min-width: 0; }
+.sum-sec-head {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); min-height: 44px; padding: var(--sp-3) 0;
+  list-style: none;
+}
+.sum-sec-head::-webkit-details-marker { display: none; }
+.sum-sec-head::before {
+  content: ""; flex: 0 0 auto; width: 7px; height: 7px; margin-right: var(--sp-1); border-right: 1.5px solid var(--text-muted); border-bottom: 1.5px solid var(--text-muted);
+  transform: translateY(-2px) rotate(-45deg);
+}
+.sum-sec[open] > .sum-sec-head::before { transform: translateY(-4px) rotate(45deg); }
+.sum-sec-head:hover .sum-sec-title { color: var(--primary); }
+.sum-sec-title { flex: 1 1 14rem; min-width: 0; font: 600 var(--fs-lg)/1.35 var(--font-head); color: var(--text); overflow-wrap: anywhere; }
+.sum-sec-title .math-inline { font-size: 1em; }
+.sum-sec-meta { color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sum-sec-body { padding: 0 0 var(--sp-5) calc(7px + var(--sp-4)); min-width: 0; }
+.sum-sec-body > * + * { margin-top: var(--sp-4); }
+.sum-topic + .sum-topic { margin-top: var(--sp-5); }
+.sum-topic-title { margin-bottom: var(--sp-2); font: 600 var(--fs-md)/1.35 var(--font-read); color: var(--text); overflow-wrap: anywhere; }
+.sum-topic-title .math-inline { font-size: 1em; }
+.sum-slide + .sum-slide { margin-top: var(--sp-2); }
+.sum-points { font-size: 1rem; line-height: 1.6; }
+.sum-points ul ul { margin-top: var(--sp-1); color: var(--text-soft); }
+.sum-points .page-jump, .sum-note .page-jump, .sum-sec-body .def dd .page-jump { margin-left: var(--sp-1); }
+.sum-sec-body .page-jump, .sum-points .page-jump { display: inline-block; padding: 4px 2px; }
+.sum-note { margin-top: var(--sp-1); color: var(--text-muted); font-size: var(--fs-sm); }
+/* The student's own pen notes under a slide: collapsed, set apart from the slide's points */
+.slide-notes { margin-top: var(--sp-2); font-size: var(--fs-sm); color: var(--text-muted); }
+.slide-notes > summary { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 24px; cursor: pointer; color: var(--text-soft); }
+.slide-notes > summary:hover { color: var(--primary); }
+/* inline-flex drops the native marker: the same chevron as the outline shows that it opens */
+.slide-notes > summary::-webkit-details-marker { display: none; }
+.slide-notes > summary::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; margin-right: 4px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-1px) rotate(-45deg); }
+.slide-notes[open] > summary::before { transform: translateY(-2px) rotate(45deg); }
+.slide-notes ul { margin: var(--sp-1) 0 0; padding-left: var(--sp-5); font-style: italic; overflow-wrap: anywhere; }
+/* Points of a slide held back from the outline: one disclosure per slide, same weight as the pen notes */
+.sum-more { margin-top: var(--sp-1); font-size: var(--fs-sm); color: var(--text-soft); }
+.sum-more > summary { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 24px; padding: 2px 0; cursor: pointer; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.sum-more > summary::-webkit-details-marker { display: none; }
+.sum-more > summary::before {
+  content: ""; flex: 0 0 auto; width: 6px; height: 6px; margin-right: var(--sp-1); border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: translateY(-1px) rotate(-45deg);
+}
+.sum-more[open] > summary::before { transform: translateY(-3px) rotate(45deg); }
+.sum-more > summary:hover { color: var(--primary); }
+.sum-more > .sum-points { margin-top: var(--sp-1); font-size: 1rem; color: var(--text); }
+.sum-cont { color: var(--text-muted); }
+/* A box whose symbols were lost when the page was read: said in words, not shown as if right */
+.sum-flag { margin-top: var(--sp-2); padding-left: var(--sp-3); border-left: 2px solid var(--warning); color: var(--text-soft); font-size: var(--fs-sm); line-height: 1.5; }
+.sum-table .table-wrap { margin-top: var(--sp-2); }
+.sum-formulas .math-display { justify-content: flex-start; }
+.term-link { display: inline-flex; align-items: center; min-height: 28px; color: var(--text-soft); text-decoration: none; }
+.term-link:hover { color: var(--primary); border-color: var(--primary); }
+.sum-sec-body [tabindex="-1"]:focus-visible { outline-offset: 4px; }
+
 /* Question with click-to-reveal answer */
 .reveal > summary {
   display: inline-flex; align-items: center; height: var(--ctl-h-sm); padding: 0 var(--sp-3); list-style: none;
@@ -85,4 +147,5 @@
   .view-title { font-size: var(--fs-xl); }
   .dblock-title { font-size: var(--fs-lg); }
   .sec { margin-top: var(--sp-6); }
+  .sum-sec-body { padding-left: 0; }
 }

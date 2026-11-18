@@ -127,7 +127,7 @@ function fakeClient(opts = {}) {
       calls.push(`page:${p.gray[0]}`);
       const result = { pageNumber: p.pageNumber, scale: p.scale, width: p.width, height: p.height, lines: [] };
       if (opts.tooMany) result.skippedReason = 'too-many-regions';
-      else result.lines.push({ index: 0, box: { x: 0, y: 0, w: 10, h: 10 }, regions: [{ id: 'p1-l0-r0', kind: 'text', box: { x: 0, y: 0, w: 10, h: 10 }, text: 'a line', confidence: 0.9, source: 'model' }] });
+      else result.lines.push({ index: 0, box: { x: 0, y: 0, w: 10, h: 10 }, regions: [{ id: 'p1-l0-r0', kind: 'text', box: { x: 0, y: 0, w: 10, h: 10 }, text: 'a line of notes', confidence: 0.9, source: 'model' }] });
       return result;
     },
     cancel() {},

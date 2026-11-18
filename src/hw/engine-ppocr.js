@@ -1,10 +1,12 @@
 /**
- * Second handwriting/print engine: PP-OCRv5 mobile (text detection + English recognition, ONNX) run with
- * onnxruntime-web on WASM (one thread), all from vendor/hw/ on the app's own origin. It reads whole tiles of a page
- * (detect the text lines, then read each) and single line crops from page-prep. Fast (milliseconds per line) and
- * very accurate on typeset print; also reads neat handwriting in coloured inks.
+ * The page reader: PP-OCRv5 mobile (text detection + English recognition, ONNX) run with onnxruntime-web on
+ * WASM (one thread, or a few where the page is cross-origin isolated: wasm-threads.js), all from vendor/hw/ on
+ * the app's own origin. It reads whole tiles of a page (detect the text lines, then read each) and single line
+ * crops from page-prep, and it is enough on its own: the TrOCR handwriting model is an optional extra.
+ * Very accurate on typeset print; also reads neat handwriting in coloured inks.
  * When the files are absent, or anything fails while loading, load() reports { available: false, reason }.
- * Worker usage: importScripts('ppocr-prep.js', 'ppocr-boxes.js', 'ppocr-ctc.js', 'engine-ppocr.js').
+ * Worker usage: importScripts('page-turn.js', 'wasm-threads.js', 'ppocr-prep.js', 'ppocr-boxes.js', 'ppocr-ctc.js',
+ * 'engine-ppocr.js'); the first two are already in the worker's main list.
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
@@ -25,6 +27,9 @@
   const boxes = () => need('hwPpocrBoxes', './ppocr-boxes.js');
   const ctc = () => need('hwPpocrCtc', './ppocr-ctc.js');
   const raster = () => need('hwRaster', './raster.js');
+  const turn = () => need('hwPageTurn', './page-turn.js');
+  /** One thread unless the page is cross-origin isolated (wasm-threads.js). */
+  const threads = () => (PDFStudy.hwWasmThreads ? PDFStudy.hwWasmThreads.count(root) : 1);
   const msgOf = (e) => String((e && e.message) || e);
 
   function defaultBaseUrl() {
@@ -78,7 +83,7 @@
         ort = await importModule(url(LOADER));
         if (!ort || !ort.InferenceSession || !ort.Tensor || !ort.env) throw new Error('Unexpected onnxruntime-web module shape');
         ort.env.logLevel = 'error';
-        ort.env.wasm.numThreads = 1;
+        ort.env.wasm.numThreads = threads();
         ort.env.wasm.proxy = false;
         ort.env.wasm.wasmPaths = { mjs: url(WASM_MJS), wasm: url(WASM_BIN) };
         const res = await fetchFn(url(DIR + 'vocab.json'));
@@ -140,16 +145,21 @@
     }
 
     /**
-     * Detect and read every text line of an RGBA tile. lineHeight: expected median line height in tile pixels.
+     * Detect and read every text line of an RGBA tile. lineHeight: expected median line height in tile pixels;
+     * angle: slope of the text lines in degrees when the page is crooked or turned (skew-angle.js), else absent.
      * @returns {Promise<{lines:{box:{x,y,w,h}, text:string, confidence:number, stats:object}[], cancelled?:boolean, timing?:object}>}
      */
     async function readTile(tile, opts) {
       const o2 = opts || {};
       if (!det || !rec) return { lines: [] };
       const P = prep();
-      const { width: w, height: h } = tile;
       const raw = tile.rgba instanceof ArrayBuffer ? new Uint8ClampedArray(tile.rgba) : tile.rgba;
-      const clean = P.neutralise(raw, w, h);
+      const given = P.neutralise(raw, tile.width, tile.height);
+      // a crooked or turned tile is read from an upright copy; the boxes go back onto the tile as it was given
+      const T = turn();
+      const frame = T.needsTurn(o2.angle) ? T.frame(tile.width, tile.height, o2.angle) : null;
+      const clean = frame ? T.rotate(given, frame) : given;
+      const { w, h } = clean;
       const lh = o2.lineHeight > 0 ? o2.lineHeight : 40;
       const f = Math.max(0.05, Math.min(2, DET_LINE / lh));
       const t0 = Date.now();
@@ -168,13 +178,19 @@
         if (!r.text) continue;
         const x = Math.floor(box.x0);
         const y = Math.floor(box.y0);
-        lines.push({ box: { x, y, w: Math.ceil(box.x1) - x, h: Math.ceil(box.y1) - y }, text: r.text, confidence: r.confidence, stats: r.stats });
+        const level = { x, y, w: Math.ceil(box.x1) - x, h: Math.ceil(box.y1) - y };
+        const line = { box: frame ? frame.boxToSource(level) : level, text: r.text, confidence: r.confidence, stats: r.stats };
+        // on a turned tile `box` is the tile rectangle around the sloping line; `size` is the line itself
+        if (frame) line.size = { w: level.w, h: level.h };
+        lines.push(line);
       }
       return { lines, timing: { det: t1 - t0, rec: Date.now() - t1 } };
     }
 
     return {
       name: 'ppocr-v5',
+      /** WASM threads in use (set when the runtime loaded; 1 before that). */
+      threads: () => (ort ? ort.env.wasm.numThreads : 1),
       /** @returns {Promise<{available:boolean, reason:string}>} idempotent, never rejects */
       load(onProgress) {
         if (!loading) loading = doLoad(onProgress);
@@ -198,6 +214,6 @@
     };
   }
 
-  PDFStudy.hwPpocrEngine = Object.assign(create(), { create, DET_LINE, DET_CAP });
+  PDFStudy.hwPpocrEngine = Object.assign(create(), { create, DET_LINE, DET_CAP, PROBES });
   if (typeof module !== 'undefined' && module.exports) module.exports = PDFStudy.hwPpocrEngine;
 })(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this);

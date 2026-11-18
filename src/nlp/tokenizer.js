@@ -1,11 +1,13 @@
 /**
  * Deterministic Tokenizer, Sentence Splitter & TF-IDF Vectorizer (Zero Dependencies)
- * Includes STEM & Textbook Stopword Filters.
+ * Stopwords come in two kinds that callers must not confuse: linguistic function words, which end a
+ * phrase, and publisher/layout words, which are only weightless (see the sets below).
  */
 (function (root) {
   const PDFStudy = (root.PDFStudy = root.PDFStudy || {});
 
-  const STOPWORDS = new Set([
+  // Function words of English: these end a noun phrase wherever they occur.
+  const LINGUISTIC_STOPWORDS = new Set([
     'a','about','above','after','again','against','all','also','am','an','and','any','are',
     'as','at','be','because','been','before','being','below','between','both','but','by',
     'can','cannot','could','did','do','does','doing','down','during','each','either',
@@ -18,19 +20,44 @@
     'they','this','those','through','thus','to','too','under','until','up','very','was',
     'we','were','what','when','where','which','while','who','whom','why','will','with',
     'would','you','your','yours','yourself','yourselves',
-    // Textbook & Publisher Structural Stopwords
-    'cengage','copyright','editorial','suppressed','electronic','rights','reserved',
-    'figure','figures','fig','table','tables','example','examples','exercise','exercises',
-    'solution','solutions','chapter','section','page','pages','remark','exploration',
-    'graphing','utility','shown','see','let','use','using','find','finding','given',
+    // Prepositions and conjunctions the list above lacked
+    'per','via','within','without','upon','among','across','along','around','behind','beyond',
+    'onto','toward','towards','since','unless','whether','whereas','although','though','yet','shall',
+    // Determiners and adverbs of degree or frequency
+    'every','another','several','many','much','always','never','often','usually','sometimes',
+    'almost','already','still','quite','rather',
   ]);
+
+  // Textbook instructions ("see", "let", "find", "shown", "given"): never part of a term either.
+  const INSTRUCTION_WORDS = new Set(['shown','see','let','use','using','find','finding','given']);
+
+  // Callout labels that open a reference ("Figure 3", "Example 2"), not a concept.
+  const CALLOUT_WORDS = new Set([
+    'figure','figures','fig','example','examples','exercise','exercises','chapter','section',
+    'page','pages','remark','exploration',
+  ]);
+
+  // Publisher and layout vocabulary. These carry no weight when ranking sentences, but most of them
+  // are ordinary nouns inside real terms ("property rights", "truth table", "solution set"), so they
+  // must not cut a keyphrase in two. Only the union below treats them as stopwords.
+  const BOILERPLATE_WORDS = new Set([
+    'cengage','copyright','editorial','suppressed','electronic','rights','reserved',
+    'table','tables','solution','solutions','graphing','utility',
+    ...CALLOUT_WORDS,
+  ]);
+
+  /** Everything ignored when weighing or counting content words: function, instruction and publisher words. */
+  const STOPWORDS = new Set([...LINGUISTIC_STOPWORDS, ...INSTRUCTION_WORDS, ...BOILERPLATE_WORDS]);
+
+  /** Words that end a keyphrase: function and instruction words, but not publisher nouns. */
+  const PHRASE_BREAK_WORDS = new Set([...LINGUISTIC_STOPWORDS, ...INSTRUCTION_WORDS]);
 
   const INVALID_TERM_STARTS = new Set([
     'this','that','these','those','it','they','we','you','he','she','there','here',
     'however','therefore','thus','moreover','furthermore','for','in','on','at','by',
     'figure','fig','table','chapter','section','example','note','when','where','while',
     'if','although','because','since','unless','whereas','both','each','many','some',
-    'cengage','editorial','copyright','suppressed','third','overall','due','electronic',
+    'cengage','editorial','copyright','suppressed','overall','due','electronic',
     'statement','following','graph','function','equation','value','result','show','let',
   ]);
 
@@ -171,6 +198,10 @@
 
   PDFStudy.tokenizer = {
     STOPWORDS,
+    LINGUISTIC_STOPWORDS,
+    BOILERPLATE_WORDS,
+    CALLOUT_WORDS,
+    PHRASE_BREAK_WORDS,
     INVALID_TERM_STARTS,
     tokenize,
     cleanMarkdown,

@@ -160,7 +160,7 @@
     const fallback = [];
     for (let start = 1; start <= totalPages; start += chunkSize) {
       const end = Math.min(totalPages, start + chunkSize - 1);
-      fallback.push({ title: `Pages ${start}–${end}`, startPage: start, sections: [] });
+      fallback.push({ title: end > start ? `Pages ${start}–${end}` : `Page ${start}`, startPage: start, sections: [] });
     }
     return assignEndPages(fallback, totalPages);
   }

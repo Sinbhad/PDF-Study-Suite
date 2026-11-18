@@ -4,10 +4,23 @@ Written 2026-11-12. Read pages only; nothing was downloaded or run. Every fact h
 URL. "Not published" means no primary source gives the number; "ESTIMATE" marks my reasoning, never a measurement.
 "Not verified" means I could not read the primary page (reason given).
 
-**As built:** this document is the research record. Where the code differs, the code wins: the runtime bundle is stored as
-`vendor/hw/transformers.min.mjs` (it is an ES module); the fetch script also saves the licence files and the model
-card; recognition runs on one thread and `app.py` sends no COOP/COEP headers; math-looking pieces are read with the
-text model and always flagged; small JSON files are verified by git blob SHA-1.
+**As built (updated 2026-11-18):** this document is the research record. Where the code differs, the code wins:
+
+- The reader a default install uses is PP-OCRv5 alone (`python tools/fetch-handwriting-model.py --ppocr-only`, about
+  34 MB in `vendor/hw/`). The TrOCR handwriting model is an optional extra. `src/hw/hw-availability.js` switches
+  reading on only where the PP-OCR files are installed, so the hosted page does not read pictures.
+- `app.py` sends `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, so
+  the local page is cross-origin isolated and recognition uses up to four WebAssembly threads
+  (`src/hw/wasm-threads.js`). `NO_ISOLATION=1` leaves the headers out; a static host that cannot send them
+  runs on one thread.
+- The runtime bundle for the optional TrOCR model is stored as `vendor/hw/transformers.min.mjs` (it is an ES
+  module); the fetch script also saves the licence files and the model card; math-looking pieces are read with
+  the text model and always flagged; small JSON files are verified by git blob SHA-1.
+- Typed text is built and shown first; picture pages are read after it without blocking
+  (`src/ui/background-read.js`). Each page's result is remembered per document (`src/ui/ocr-cache.js`), and
+  fragments from photographs and diagrams are discarded before anything is counted or listed for review
+  (`src/pdf/ocr-noise.js`). `docs/HANDWRITING-RESULTS.md` has the measurements.
+
 Section 8 records what was checked with the real model; it settles R3 and R4 and replaces the confidence
 proposal in 5.7. Sections 9 to 11 record what changed after measuring on real lines (model files, crop
 preparation, confidence, line finding, print and columns); where they differ from earlier sections, they win.

@@ -9,8 +9,9 @@
   const BOLD_FONT_RE = /bold|black|heavy|demi|semibold|extrabold|ultra/i;
   const ITALIC_FONT_RE = /italic|oblique|slanted/i;
   const CODE_FONT_RE = /courier|mono|consol|menlo|typewriter|^cmtt|^sfmono|inconsolata|sourcecode|lucidaconsole/i;
-  // Math / symbol fonts: their bold cuts are vectors and operators, never key terms
-  const MATH_FONT_RE = /math|symbol|^cm(?:sy|mi|ex|bsy|mib)|msbm|msam|euclid|mtextra|wingding|dingbat|stixgeneral/i;
+  // Math / symbol fonts: their bold cuts are vectors and operators, never key terms.
+  // STIXGeneral is not one: it is the text face of the STIX family, set for running prose ("Let p and q be").
+  const MATH_FONT_RE = /math|symbol|^cm(?:sy|mi|ex|bsy|mib)|msbm|msam|euclid|mtextra|wingding|dingbat/i;
 
   /**
    * Maps each text item's fontName id to the real PostScript name ("LNKELH+Times-Bold").
