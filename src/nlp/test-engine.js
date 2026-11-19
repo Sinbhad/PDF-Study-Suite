@@ -12,7 +12,8 @@
  * (see TEST_VARIANT below) and refusing the facts the quiz asks: another fact about the same subject is fine.
  * Keyed questions (choice, True/False, typed) are drawn first: the sections' own, then, when those run out, a
  * "Review" section that asks quiz facts again, each in another form than the quiz used (a True/False where the
- * quiz had a choice), with `review: true` and a "Review" badge so the student knows it is a second look. Only
+ * quiz had a choice), with `review: true` and a "Review" badge so the student knows it is a second look (at most a
+ * fifth of the test: a short test is better than one padded with the quiz again). Only
  * then do self-graded recall questions (a card's front shown, its back revealed) fill the slots left, the
  * sections' own first, then quiz facts recalled in another form; when the test must be cut down, recall
  * questions go before choice ones.
@@ -37,6 +38,7 @@
   const DEFAULT_QUIZ_LENGTH = 10;
   const REVIEW_SECTION = 'Review';
   const SPARE = 4;
+  const MAX_REVIEW_SHARE = 0.2; // at most 4 of 20 questions re-ask a quiz fact (in another form)
   // A typed question has no options but is checked by the app (typed-check.js): it is not self-graded.
   const isSelfGraded = (q) => q.type === 'reveal' || (q.type !== 'typed' && (!Array.isArray(q.options) || q.options.length < 2));
 
@@ -182,11 +184,13 @@
     // The test's own gate may still refuse a few of a round's questions (a True too many, an option set seen),
     // so each round draws SPARE more than the room it fills; trimTo cuts what runs over.
     const roomLeft = () => maxQuestions - count() - review.questions.length;
+    // A second look at quiz facts is a few questions, not the test: a short test beats one padded with the quiz again.
+    const reviewCap = Math.max(1, Math.floor(maxQuestions * MAX_REVIEW_SHARE));
     const addReview = (maxSelfGraded) => {
-      const room = roomLeft();
+      const room = Math.min(roomLeft(), reviewCap - review.questions.length);
       if (room <= 0) return;
       const more = buildReview(input, options, room + SPARE, [...built.flatMap((s) => s.questions), ...review.questions], quiz, maxSelfGraded === null ? room + SPARE : maxSelfGraded);
-      for (const q of more.questions) if (roomLeft() > 0 && keep(q)) review.questions.push(q);
+      for (const q of more.questions) if (roomLeft() > 0 && review.questions.length < reviewCap && keep(q)) review.questions.push(q);
     };
     addReview(0);
     specs.forEach((s, i) => {

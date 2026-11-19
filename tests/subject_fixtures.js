@@ -76,7 +76,9 @@ const quiz = S.quizEngine.generateQuiz(DECK, { mode: 'slides', maxQuestions: 10 
 const test = S.testEngine.generateTest(DECK, { mode: 'slides', maxQuestions: 20 });
 const both = [...quiz, ...test.questions];
 const show = (list) => list.map((q) => `${q.question.replace(/\n/g, ' / ')} => ${q.answer}`).join(' | ');
-check('deck: questions are built', quiz.length >= 6, `${quiz.length}: ${show(quiz)}`);
+// (Each drug slide is a run of points under a drug's name: no label says what to recall, so only the aspect slides
+// are asked, "Describe the pharmacokinetics of Drug Alpha (2 points)", never "Name the 3 key points about Drug Alpha".)
+check('deck: questions are built, none a whole slide\'s "key points"', quiz.length >= 2 && !quiz.some((q) => /key points about/.test(q.question)), `${quiz.length}: ${show(quiz)}`);
 check('deck: no stem asks where a line sat', !both.some((q) => /\blecture\b|\bslide\b|which topic/i.test(q.question.split('\n')[0])), show(both));
 check('deck: no generic heading, title or case is a subject', !both.some((q) => /^(?:Pharmacokinetics|Learning Objectives|Agents Against Worms|Case 1)/.test(q.subject || '')),
   both.map((q) => q.subject).join(' | '));

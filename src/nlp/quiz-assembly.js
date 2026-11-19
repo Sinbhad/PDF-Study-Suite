@@ -27,6 +27,7 @@
   const MIN_FACT_WORDS = 4;
   const SHORT_ANSWER_WORDS = 8; // longer answers are statements; those are compared as facts instead
   const MAX_TRUE_FALSE_SHARE = 0.4; // 4 of 10, 8 of 20
+  const MAX_PER_RECALL_GROUP = 2; // recall questions from one figure (a table's cells) in one set
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   // A typed question (typed-questions.js) has no options but is checked by the app: it is not self-graded.
@@ -73,14 +74,57 @@
     return shared / small.size >= SAME_FACT_CONTAINMENT;
   }
 
-  /** Key of a short answer ("tangent line" == "Tangent lines", "$O(n)$" == "O(n)"), or '' for a statement. */
+  // "$\neg q \to \neg p$ (p. 32)": a rule card's answer cites its page; the answer is what comes before.
+  const CITATION_RE = /\s*\((?:p\.|pp\.|section)\s[^)]*\)\.?\s*$/i;
+
+  /**
+   * Key of a short answer ("tangent line" == "Tangent lines", "$O(n)$" == "O(n)"), or '' for a statement. A recall
+   * question's short answer (a term recalled from its sentence) has one too: the same term asked twice, in whatever
+   * form, is one fact. A recall answer of several lines is a list, not a term.
+   */
   function answerKey(q) {
-    const answer = String(q.answer || '');
-    if (q.type === 'true_false' || q.type === 'reveal' || !answer) return '';
+    // ("Commutative law (identity 10) (p. 66)" is the answer "commutative law")
+    const answer = String(q.answer || '').replace(CITATION_RE, '').replace(/(?:\s*\([^)]*\d[^)]*\))+\s*$/, '').trim();
+    if (q.type === 'true_false' || !answer || (q.type === 'reveal' && /\n/.test(answer))) return '';
     if (mt().isFormula(answer)) return `f:${mt().formulaKey(answer)}`;
     if (answer.split(/\s+/).length > SHORT_ANSWER_WORDS) return '';
     return `t:${norm(answer).replace(/(?:es|s)\b/g, '')}`;
   }
+
+  const MIN_FORMULA_KEY = 4;
+  /** The formulas a text writes ($…$), keyed: "p → q" is not "q → p". */
+  const formulaKeys = (text) => (String(text || '').match(/\$[^$\n]+\$/g) || []).map((f) => mt().formulaKey(f)).filter((k) => k.length >= MIN_FORMULA_KEY);
+
+  /**
+   * Is one of these the other's fact, by its formula? The formula one answers is printed in the other ("What is the
+   * contrapositive of p → q?" => "¬q → ¬p", and "Name the term: The ____ of p → q is ¬q → ¬p").
+   */
+  function sameFormula(a, b) {
+    const shown = (q) => new Set(formulaKeys(`${q.question} ${q.type === 'true_false' ? '' : q.answer}`));
+    // Only a short answer is its formula: a definition that prints one among others answers no formula.
+    const short = (q) => String(q.answer || '').replace(CITATION_RE, '').split(/\s+/).length <= SHORT_ANSWER_WORDS;
+    const answered = (q) => (q.type === 'true_false' || !short(q) ? [] : formulaKeys(q.answer));
+    const inA = shown(a);
+    const inB = shown(b);
+    return answered(a).some((k) => inB.has(k)) || answered(b).some((k) => inA.has(k));
+  }
+
+  const MIN_STATEMENT_WORDS = 4;
+  /**
+   * Does a recall's answer restate the sentence another question was cut from? "Define "Candidate key"" => "A
+   * determinant that determines ..." and a True/False on "A candidate key is a determinant that determines ..." are
+   * one sentence asked twice, whatever name the True/False swaps in.
+   */
+  function sameStatement(a, b) {
+    const inside = (r, k) => {
+      const answer = norm(r.answer);
+      return isSelfGraded(r) && answer.split(' ').length >= MIN_STATEMENT_WORDS && Boolean(k.source) && norm(k.source).includes(answer);
+    };
+    return inside(a, b) || inside(b, a);
+  }
+
+  /** "What is the converse of $r \to s$?" and "... of $p \to q$?": one question with other letters. */
+  const template = (q) => norm(String(q.question || '').replace(/\$[^$\n]+\$/g, ' F ').replace(/`[^`]+`/g, ' C '));
 
   const optionKey = (q) => ((q.options || []).length >= 3 ? q.options.map(norm).sort().join(' | ') : '');
 
@@ -120,6 +164,8 @@
     const avoidOptions = new Set(avoid.map(optionKey).filter(Boolean));
     const offered = new Set(avoid.flatMap(statementDistractors));
     const sourceOf = (q) => norm(q.source || q.sourceKey);
+    // A typed or recall question is the card or sentence it was cut from: asked in any other form, it is the same fact.
+    const once = (x) => isTyped(x) || isSelfGraded(x);
     // A review set (opts.reviewOf) may ask those questions' facts again, but never in the form they were asked.
     const reviewOf = opts.reviewOf || [];
     const reviewWords = reviewOf.map((q) => ({ q, words: factWords(q) }));
@@ -143,16 +189,24 @@
       if (q.sourceKey && kept.some((k) => k.sourceKey === q.sourceKey)) return 'same source';
       // A typed or recall question and any other question cut from the same card or sentence test one fact (a rule
       // worked out on values, then the same rule card recalled, is the card twice).
-      const once = (x) => isTyped(x) || isSelfGraded(x);
       if (sourceOf(q) && kept.some((k) => (once(q) || once(k)) && sourceOf(k) === sourceOf(q))) return 'same source';
       if (q.factKey && kept.some((k) => k.factKey === q.factKey)) return 'same fact';
       const words = factWords(q);
       if (facts.some((f) => sameFact(words, f))) return 'same fact words';
       // About one subject, even a short statement repeated with a word more is the same fact.
       if (q.subject && kept.some((k) => k.subject === q.subject && containedIn(words, factWords(k)))) return 'same subject fact';
+      if (kept.some((k) => (isSelfGraded(q) || isSelfGraded(k)) && sameFormula(q, k))) return 'same formula';
+      if (kept.some((k) => sameStatement(q, k))) return 'same sentence';
+      // The cells of one table are one figure: a set recalls a few of them, not the whole figure.
+      if (q.recallGroup && kept.filter((k) => k.recallGroup === q.recallGroup).length >= MAX_PER_RECALL_GROUP) return 'figure asked enough';
       if (avoid.length) {
         if (q.factKey && avoidFacts.has(q.factKey)) return 'asked elsewhere';
         if (oKey && avoidOptions.has(oKey)) return 'options shown elsewhere';
+        // The same answer asked elsewhere is that fact again, whatever its form ("flip-flops" typed from a definition,
+        // then typed from another sentence); a recall of a formula shown elsewhere is too.
+        if (aKey && avoid.some((k) => answerKey(k) === aKey)) return 'asked elsewhere (answer)';
+        if (avoid.some((k) => (isSelfGraded(q) || isSelfGraded(k)) && sameFormula(q, k))) return 'asked elsewhere (formula)';
+        if (avoid.some((k) => sameStatement(q, k))) return 'asked elsewhere (sentence)';
         // A False that borrows a statement tests whether it belongs to this subject: its own fact key says
         // whether that was asked; the borrowed statement's source and words were shown in another role.
         const borrowed = isSwap(q, 'False') && /\|not\|/.test(q.factKey || '');
@@ -160,9 +214,12 @@
         if (!borrowed && avoidWords.some((f) => sameFact(words, f))) return 'asked elsewhere (words)';
       }
       if (reviewOf.length) {
-        const sameForm = (k) => k.type === q.type || norm(k.question) === norm(q.question);
+        // Another form asks another thing: the same answer, or the same question with other letters, is the same form
+        // whatever the type ("Type the missing term" and "Name the term" over one sentence).
+        const sameForm = (k) => k.type === q.type || norm(k.question) === norm(q.question) || (aKey && answerKey(k) === aKey) ||
+          template(k) === template(q);
         const twins = reviewWords.filter(({ q: k, words: w }) => (q.factKey && k.factKey === q.factKey) ||
-          (sourceOf(q) && sourceOf(k) === sourceOf(q)) || sameFact(words, w));
+          (sourceOf(q) && sourceOf(k) === sourceOf(q)) || sameFact(words, w) || (aKey && answerKey(k) === aKey));
         if (twins.some(({ q: k }) => sameForm(k))) return 'same form as before';
       }
       if (isExcluded(q, opts.excludeSources, opts.sourceKey)) return 'flagged source';

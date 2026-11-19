@@ -173,20 +173,14 @@ check('table-notes: the asked row\'s note is the key', nn.length > 0 && nn.every
 check('table-notes: a related remark is not offered', !swab || !swab.options.includes('Not serospecific at all'), swab && swab.options.join(' | '));
 check('table-notes: a remark naming the asked row is not offered', nn.filter((q) => /"Probe"/.test(q.question)).every((q) => !q.options.includes('Confirms the Probe result')));
 
-// 6. Recall prompts of labelled cards, and the card gates behind them.
-const scope = { ctx: {}, titlePages: (t) => (/^Claw care$/i.test(t) ? [11, 12, 15] : [3]) };
-const fact = (subject, statement) => ({ subject, statement, kind: 'point' });
-check('recall-labels: a descriptive label is not a prompt', labels.pointPrompt(fact('Pond fever', 'Spreads through shared nets'),
-  { front: 'Pond fever — A gram-negative rod' }, scope) === '');
-check('recall-labels: a participle label is not a prompt', labels.pointPrompt(fact('Gill rot', 'Seen in warm ponds'),
-  { front: 'Gill rot — Caused by a water mould' }, scope) === '');
-check('recall-labels: one short item under a plural label is not the set', labels.pointPrompt(fact('Net injury', 'Torn fin'),
-  { front: 'Net injury — Possible wounds' }, scope) === '');
-check('recall-labels: an aspect label keeps "Explain"', labels.pointPrompt(fact('Saltwort', 'None seen at any dose'),
-  { front: 'Saltwort — Adverse effects' }, scope) === 'Explain: Saltwort — adverse effects.');
-check('recall-labels: a single line with no label is not asked', labels.labelledPrompt({ front: 'Gill wash', back: 'Can be taken through the mouth' }, scope) === '');
-check('recall-labels: a list whose title spans slides names its slide',
-  labels.listPrompt({ topic: 'Claw care', pageNumber: 15 }, ['Clean', 'Dry', 'Wrap'], scope, 'Claw care') === 'Name the 3 key points about "Claw care" on slide 15.');
+// 6. Recall prompts of labelled cards (the templates and the slide nesting are covered by recall_question_fixtures.js),
+// and the card gates behind them.
+const descSlide = { slideNumber: 3, title: 'Pond fever', nestedBullets: [{ level: 0, text: 'A gram-negative rod' }, { level: 1, text: 'Spreads through shared nets' },
+  { level: 0, text: 'Caused by a water mould' }, { level: 1, text: 'Seen in warm ponds' }] };
+const scope = { slides: [descSlide], ctx: { repeated: new Set() } };
+check('recall-labels: a descriptive label is not a prompt', labels.labelled({ front: 'Pond fever — A gram-negative rod', back: 'x', pageNumber: 3, sourceKind: 'label' }, scope) === null);
+check('recall-labels: a participle label is not a prompt', labels.labelled({ front: 'Pond fever — Caused by a water mould', back: 'x', pageNumber: 3, sourceKind: 'label' }, scope) === null);
+check('recall-labels: a single line with no label is not asked', labels.labelled({ front: 'Gill wash', back: 'Can be taken through the mouth', pageNumber: 3 }, scope) === null);
 check('slide-line-shapes: descriptions are not label heads', !shapes.isLabelHead('A gram-negative rod') && !shapes.isLabelHead('Caused by a water mould') &&
   !shapes.isLabelHead('Diagnostic as well as therapeutic') && shapes.isLabelHead('Clinical signs'));
 check('slide-line-shapes: two binomials run together are debris', shapes.fusedNames('Vibrio anguillarum Aeromonas spp.') && !shapes.fusedNames('Vibrio anguillarum and Aeromonas spp.'));

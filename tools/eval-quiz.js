@@ -17,7 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ROOT, loadPipeline, readManifest, buildEntry } = require('./eval-quiz-corpus.js');
-const { lintSet, lintQuizTestOverlap, LINT_NAMES } = require('./eval-quiz-lints.js');
+const { lintSet, lintQuizTestOverlap, lintCrossSetRepeats, LINT_NAMES } = require('./eval-quiz-lints.js');
 const { crudeStem, stripMath, stripMarkdown, stemBody } = require('./eval-quiz-text.js');
 const solver = require('./eval-quiz-solver.js');
 const { pct, round3, totalOf, recordLines, compare } = require('./eval-quiz-report.js');
@@ -60,10 +60,14 @@ async function measure(P, entry, manifest) {
   // A practice-test question that re-asks a quiz fact is a defect of the test: the student sees it twice.
   // A review question (the test came back to a quiz fact in another form, and says so) is counted apart.
   const overlap = lintQuizTestOverlap(built.quiz, built.test);
+  // The same fact in any form (the same short answer, a formula one answers and the other prints), and a review
+  // question asked in the quiz's own form.
+  const anyForm = lintCrossSetRepeats(built.quiz, built.test);
   const review = built.test.filter((q) => q.review);
   for (const [setName, list] of sets) {
     lintSet(list, built.scopeText).forEach((own, i) => {
-      const findings = setName === 'test' && overlap[i] && !list[i].review ? [...own, overlap[i]] : own;
+      const crossing = setName === 'test' ? [overlap[i] && !list[i].review ? overlap[i] : null, anyForm[i]].filter(Boolean) : [];
+      const findings = [...own, ...crossing];
       if (findings.length) defective++;
       for (const f of findings) {
         lints[f.lint] = (lints[f.lint] || 0) + 1;

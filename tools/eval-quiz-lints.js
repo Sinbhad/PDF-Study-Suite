@@ -29,6 +29,7 @@ const thirdLints = require('./eval-quiz-third-lints.js');
 const fourthLints = require('./eval-quiz-fourth-lints.js');
 const typedLints = require('./eval-quiz-typed-lints.js');
 const fifthLints = require('./eval-quiz-fifth-lints.js');
+const recallLints = require('./eval-quiz-recall-lints.js');
 
 const found = (lint, detail) => ({ lint, detail });
 
@@ -160,7 +161,8 @@ const LINT_NAMES = ['unresolved_reference', 'cloze_leading_blank', 'thin_stem', 
   'option_number_mix', 'option_article_mismatch', 'answer_length_tell', 'answer_leak', 'tf_copied_true', 'tf_antonym_swap',
   'tf_double_antonym', 'malformed_math', 'duplicate_fact', 'reused_option_set', 'whole_block_stem',
   ...contentLints.CONTENT_LINT_NAMES, ...reviewLints.REVIEW_LINT_NAMES, ...thirdLints.THIRD_LINT_NAMES,
-  ...fourthLints.FOURTH_LINT_NAMES, ...typedLints.TYPED_LINT_NAMES, ...fifthLints.FIFTH_LINT_NAMES, 'quiz_test_overlap'];
+  ...fourthLints.FOURTH_LINT_NAMES, ...typedLints.TYPED_LINT_NAMES, ...fifthLints.FIFTH_LINT_NAMES, ...recallLints.RECALL_LINT_NAMES,
+  'quiz_test_overlap'];
 
 /**
  * All findings for one question. `source` is the scope text (or a prebuilt index); `earlier` the questions
@@ -182,6 +184,8 @@ function lintQuestion(q, source, earlier = [], content = null, review = null) {
     ...fourthLints.FOURTH_LINTS.map((lint) => lint(q, fctx)),
     ...typedLints.TYPED_LINTS.map((lint) => lint(q)),
     ...fifthLints.FIFTH_LINTS.map((lint) => lint(q)),
+    ...recallLints.RECALL_LINTS.map((lint) => lint(q)),
+    recallLints.lintAnyFormRepeat(q, earlier),
   ].filter(Boolean);
 }
 
@@ -211,7 +215,7 @@ function lintQuizTestOverlap(quiz, test) {
 }
 
 module.exports = {
-  lintQuizTestOverlap, ...contentLints, ...reviewLints, ...thirdLints, ...fourthLints, ...typedLints, ...fifthLints,
+  lintQuizTestOverlap, ...recallLints, ...contentLints, ...reviewLints, ...thirdLints, ...fourthLints, ...typedLints, ...fifthLints,
   lintUnresolvedReference, lintClozeLeadingBlank, lintThinStem, lintAnswerLeak, lintWholeBlockStem,
   ...optionLints, ...setLints, LINT_NAMES, lintQuestion, lintSet,
 };

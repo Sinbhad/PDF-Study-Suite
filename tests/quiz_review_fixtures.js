@@ -119,9 +119,9 @@ const recallScope = { facts: [], counts: new Map(), recurs: (t) => /register/i.t
 const recalls = S.recallQuestions.candidates(recallScope);
 check('completions that pin no single answer are not asked', !recalls.some((q) => /halves the range|Some editors|Error You/.test(q.question)), show(recalls));
 // "A register is …" => "a small fast store ..." is asked as the question it answers; a completion whose grammar
-// gives no question ("When comparing two registers, test …") is asked as the statement to complete.
-check('completions about a term the scope uses, or with an opening clause, are asked', recalls.some((q) => q.question === 'What is a register?') &&
-  recalls.some((q) => /When comparing two registers/.test(q.question)), show(recalls));
+// gives no question ("When comparing two registers, test …") has more than one right ending and is not asked.
+check('a defining completion is asked as its question; any other completion is not', recalls.some((q) => q.question === 'What is a register?') &&
+  !recalls.some((q) => /When comparing two registers/.test(q.question)), show(recalls));
 check('"Define" with a bare name or advice is not asked', !recalls.some((q) => /Define "(?:Odd table|Kidney disease)"/.test(q.question)), show(recalls));
 
 // 6. Stems: extraction debris and worked-example talk are refused; a run-in heading is cut off.

@@ -104,8 +104,11 @@ const RULES = [['Trout', 'Cold water below sixteen degrees keeps them feeding'],
   ['Tilapia', 'Tolerate brackish water and crowding better than most species'], ['Catfish', 'Feed at night and hide under floating cover by day'],
   ['Salmon', 'Return from the sea to spawn in gravel streams'], ['Sturgeon', 'Grow slowly and mature only after many winters'],
   ['Perch', 'Hunt in schools along weedy margins at dawn'], ['Eel', 'Migrate across the ocean to breed far offshore']];
-const CARDS = RULES.map(([fish, back], i) => ({ front: `${fish} — Habits`, back, sourceKind: 'label', subject: fish, pageNumber: i + 1 }));
-const filled = S.quizEngine.generateQuiz('Pond rules. Each pond has its own stocking rule.', { mode: 'book', maxQuestions: 6, cards: CARDS });
+// (A labelled card is recalled from its slide's nesting: each fish has a slide with its "Management" label and line.)
+const CARDS = RULES.map(([fish, back], i) => ({ front: `${fish} — Management`, back, sourceKind: 'label', subject: fish, pageNumber: i + 1 }));
+const FISH_SLIDES = RULES.map(([fish, back], i) => ({ slideNumber: i + 1, kind: 'content', title: fish, bullets: ['Management', back],
+  nestedBullets: [{ level: 0, text: 'Management' }, { level: 1, text: back }] }));
+const filled = S.quizEngine.generateQuiz(FISH_SLIDES, { mode: 'slides', maxQuestions: 6, cards: CARDS });
 check('fill: recall questions fill every slot the choice questions leave', filled.length === 6, `${filled.length}: ${show(filled)}`);
 
 // 8. Lints: each flags its bad example and passes its good one.

@@ -21,7 +21,8 @@
  * Choice questions are drawn first. Then a typed round (typed-round.js) asks, with an answer the student types and
  * the app checks, the definitions, blanks, table cells, numbers and worked answers where one short answer is right.
  * Then a recall round (recall-questions.js) asks, self-graded, the facts and cards no choice or typed form could ask,
- * in every slot left: a set is short only when the scope has no more to ask.
+ * in every slot left: a set is short only when the scope has no more to ask. Before it, a quiz (variant 0) that would
+ * be more than half recall draws the keyed forms the practice test would use (variant 1) for its unused facts.
  *
  * generateQuiz(input, { maxQuestions, mode, didacticBlocks, seedOffset, variant, excludeSources, avoid, cards, reviewOf })
  *   cards           the flashcards the app shows for the scope; they are what the quiz asks (mined when absent)
@@ -81,6 +82,7 @@
   const FACT_FORMS = ['name', 'describe', 'trueFalse'];
   const CLOZE_REDRAWS = 2;
   const OPTION_REDRAWS = 2; // other draws of a fact's nearest siblings when its options were offered already
+  const KEYED_SPARE = 4; // keyed questions drawn beyond the room, since the quiz's own set may refuse a few
 
   const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -264,6 +266,15 @@
     // Typed round (typed-round.js): what the choice forms left is asked with an answer the app checks.
     if (D.typedRound) {
       D.typedRound.fill(set, { scope, ctx: sentenceWork(), placed, ruleCards, factOf: (source) => factBySource.get(source), seed: seedOffset, variant });
+    }
+
+    // Recall fills at most half of a quiz while the scope still has keyed questions on facts the quiz has not used:
+    // the other forms the practice test would draw (variant 1) are drawn for the quiz first.
+    const half = Math.floor(maxQuestions / 2);
+    if (variant === 0 && !options.keyedOnly && !(options.reviewOf || []).length && maxQuestions - set.size() > half) {
+      const want = maxQuestions - half - set.size();
+      const more = generateQuiz(input, { ...options, maxQuestions: want + KEYED_SPARE, variant: 1, gradedOnly: true, keyedOnly: true, avoid: [...(options.avoid || []), ...set.list()] });
+      for (const q of more) if (maxQuestions - set.size() > half) set.accept(q);
     }
 
     // Recall round: what no choice form could ask honestly is asked self-graded. The choice families have run

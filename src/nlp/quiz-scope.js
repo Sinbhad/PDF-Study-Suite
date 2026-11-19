@@ -18,6 +18,7 @@
  *     usable      (sentence) => may this sentence be asked (stands alone, study content, not an example)
  *     named       terms a sentence introduces by name ("... is called X", "... known as X")
  *     titlePages  (title) => the slide numbers a deck prints that title on (a recall names its slide when > 1)
+ *     slides      a deck's slides (learned ones), so a recall question can read a label's nesting off its slide
  *   clozeSentences(scope, seed) -> sentences a blank may be cut from, best first
  *   clozeTerms(scope)           -> terms a blank may replace or offer (marked-terms.js)
  * Returns null for a back-of-book answer key: there is nothing to learn from one. A slide the lecturer marked
@@ -255,6 +256,7 @@
     return {
       isDeck, text, headingWords, profile, recurs, isTerm, usable, pageOf, sentences, structured, cards, facts, claims, peers, kinds, named, summary,
       subjectsDefined, allCards, counts, ctx, concepts, rank, exampleTerm, titlePages,
+      slides: isDeck ? input : [], // a recall question reads a label's nesting off its slide (recall-outline.js)
     };
   }
 

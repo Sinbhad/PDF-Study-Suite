@@ -10,7 +10,7 @@ cross-check that a script was not dropped from both the map and index.html toget
 import os
 import shutil
 
-EXPECTED_SCRIPT_COUNT = 243  # <script src> tags in index.html (modules and vendor scripts)
+EXPECTED_SCRIPT_COUNT = 245  # <script src> tags in index.html (modules and vendor scripts)
 
 EXPECTED_NAMESPACES: dict[str, str] = {
     # PDF extraction, 2D formula reconstruction & textbook/slide structure (23)
@@ -124,6 +124,8 @@ EXPECTED_NAMESPACES: dict[str, str] = {
     "src/nlp/term-kinds.js": "PDFStudy.termKinds",
     "src/nlp/cloze-questions.js": "PDFStudy.clozeQuestions",
     "src/nlp/naming-questions.js": "PDFStudy.namingQuestions",
+    "src/nlp/recall-outline.js": "PDFStudy.recallOutline",
+    "src/nlp/recall-statements.js": "PDFStudy.recallStatements",
     "src/nlp/recall-labels.js": "PDFStudy.recallLabels",
     "src/nlp/recall-questions.js": "PDFStudy.recallQuestions",
     "src/nlp/table-questions.js": "PDFStudy.tableQuestions",
@@ -318,6 +320,7 @@ NODE_FIXTURES: tuple[str, ...] = (
     "page_schedule_fixtures.js",
     "worked_rule_fixtures.js",
     "keyed_question_fixtures.js",
+    "recall_question_fixtures.js",
     "typed_answer_fixtures.js",
     "typed_question_fixtures.js",
 )
