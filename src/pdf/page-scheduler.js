@@ -57,20 +57,31 @@
     return Math.max(0, Math.min(MAX_HELPERS, cores - 2));
   }
 
+  const copyBytes = (buf) => {
+    if (ArrayBuffer.isView(buf)) return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    return buf.slice(0);
+  };
+
   function begin(arrayBuffer) {
     const bytes = arrayBuffer && arrayBuffer.byteLength ? arrayBuffer.byteLength : 0;
-    const usable = isBrowser && helperCount() > 0 && bytes > 0 && bytes <= MAX_HELPER_BYTES && root.pdfjsLib;
-    // PDF.js hands the bytes to its worker and they are gone from here, so helpers need their own copy
-    return { byteLength: bytes, spare: usable ? arrayBuffer.slice(0) : null };
+    const canSlice = arrayBuffer && (typeof arrayBuffer.slice === 'function' || ArrayBuffer.isView(arrayBuffer));
+    const usable = canSlice && bytes > 0 && bytes <= MAX_HELPER_BYTES && root.pdfjsLib && typeof root.pdfjsLib.getDocument === 'function';
+    // PDF.js transfers or detaches raw bytes when opening, so parse-only lanes need their own copy
+    return { byteLength: bytes, spare: usable ? copyBytes(arrayBuffer) : null };
   }
 
   function closeHelpers(state) {
     if (!state) return;
     clearTimeout(state.idleTimer);
-    const helpers = state.helpers;
+    state.idleTimer = null;
+    const docs = state.helpers.slice();
     state.helpers = [];
-    for (const h of helpers) {
-      h.doc.then((doc) => doc && doc.destroy()).catch(() => {});
+    if (state.fastDoc) {
+      docs.push(state.fastDoc);
+      state.fastDoc = null;
+    }
+    for (const h of docs) {
+      h.doc.then((doc) => doc && typeof doc.destroy === 'function' && doc.destroy()).catch(() => {});
     }
   }
 
@@ -84,11 +95,23 @@
     const state = {
       pdfDoc,
       spare: t.spare || null,
+      fastDoc: null,
+      fastFailed: false,
       helpers: [],
+      queue: [],
       idleTimer: null,
       inflight: new Map(),
       cache: cacheModule ? cacheModule.forDocument(pdfDoc, t.byteLength).catch(() => null) : Promise.resolve(null),
     };
+    if (pdfDoc && typeof pdfDoc.destroy === 'function' && !pdfDoc.__schedulerDestroyHooked) {
+      const origDestroy = pdfDoc.destroy.bind(pdfDoc);
+      pdfDoc.__schedulerDestroyHooked = true;
+      pdfDoc.destroy = () => {
+        closeHelpers(state);
+        state.spare = null;
+        return origDestroy();
+      };
+    }
     states.set(pdfDoc, state);
     current = state;
     return state;
@@ -98,61 +121,99 @@
     return states.get(pdfDoc) || attach(pdfDoc, null);
   }
 
-  /** A helper: the same file opened again in a worker of its own. Resolves to null when it cannot open. */
-  function openHelper(state) {
+  /** Opens a parse-only copy of the document with image decoding disabled (maxImageSize: 1). */
+  function openParseDoc(state, fast) {
     const lib = root.pdfjsLib;
-    const doc = lib.getDocument({ data: state.spare.slice(0), fontExtraProperties: true }).promise.catch(() => null);
-    return { doc, busy: false, dead: false };
+    const doc = Promise.resolve()
+      .then(() => {
+        const task = lib.getDocument({ data: copyBytes(state.spare), fontExtraProperties: true, maxImageSize: 1, verbosity: 0 });
+        return task && task.promise ? task.promise : task;
+      })
+      .catch(() => null);
+    return { doc, busy: false, dead: false, fast: Boolean(fast) };
   }
 
-  /** Lanes that parse at the same time: the document itself, then helpers when the run is long enough. */
+  /** Lanes that parse at the same time: parse-only fast lane (plus browser helpers), or main doc fallback. */
   function lanesFor(state, toParse) {
-    const lanes = [{ doc: Promise.resolve(state.pdfDoc), busy: false, dead: false, main: true }];
-    if (!state.spare || toParse < MIN_PARALLEL) return lanes;
-    const affordable = Math.floor(HELPER_BYTES_BUDGET / Math.max(1, state.spare.byteLength));
-    const want = Math.min(helperCount(), affordable, Math.ceil(toParse / MIN_PARALLEL) - 1);
-    while (state.helpers.length < want) state.helpers.push(openHelper(state));
+    const canFast = Boolean(state.spare && !state.fastFailed && root.pdfjsLib && typeof root.pdfjsLib.getDocument === 'function');
+    if (!canFast) return [{ doc: Promise.resolve(state.pdfDoc), busy: false, dead: false, main: true }];
+    if (!state.fastDoc || state.fastDoc.dead) state.fastDoc = openParseDoc(state, true);
+    const lanes = [state.fastDoc];
+    if (isBrowser && helperCount() > 0 && toParse >= MIN_PARALLEL) {
+      const affordable = Math.max(0, Math.floor(HELPER_BYTES_BUDGET / Math.max(1, state.spare.byteLength)) - 1);
+      const want = Math.max(0, Math.min(helperCount(), affordable, Math.ceil(toParse / MIN_PARALLEL) - 1));
+      while (state.helpers.length < want) state.helpers.push(openParseDoc(state, false));
+      lanes.push(...state.helpers.filter((h) => !h.dead).slice(0, want));
+    }
     clearTimeout(state.idleTimer);
-    return lanes.concat(state.helpers.filter((h) => !h.dead).slice(0, want));
+    return lanes;
   }
 
   function idleLater(state) {
     clearTimeout(state.idleTimer);
-    if (!state.helpers.length) return;
+    if (!state.helpers.length && !state.fastDoc) return;
     state.idleTimer = setTimeout(() => {
       if (!state.inflight.size) closeHelpers(state);
     }, HELPER_IDLE_MS);
+    if (state.idleTimer && state.idleTimer.unref) state.idleTimer.unref();
   }
 
   /**
-   * Runs the queue of page numbers over the lanes. A helper that fails hands its page back to the queue and
-   * is not used again; a page that fails on the document itself fails as it did before this file existed.
+   * Runs the document's queued pages over its active lanes. A failed helper or fast lane falls back to
+   * state.pdfDoc cleanly; a page that fails on state.pdfDoc itself fails as it did before.
    */
-  function runQueue(state, queue, parseOne, settle) {
-    const lanes = lanesFor(state, queue.length);
+  function pumpState(state) {
+    if (!state.queue.length) return;
+    const lanes = lanesFor(state, state.queue.length);
+    const ensureMain = () => {
+      if (!lanes.some((l) => l.main && !l.dead)) {
+        lanes.push({ doc: Promise.resolve(state.pdfDoc), busy: false, dead: false, main: true });
+      }
+    };
     const pump = () => {
       for (const lane of lanes) {
-        if (lane.busy || lane.dead || !queue.length) continue;
-        const n = queue.shift();
+        if (lane.busy || lane.dead || !state.queue.length) continue;
+        const item = state.queue.shift();
         lane.busy = true;
         lane.doc
           .then((doc) => {
-            if (!doc) throw new Error('helper could not open the document');
-            return parseOne(doc, n);
+            if (!doc) {
+              const err = new Error('helper could not open the document');
+              err.__openFailed = true;
+              throw err;
+            }
+            return item.parseOne(doc, item.n);
           })
           .then((page) => {
             lane.busy = false;
-            settle(n, null, page);
+            item.settle(item.n, null, page);
           }, (err) => {
             lane.busy = false;
-            if (lane.main) settle(n, err, null);
-            else {
-              lane.dead = true;
-              queue.unshift(n);
+            if (lane.main) {
+              item.settle(item.n, err, null);
+              return;
             }
+            if (err && err.__openFailed) {
+              lane.dead = true;
+              if (lane.fast) state.fastFailed = true;
+              state.queue.unshift(item);
+              if (lanes.every((l) => l.dead)) ensureMain();
+              return;
+            }
+            if (!lane.fast) {
+              lane.dead = true;
+              state.queue.unshift(item);
+              if (lanes.every((l) => l.dead)) ensureMain();
+              return;
+            }
+            // Fast lane opened cleanly, so retry just this page on state.pdfDoc while keeping fast lane alive
+            Promise.resolve(item.parseOne(state.pdfDoc, item.n)).then(
+              (page) => item.settle(item.n, null, page),
+              (mainErr) => item.settle(item.n, mainErr, null)
+            );
           })
           .then(() => {
-            if (queue.length) pump();
+            if (state.queue.length) pump();
             else if (lanes.every((l) => !l.busy)) idleLater(state);
           });
       }
@@ -186,17 +247,18 @@
     (async () => {
       const cache = await state.cache;
       const found = cache ? await Promise.all(fresh.map((n) => cache.get(n))) : fresh.map(() => null);
-      const queue = [];
+      const queued = [];
       fresh.forEach((n, i) => {
         if (found[i]) settle(n, null, found[i]);
-        else queue.push(n);
+        else queued.push(n);
       });
-      if (!queue.length) return;
+      if (!queued.length) return;
       const remember = (n, err, page) => {
         if (!err && cache) cache.put(page);
         settle(n, err, page);
       };
-      runQueue(state, queue, parseOne, remember);
+      for (const n of queued) state.queue.push({ n, parseOne, settle: remember });
+      pumpState(state);
     })().catch((err) => {
       for (const n of fresh) if (state.inflight.has(n)) settle(n, err, null);
     });

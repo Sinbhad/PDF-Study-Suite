@@ -44,7 +44,12 @@
     const nested = Array.isArray(slide && slide.nestedBullets) && slide.nestedBullets.length
       ? slide.nestedBullets
       : ((slide && slide.bullets) || []).map((text) => ({ text, level: 0 }));
-    return nested.map((b) => ({ text: String(b.text || '').trim(), level: Number(b.level) || 0, bullet: Boolean(b.bullet), column: b.layoutColumn }))
+    return nested
+      .filter((b) => b && b.kind !== 'caption' && b.kind !== 'label')
+      .map((b) => ({
+        text: String(b.text || '').trim(), level: Number(b.level) || 0, bullet: Boolean(b.bullet),
+        column: b.layoutColumn, fontSize: Number.isFinite(b.fontSize) ? b.fontSize : 0,
+      }))
       .filter((l) => l.text);
   }
 
@@ -55,6 +60,21 @@
     const stack = [];
     for (const n of nodes) {
       while (stack.length && (stack[stack.length - 1].depth >= n.depth || !sameColumn(stack[stack.length - 1], n))) stack.pop();
+      // Where fontSize rises back to an ancestor's size over smaller sub-bullets ("General cerebral signs" after 10pt notes),
+      // that line sits at the ancestor's visual tier rather than nested inside the smaller child block.
+      if (n.fontSize) {
+        const up = stack.findIndex((a) => a.fontSize && a.children.some((c) => c.fontSize && c.fontSize < a.fontSize - 0.5) && n.fontSize >= a.fontSize - 0.5);
+        if (up >= 0) {
+          n.depth = stack[up].depth;
+          stack.length = up;
+        } else {
+          // Two consecutive lines with identical level and matching fontSize (e.g. snapped siblings) stay siblings.
+          while (stack.length && stack[stack.length - 1].fontSize && n.level <= stack[stack.length - 1].level && Math.abs(n.fontSize - stack[stack.length - 1].fontSize) <= 0.5) {
+            n.depth = stack[stack.length - 1].depth;
+            stack.pop();
+          }
+        }
+      }
       // Where lines are bulleted, a plain line under a bulleted one is a caption or a note, not its point.
       if (marked && !n.bullet && stack.length && stack[stack.length - 1].bullet) stack.length = 0;
       if (stack.length) {

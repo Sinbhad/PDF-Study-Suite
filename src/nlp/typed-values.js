@@ -54,7 +54,7 @@
    * A line of the card that states one number with its unit about the card's subject, asked with the number blanked:
    * [{ line, value }]. A line with a second number, an approximate or hedged value, or too few words is not asked.
    */
-  function blankedNumbers(card) {
+  function blankedNumbers(card, front = '') {
     const lines = String(card.back || '').split('\n').map((l) => l.replace(BULLET_RE, '').trim()).filter(Boolean);
     const out = [];
     for (const line of lines) {
@@ -62,6 +62,9 @@
       const hits = [...line.matchAll(NUMBER_IN_LINE_RE)].filter((m) => numberWithUnit(m[1]));
       if (hits.length !== 1 || (line.match(/\d+(?:\.\d+)?/g) || []).length !== (hits[0][1].match(/\d+(?:\.\d+)?/g) || []).length) continue;
       const value = hits[0][1].trim();
+      // Percentages have no unit to recall, and compound rates (mg/kg) belong only under fronts that name the quantity.
+      if (/%/.test(value)) continue;
+      if (/\//.test(value) && !QUANTITY_RE.test(front)) continue;
       const after = line.slice(hits[0].index + hits[0][1].length);
       const blanked = `${line.slice(0, hits[0].index)}________${after}`.replace(/[.;]\s*$/, '');
       // The blank's own clause must say what the value is ("Survives ________ in water"); "...; ________" or "________+"
@@ -94,10 +97,12 @@
         }));
       }
       if (labelled.length) continue;
-      for (const { line, value } of blankedNumbers(card)) {
+      for (const { line, value } of blankedNumbers(card, front)) {
+        const noun = /\d\s*(?:-|–|\bto\b)\s*\d/i.test(value) ? 'range' : 'value';
+        const lineSource = `${front}: ${line.replace('________', value)}`;
         out.push(shape().make({
-          badge: 'Type the Answer • Number', question: `${front}: type the missing value with its unit.\n"${line}"`, answer: value, form: 'number',
-          explanation: `${front}: ${line.replace('________', value)}`, subject, source, factKey: `n|${norm(front)}|${norm(line)}`, page: pageOf(card),
+          badge: 'Type the Answer • Number', question: `${front}: type the missing ${noun} with its unit.\n"${line}"`, answer: value, form: 'number',
+          explanation: lineSource, subject, source: lineSource, factKey: `n|${norm(front)}|${norm(line)}`, page: pageOf(card),
         }));
       }
     }

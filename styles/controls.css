@@ -101,14 +101,14 @@
 .loading-detail { margin-top: var(--sp-2); min-height: 1.3em; color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 
 /* Welcome / empty state: one centered dropzone, one primary action */
-.welcome { min-height: calc(100vh - var(--topbar-h)); display: grid; place-items: center; padding: var(--sp-5) var(--sp-4); }
+.welcome { min-height: calc(100vh - var(--topbar-h)); display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-5) clamp(var(--sp-2), 4vw, var(--sp-4)); }
 .dropzone {
-  width: 100%; max-width: 35rem; padding: var(--sp-7) var(--sp-6); text-align: center;
+  width: 100%; min-width: 0; max-width: min(35rem, 100%); padding: var(--sp-7) clamp(var(--sp-3), 5vw, var(--sp-6)); text-align: center;
   border: 1.5px dashed var(--border-strong); border-radius: var(--r-md);
   transition: border-color var(--ease), background var(--ease);
 }
 .drag-active .dropzone, .dropzone.drag-active { border-color: var(--primary); background: var(--primary-soft); }
-.dropzone h1 { font: 600 var(--fs-3xl)/1.2 var(--font-head); letter-spacing: -0.01em; }
+.dropzone h1 { font: 600 var(--fs-3xl)/1.2 var(--font-head); letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .dropzone-lead { margin: var(--sp-3) auto var(--sp-5); max-width: 28rem; color: var(--text-soft); font-size: var(--fs-lg); line-height: 1.55; }
 .dropzone-more { margin-top: var(--sp-5); color: var(--text-muted); font-size: var(--fs-sm); line-height: 1.9; }
 .dropzone .loading { margin: var(--sp-5) auto 0; }

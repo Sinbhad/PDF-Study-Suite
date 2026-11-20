@@ -153,6 +153,110 @@ function run() {
     body: 'A bag is an unordered collection of objects that may repeat, called items of the bag. A bag is finite when it holds finitely many items.' }]);
   check('book: a definition box is named by the subject it opens with', boxes.boxes.some((c) => c.front === 'Bag'), JSON.stringify(boxes.boxes));
 
+  // Regression guards: diagram column outline groups, route fact vs term, non-ID table key promotion, example-tail/schema cleanup.
+  const boldLine = (text, x0, top, size) => ({ ...line(text, x0, top, size), isBold: true });
+  const diagramDeck = ex.extractSlideDeck({
+    pages: [page(7, [
+      boldLine('Flow Regulators', 60, 40, 28),
+      boldLine('Check valves', 60, 120, 18),
+      line('Prevent reverse flow cleanly', 60, 148, 13),
+      line('17', 60, 500, 10),
+      boldLine('Relief valves', 520, 120, 18),
+      line('Open above preset line pressure', 520, 148, 13),
+    ])],
+  });
+  const diagramGroups = S.slideModel.normalize(diagramDeck.slides).slides[0].groups || [];
+  check('cards: multi-column diagram bold headers build outlineGroups while skipping page numbers',
+    diagramGroups.length === 2 && diagramGroups[0].head === 'Check valves' && diagramGroups[1].items[0] === 'Open above preset line pressure', JSON.stringify(diagramGroups));
+
+  const routeCards = S.flashcardEngine.extractSlideFlashcards([
+    { slideNumber: 8, title: 'Rodent Fever', bullets: ['Gram (-), motile', 'Vaccination', 'Live- Brand Z spray, two doses 2 weeks apart', 'Killed Intramuscular – two doses 3 weeks apart', 'Drug of choice: doxycycline'],
+      nestedBullets: [
+        { text: 'Gram (-), motile', level: 0 }, { text: 'Vaccination', level: 0 },
+        { text: 'Live- Brand Z spray, two doses 2 weeks apart', level: 1 }, { text: 'Killed Intramuscular – two doses 3 weeks apart', level: 1 },
+        { text: 'Drug of choice: doxycycline', level: 0 },
+      ] },
+    { slideNumber: 9, title: 'Notes', bullets: ['General protocol notes', 'Live- Brand Z spray, two doses 2 weeks apart', 'Killed Intramuscular – two doses 3 weeks apart'],
+      nestedBullets: [{ text: 'General protocol notes', level: 0 }, { text: 'Live- Brand Z spray, two doses 2 weeks apart', level: 0 }, { text: 'Killed Intramuscular – two doses 3 weeks apart', level: 0 }] },
+  ]);
+  check('cards: qualified route item yields a Slide Fact while bare route words stay off Slide Term',
+    routeCards.some((c) => c.front === 'Rodent Fever — Live' && c.category === 'Slide Fact') &&
+    !routeCards.some((c) => c.front === 'Live' || c.front === 'Killed Intramuscular'), fronts(routeCards));
+
+  const idPromoted = S.tableCards.rowCards({ rows: [['Habitat', 'Valve Type', 'Seal'], ['pipes, tanks', 'Ball valve', 'PTFE'], ['pipes, boilers', 'Gate valve', 'Bronze']] }, { subject: 'Valves' });
+  const toyIds = S.tableCards.rowCards({ rows: [['Employee_ID', 'Department', 'Shift'], ['101', 'Assembly', 'Day'], ['102', 'Testing', 'Night']] }, { subject: 'Roster' });
+  check('cards: repeating lowercase col 0 promotes capitalized unique key column and ignores Employee_ID tables',
+    idPromoted.some((c) => c.front === 'Ball valve — Seal' && c.back === 'PTFE') && toyIds.length === 0, fronts(idPromoted));
+
+  const schemaBook = book('Schema Keys\n\nORDER_ITEM (OrderNumber, LineNumber, SKU) lists line items. Deletion anomaly happens when deleting a row removes unrelated facts about an entity. For example, deleting customer 42 also loses the warehouse code.');
+  check('book: schema column identifiers are ignored and definition drops "For example" tail',
+    !schemaBook.some((c) => /ORDER_ITEM/.test(c.front)) && schemaBook.some((c) => c.front === 'Deletion anomaly' && !/customer 42/.test(c.back)), fronts(schemaBook));
+
+  // Regression guards: column:0 right-side captions, columnLayout gap preservation, multi-assay qualification, and bare qualifier inheritance.
+  const sideNoteLine = (text, x0, top, size, x1, column) => ({ ...line(text, x0, top, size, x1), column });
+  const sideNotePage = ex.extractSlidePage(page(10, [
+    sideNoteLine('Agent Gamma', 56, 52, 36, 300, 0),
+    sideNoteLine('Pathology', 75, 220, 26, 200, 0),
+    sideNoteLine('• Kidney inflammation', 111, 260, 24, 480, 0),
+    sideNoteLine('SHOCK', 730, 220, 72, 900, 0),
+    sideNoteLine('• Focal liver necrosis', 111, 300, 24, 520, 0),
+    sideNoteLine('(acute onset)', 725, 315, 24, 905, 0),
+    sideNoteLine('• Hemorrhage', 111, 340, 24, 420, 0),
+  ]));
+  check('slides: column:0 short side notes right of list are tagged captions without truncating bullets',
+    sideNotePage.bullets.filter((b) => !/SHOCK|acute onset/.test(b)).length >= 4 &&
+    sideNotePage.nestedBullets.some((b) => b.text === 'SHOCK' && b.kind === 'caption') &&
+    sideNotePage.nestedBullets.some((b) => b.text === '(acute onset)' && b.kind === 'caption'),
+    JSON.stringify(sideNotePage.nestedBullets));
+
+  const splitGap = ex.extractSlidePage(page(11, [
+    sideNoteLine('Syndrome X', 10, 40, 36, 280, 0),
+    sideNoteLine('• Virus infects white cells', 20, 120, 16, 700, 0),
+    sideNoteLine('Acute Form', 140, 160, 15, 240, 1),
+    sideNoteLine('Immune complex vasculitis and edema', 40, 380, 15, 340, 1),
+    sideNoteLine('Chronic Form', 540, 160, 15, 640, 2),
+    sideNoteLine('Granulomatous lesions in organs', 410, 380, 15, 760, 2),
+  ]));
+  const gapTexts = splitGap.bullets;
+  check('slides: layout columns across a diagram gap keep each column heading beside its body',
+    gapTexts.indexOf('Acute Form') < gapTexts.indexOf('Immune complex vasculitis and edema') &&
+    gapTexts.indexOf('Immune complex vasculitis and edema') < gapTexts.indexOf('Chronic Form') &&
+    gapTexts.indexOf('Chronic Form') < gapTexts.indexOf('Granulomatous lesions in organs'),
+    gapTexts.join(' | '));
+
+  const assayDeckCards = S.flashcardEngine.extractSlideFlashcards([
+    { slideNumber: 1, title: 'Diagnostics Overview', bullets: ['Comparing agent assays'] },
+    tableSlide(2, 'Agent Gamma', [['PCR', 'Blood', 'Bacterial DNA'], ['Serology', 'Clotted blood', 'Host antibodies']]),
+    tableSlide(3, 'Agent Delta', [['Culture', 'Urine', 'Live bacteria'], ['Western blot', 'Serum', 'Host antibodies']]),
+  ]);
+  check('cards: universal assay modalities qualify in decks with multiple assay tables',
+    assayDeckCards.some((c) => c.front === 'Serology (Agent Gamma) — Sample') &&
+    assayDeckCards.some((c) => c.front === 'Western blot (Agent Delta) — Sample'),
+    fronts(assayDeckCards));
+
+  const nestedVascular = S.flashcardEngine.extractSlideFlashcards([
+    { slideNumber: 1, title: 'Overview', bullets: ['Vascular pathology overview'] },
+    {
+      slideNumber: 20,
+      title: 'Vascular events',
+      bullets: [
+        'Acute infarct (occurred within the last 3 days)',
+        'Venous: Dark red and swollen wedge (congestion)',
+        'Arterial: Blanched (hard to appreciate in the tissue)',
+      ],
+      nestedBullets: nested([
+        [0, 'Acute infarct (occurred within the last 3 days)'],
+        [1, 'Venous: Dark red and swollen wedge (congestion)'],
+        [2, 'Arterial: Blanched (hard to appreciate in the tissue)'],
+      ]),
+    },
+  ]);
+  check('cards: bare anatomical qualifier labels inherit ancestor parent name instead of becoming standalone Slide Term',
+    nestedVascular.some((c) => c.front === 'Acute infarct — Venous' && c.category === 'Slide Fact') &&
+    nestedVascular.some((c) => c.front === 'Acute infarct — Arterial' && c.category === 'Slide Fact') &&
+    !nestedVascular.some((c) => c.front === 'Venous' || c.front === 'Arterial'),
+    fronts(nestedVascular));
+
   return results;
 }
 

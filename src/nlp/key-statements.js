@@ -43,7 +43,7 @@
   // A completion whose answer is a judgement ("a good idea", "particularly important") tests no fact.
   // ("has … become intrinsic to the design process": a trend remark, not a fact either.)
   const JUDGEMENT_TAIL_RE =
-    /^(?:become\s+|been\s+|grown\s+)?(?:an?\s+)?(?:very\s+|particularly\s+|extremely\s+|quite\s+|really\s+|increasingly\s+)?(?:good|bad|great|nice|useful|important|helpful|essential|critical|crucial|esoteric|interesting|obvious|easy|hard|difficult|advantages|benefits|drawbacks|pros|intrinsic|integral|indispensable|vital|central|popular|widespread|ubiquitous|prevalent|standard)\b/i;
+    /^(?:become\s+|been\s+|grown\s+)?(?:an?\s+)?(?:very\s+|particularly\s+|extremely\s+|quite\s+|really\s+|increasingly\s+)?(?:good|bad|great|nice|useful|important|unimportant|irrelevant|arbitrary|trivial|helpful|essential|critical|crucial|esoteric|interesting|obvious|clear|easy|hard|difficult|necessary|possible|impossible|advantages|benefits|drawbacks|pros|intrinsic|integral|indispensable|vital|central|popular|widespread|ubiquitous|prevalent|standard)\b/i;
   // Sections that are not exposition: worked examples, program output, objectives, boxed tips and asides.
   const SKIPPED_SECTION_RE =
     /^(?:examples?|program\s+run|summary|review|exercises|problems|self\s+check|common\s+error|programming\s+tip|special\s+topic|how\s+to|worked\s+example|computing\s*&\s*society|historical\s+notes?|by\s+the\s+way|key\s+terms)\b/i;
@@ -102,12 +102,18 @@
     return out.filter((s) => s.lines.length).map((s) => ({ heading: s.heading, body: s.lines.join('\n') }));
   }
 
+  // Database / code example identifiers ("ORDER_ITEM", "SKU_DATA", "StudentID", "OrderNumber") belong to worked examples.
+  const SCHEMA_ID_RE = /\b[A-Z]{2,}_[A-Z0-9_]+\b|\b[A-Z][a-z]+(?:ID|Number|Code|Price|Qty|Quantity|Name|Color|Weight|Cost|Count|Amount|Total|Key)\b/;
+  // Unresolved definite devices/nouns or example quantities that lack their context ("the latch" without SR vs S'R', "five elements").
+  const UNQUALIFIED_LATCH_RE = /\bthe\s+(?:latch|flip-flop)\b/i;
+  const CHATTY_OR_CONCRETE_RE = /\byou\s+need\s+to\s+remember\b|\bencounter\s+the\s+match\b|\b(?:two|three|four|five|six|seven|eight|nine|ten)\s+elements?\b/i;
+
   /** A sentence that can be shown alone and states a fact. */
   function standsAlone(sentence) {
     const t = plain(sentence);
     const n = words(t).length;
     if (n < MIN_WORDS || n > MAX_WORDS || /\?\s*$/.test(t) || !/[.!]$/.test(t) || !/^[A-Z]/.test(t)) return false;
-    if (CODE_RE.test(t) || NARRATIVE_RE.test(t) || (t.match(/\$/g) || []).length > 2) return false;
+    if (CODE_RE.test(t) || NARRATIVE_RE.test(t) || SCHEMA_ID_RE.test(t) || (t.match(/\$/g) || []).length > 2) return false;
     if (LEANING_START_RE.test(t) || LEANING_WORD_RE.test(t) || NAMING_RE.test(t) || GLUED_HEADING_RE.test(t) || OBJECTIVE_SENTENCE_RE.test(t)) return false;
     const sn = dep('stemNoise', './stem-noise.js');
     const sc = dep('selfContained', './self-contained.js');
@@ -189,7 +195,7 @@
     if (HEDGE_START_RE.test(head) || VAGUE_SUBJECT_RE.test(subject) || OPEN_MODAL_FRONT_RE.test(subject.trim())) return null;
     // "A bit can …", "The Rectangle class has …": a modal or "has" leaves the predicate open (it can do many things,
     // it has many parts), so the front asks no one question. "must" and "need to" state a rule and stay.
-    if (OPEN_VERB_END_RE.test(head)) return null;
+    if (OPEN_VERB_END_RE.test(head) || /\s(?:do|does)\s+not$/i.test(head)) return null;
     // A back runs to its own sentence's end only: "values. The == operator tests ..." is two notes, not one answer.
     let back = tail.split(/(?<=[a-z0-9)\]])[.!?]\s+(?=[A-Z$])/)[0].trim();
     let front = head;
@@ -198,7 +204,11 @@
       front = `${head} ${(lead[1] || '')}${lead[2]}`.replace(/\s+/g, ' ');
       back = lead[3];
     }
-    if (TRIVIAL_BACK_RE.test(back) || (words(back).length === 1 && !ADJECTIVE_RE.test(back))) return null;
+    if (/\([a-d]\)\s*$/i.test(back)) return null; // figure sublabel truncation ("... reset is(a)")
+    if (TRIVIAL_BACK_RE.test(back) || (words(back).length <= 2 && /^(?:for|in|on|at|to|by|of|with)\s+/i.test(back))) return null;
+    if (UNQUALIFIED_LATCH_RE.test(`${front} ${back}`) && !/\$[^$]*\$|\b(?:SR|JK|D|T|edge-triggered|pulse-triggered)\b/i.test(front)) return null;
+    if (CHATTY_OR_CONCRETE_RE.test(`${front} ${back}`)) return null;
+    if (words(back).length === 1 && !ADJECTIVE_RE.test(back)) return null;
     if (EXAMPLE_NAME_RE.test(`${front} ${back}`)) return null;
     // "Examining the data, (A, B) determines … the other two columns as well": the book walking through its example.
     if (EXAMPLE_WALK_RE.test(head) || EXAMPLE_BACK_RE.test(back) || NONE_SUBJECT_RE.test(subject)) return null;

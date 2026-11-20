@@ -25,6 +25,7 @@
   const dep = (k, f) => PDFStudy[k] || (typeof require === 'function' ? require(f) : null);
   const quality = () => dep('cardQuality', './card-quality.js');
   const filter = () => dep('contentFilter', './content-filter.js');
+  const subjects = () => dep('quizSubjects', './quiz-subjects.js');
 
   const MIN_BODY_ROWS = 2;
   const MAX_BODY_ROWS = 24;
@@ -43,10 +44,14 @@
   const MERGED_HEADER_RE = /^[A-Z][a-z]+(?:\s+[a-z]+)+\s+[A-Z][a-z]+$/;
   // A catch-all column ("Notes", "Comments", "Other") asks nothing: "Serology — Notes" has no question in it.
   const CATCH_ALL_COLUMN_RE = /^(?:notes?|comments?|remarks?|other|misc(?:ellaneous)?|details|additional(?:\s+\w+)?|extra|see\s+also)$/i;
+  // Toy SQL/database sample-record columns ("ObjectColor", "OrderNumber", "StudentID", "SKU_DATA"): example data, not conceptual tables.
+  const TOY_ID_COL_RE = /^(?:[A-Z]{2,}_[A-Z0-9_]+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z]+(?:ID|Number|Code|Color|Num|Qty))$/;
+  // Diagnostic time-course columns depend intrinsically on the specific disease/pathogen on that slide.
+  const TIME_DEPEND_COL_RE = /\btime\s*frame\b|\bp\.?i\.?\b/i;
   // A cell that carries a web address took in a link or a credit line from the slide: its reading is not trusted.
   const tidy = (s) => {
     const t = String(s == null ? '' : s);
-    return URL_RE.test(t) ? '' : t.replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim();
+    return URL_RE.test(t) ? '' : t.replace(/\*\*|__/g, '').replace(/^[•▪◦‣●]\s*/g, '').replace(/\s+([.,:;!?])/g, '$1').replace(/\s+/g, ' ').trim();
   };
   const wordy = (cell) => /[A-Za-z]{2}/.test(cell);
   const words = (s) => s.split(/\s+/).filter(Boolean);
@@ -91,16 +96,50 @@
     return out;
   }
 
+  /**
+   * When column 0 repeats category/host values ("ruminants", "rodents, sm. mammals", "rodents") and another
+   * column holds 100% unique, properly capitalized entity keys ("Serovars (U.S.)" -> "Hardjo", ...), promote
+   * that column to index 0 so cards & MCQs key on the unambiguous entities. Empty column 0 stays intact.
+   */
+  function canonicalKeyColumn(header, body) {
+    if (!header[0] || header.length < 2) return { header, body };
+    const colVals = (k) => body.map((r) => String(r[k] || '').replace(/\s*\([^)]*\)$/, '').trim());
+    const exactDupes = (vals) => new Set(vals.map((v) => v.toLowerCase())).size < vals.length;
+    const overlapTokens = (vals) => {
+      const seen = new Map();
+      for (const v of vals) {
+        const parts = new Set(v.toLowerCase().split(/[,/;]+/).map((p) => p.replace(/[^a-z0-9]+/g, ' ').trim()).filter((p) => p.length >= 3));
+        parts.forEach((p) => seen.set(p, (seen.get(p) || 0) + 1));
+      }
+      return [...seen.values()].filter((n) => n >= 2).length;
+    };
+    const col0 = colVals(0);
+    const badKey0 = exactDupes(col0) || overlapTokens(col0) >= 2 || (overlapTokens(col0) >= 1 && col0.every((c) => /^[a-z]/.test(c)));
+    if (!badKey0) return { header, body };
+    const keyIdx = header.findIndex((h, k) => k > 0 && h && !CATCH_ALL_COLUMN_RE.test(h.trim()) && !MERGED_HEADER_RE.test(h) && (() => {
+      const vals = colVals(k);
+      return vals.every((v) => namesEntity(v) && /^[A-Z]/.test(v)) && !exactDupes(vals) && overlapTokens(vals) === 0;
+    })());
+    if (keyIdx < 0) return { header, body };
+    const order = [keyIdx, ...header.map((_, idx) => idx).filter((idx) => idx !== keyIdx)];
+    return {
+      header: order.map((idx) => header[idx]),
+      body: body.map((r) => order.map((idx) => r[idx])),
+    };
+  }
+
   /** The comparison table under the input, or null (see the rules at the top). */
   function comparison(table) {
     const t = shape(table);
     if (!t || !headerLike(t.header)) return null;
-    const body = namedRows(t.body);
-    if (!body || body.length < MIN_BODY_ROWS || body.length > MAX_BODY_ROWS) return null;
+    if (TOY_ID_COL_RE.test(t.header[0]) || t.header.filter((h) => TOY_ID_COL_RE.test(h)).length >= 2) return null;
+    const rawBody = namedRows(t.body);
+    if (!rawBody || rawBody.length < MIN_BODY_ROWS || rawBody.length > MAX_BODY_ROWS) return null;
+    const { header, body } = canonicalKeyColumn(t.header, rawBody);
     const cells = body.flatMap((r) => r.slice(1)).filter(Boolean);
     const debris = cells.filter((c) => !wordy(c)).length;
     if (!cells.length || debris / cells.length > MAX_DEBRIS_CELLS) return null;
-    return { header: t.header, body };
+    return { header, body };
   }
 
   const isComparison = (table) => Boolean(comparison(table));
@@ -120,6 +159,7 @@
     // this table's subject: its cell facts name it ("IHC (Leptospira spp.) — Sample"). opts.ambiguous holds those
     // row names in lower case (rowNames over the deck's tables).
     const ambiguous = opts.ambiguous instanceof Set ? opts.ambiguous : null;
+    const specificSubject = Boolean(subject && words(subject).length <= MAX_SUBJECT_WORDS && !(subjects() && subjects().isGenericHeading(subject, {})));
     const qualify = (entity) => Boolean(subject && ambiguous && ambiguous.has(entity.toLowerCase()) && words(subject).length <= MAX_SUBJECT_WORDS);
     for (const row of body) {
       const entity = row[0];
@@ -133,13 +173,14 @@
         if (borrows(cell, own) || MERGED_HEADER_RE.test(column) || CATCH_ALL_COLUMN_RE.test(column.trim())) return;
         // A bare row label ("1", "Type A") names nothing alone: the table's subject goes in front of it.
         const bare = subject && /\d/.test(entity) && entity.split(/\s+/).length <= 2;
-        const about = qualify(entity) && !bare && !entity.toLowerCase().includes(subject.toLowerCase()) ? `${entity} (${subject})` : entity;
+        const needsSubject = qualify(entity) || (specificSubject && TIME_DEPEND_COL_RE.test(column));
+        const about = needsSubject && !bare && !entity.toLowerCase().includes(subject.toLowerCase()) ? `${entity} (${subject})` : entity;
         const named = bare ? `${subject} ${entity}` : about;
         out.push({
           front: `${named} — ${column}`, back: cell, category: 'Comparison', kind: 'concept', subject: entity, sourceKind: 'table',
           // The whole row and the header ride along: a question asked down a column checks every cell of the other
           // rows and names the column its stem value sits in (table-questions.js).
-          table: { entity: named, column, columnIndex: i + 1, key, header: [...header], row: [...row] },
+          table: { entity: named, column, columnIndex: i + 1, key, header: [...header], row: [...row], ...(specificSubject ? { subject } : {}) },
         });
       });
     }

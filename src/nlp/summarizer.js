@@ -74,7 +74,8 @@
   const scoreGraphCentrality = (...a) => getDeps().graphRank.scoreGraphCentrality(...a);
 
   function summarizeText(text, options = {}) {
-    const { topK = 7, headings = [], didacticBlocks = [] } = options;
+    const { topK = 7, headings = [] } = options;
+    const didacticBlocks = Array.isArray(options.didacticBlocks) ? options.didacticBlocks : [];
     const { tokenizer, stemNoise, stemCards, graphRank, statements } = getDeps();
     const { STOPWORDS, tokenize, cleanMarkdown, splitSentences, computeTfIdfVectors, cosineSim } = tokenizer;
     const { normalizeScores } = graphRank;
@@ -101,8 +102,20 @@
     // section in reading order); ranking whole-scope sentences is for the quiz, which builds no outline.
     if (outline) {
       const lead = overviewOf(outline, topK);
-      // The key terms are the ones the outline links to their definitions, never words ranked from examples
+      const kt = dep('keyTerms', './key-terms.js');
+      const META_RE = /^(?:(?:course|learning)\s+objectives?|overview|outline|agenda|summary|review|introduction|references)$/i;
+      // The key terms are the ones the outline links to their definitions, never words ranked from examples;
+      // when thin (< 8), supplement cleanly with filtered real terms from non-example sections.
       const linked = (outline.terms || []).map((t) => t.term);
+      const seenT = new Set(linked.map((t) => String(t).toLowerCase()));
+      const mergedKeyTerms = [...linked];
+      for (const t of keyTerms || []) {
+        if (mergedKeyTerms.length >= 10) break;
+        const k = String(t || '').toLowerCase();
+        if (!k || seenT.has(k) || META_RE.test(t) || (kt && !kt.realTerm(t))) continue;
+        seenT.add(k);
+        mergedKeyTerms.push(t);
+      }
       // The Summary's list of definitions holds only those that read on their own, as the outline's do: never
       // an example passage that ends "This condition is called ..."
       const bo = dep('bookOutline', './book-outline.js');
@@ -111,14 +124,33 @@
         .filter((d) => d.page || bo.usableDefinition(d))
         // "is said to be in the set state" names "set state", not "In the set state"
         .map((d) => ({ ...d, term: String(d.term || '').replace(/^(?:in|into|at|on)\s+(?:the\s+|an?\s+)?/i, '').replace(/^[a-z]/, (c) => c.toUpperCase()), definition: bo.withoutAside(d.definition) }));
-      // ... and every term the outline defines under its heading
+      // ... preserving real page provenance from the outline definitions and line locator (without duplicating outline.sections[].definitions)
       const key = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const cf = dep('cardFields', './card-fields.js');
+      const locate = cf && options.outline.lines ? cf.pageLocator(options.outline.lines) : null;
+      const outlinePage = new Map();
       for (const sec of outline.sections || []) {
         for (const d of sec.definitions || []) {
-          if (!readable.some((r) => key(r.term) === key(d.term))) readable.push({ term: d.term, definition: d.text, page: d.page });
+          if (d.page) outlinePage.set(key(d.term), d.page);
         }
       }
-      return damage().clean({ sentences: lead, keyTerms: linked, didacticBlocks, keyFormulas, definitions: readable, outline });
+      for (const d of readable) {
+        if (!d.page) d.page = outlinePage.get(key(d.term)) || (locate && (locate(`${d.term} ${d.definition}`) || locate(d.definition))) || options.outline.startPage || null;
+      }
+      // Populate keyFormulas from outline formulas (not section blocks, which already live in sec.blocks) when stemCards found none
+      const formulas = keyFormulas.length ? keyFormulas : [];
+      if (!formulas.length) {
+        const seenF = new Set();
+        for (const sec of outline.sections || []) {
+          for (const f of sec.formulas || []) {
+            const sig = `${f.title}|${f.body}`;
+            if (seenF.has(sig)) continue;
+            seenF.add(sig);
+            formulas.push({ category: f.category || (f.kind === 'code' ? 'Code' : 'Formula'), title: f.title, body: f.body, ...(f.page ? { page: f.page } : {}), ...(f.kind === 'code' ? {} : { formula: f.body }) });
+          }
+        }
+      }
+      return damage().clean({ sentences: lead, keyTerms: mergedKeyTerms, didacticBlocks, keyFormulas: formulas, definitions: readable, outline });
     }
     if (rawSentences.length <= topK) {
       return { sentences: rawSentences, keyTerms, didacticBlocks, keyFormulas, definitions, outline };
@@ -217,10 +249,27 @@
   function summarizeSlides(slides, topK = 8) {
     const model = dep('slideModel', './slide-model.js').normalize(slides);
     const sq = dep('slideQuiz', './slide-quiz.js');
-    const definitions = model.definitions.filter(realDefinition).map((d) => ({ term: d.term, definition: d.definition, page: d.page }));
+    const dt = dep('deckTerms', './deck-terms.js');
+    const kt = dep('keyTerms', './key-terms.js');
+    const qs = dep('quizSubjects', './quiz-subjects.js');
+    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const upFirst = (t) => String(t || '').replace(/^[a-z]/, (c) => c.toUpperCase());
+    const META_TERM_RE = /^(?:(?:course|learning)\s+objectives?|overview|outline|agenda|summary|review|introduction|references)$/i;
+    const definitions = model.definitions.filter(realDefinition).map((d) => ({ term: d.term, definition: upFirst(d.definition), page: d.page }));
+    const seenDef = new Set(definitions.map((d) => norm(d.term)));
+    if (dt && dt.labelledDefinition) {
+      for (const s of model.slides) {
+        if (s.contentKind === 'case' || s.contentKind === 'references' || s.contentKind === 'contact') continue;
+        for (const b of s.bullets || []) {
+          const parsed = dt.labelledDefinition(b);
+          if (!parsed || seenDef.has(norm(parsed.term)) || !realDefinition(parsed)) continue;
+          seenDef.add(norm(parsed.term));
+          definitions.push({ term: parsed.term, definition: upFirst(parsed.definition), page: s.slideNumber });
+        }
+      }
+    }
     const topical = model.slides.filter((s) => (s.kind === 'content' && !s.isExample) || s.kind === 'section');
     const overview = summarizeText(sq.studyText(slides), { topK, headings: topical.map((s) => s.title), titles: topical.map((s) => s.title), definitions });
-    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const outline = dep('deckOutline', './deck-outline.js').build(slides, { model });
     // One point per slide, in lecture order: the slide's defining statement when it has one, else the outline's
     // first point that reads as a statement (never a heading, a label or a scrap). The overview then takes
@@ -244,14 +293,22 @@
         ...(s.qa.length ? { qa: s.qa.map((q) => ({ question: q.question, answer: q.answer })) } : {}),
         ...(s.table ? { table: s.table } : {}),
       }));
+    const linked = (outline.terms || []).map((t) => t.term).filter((t) => (!kt || kt.realTerm(t)) && !META_TERM_RE.test(t));
+    const seenTerms = new Set(linked.map(norm));
+    const mergedTerms = [...linked];
+    for (const t of overview.keyTerms || []) {
+      if (mergedTerms.length >= 12) break;
+      const k = norm(t);
+      if (!k || seenTerms.has(k) || META_TERM_RE.test(t) || (kt && !kt.realTerm(t))) continue;
+      if (qs && qs.isGenericHeading(t, {})) continue;
+      if (!linked.length && model.slides.some((s) => norm(s.title || '') === k && qs && qs.isGenericHeading(s.title || '', {}))) continue;
+      seenTerms.add(k);
+      mergedTerms.push(t);
+    }
     // A glyph the extraction could not read ("¿") is never shown: summary-damage.js
     return damage().clean({
       overviewSentences: lead,
-      // Terms the outline links to their slides; without any, the ranked terms that are not a slide's title
-      // ("Course objectives", "Mild disease" name slides, not concepts)
-      keyTerms: (outline.terms || []).length
-        ? outline.terms.map((t) => t.term)
-        : overview.keyTerms.filter((t) => !model.slides.some((s) => norm(s.title || '') === norm(t))),
+      keyTerms: mergedTerms,
       keyFormulas: overview.keyFormulas,
       definitions,
       slideBreakdown,
@@ -262,11 +319,14 @@
 
   // A point that states something: six words or more, mostly in running (lower-case) words, not a label.
   const STATEMENT_MIN_WORDS = 6;
+  const GENERIC_SUBJECT_WORDS = new Set(('disease diseases signs symptoms group groups prognosis therapy treatment diagnosis ' +
+    'infection infections clinical acute chronic mild moderate severe general features effects causes types overview summary notes ' +
+    'pathology pathogenesis administration transmission prevention control').split(' '));
   function readsAsStatement(text) {
     const t = String(text || '').replace(/\*\*|__/g, '').replace(/\$[^$]*\$/g, 'x').replace(/\s+/g, ' ').trim();
     const words = t.split(' ');
     if (words.length < STATEMENT_MIN_WORDS || /[:?]$/.test(t) || /¿|\s\|\s/.test(t)) return false;
-    if (/\b(?:and|or|of|the|a|an|to|with|by|in|for|from|that|is|are)$/i.test(t)) return false; // cut off by the slide layout
+    if (/\b(?:and|or|of|the|a|an|to|with|by|in|for|from|that|is|are|both)$/i.test(t) || /^[a-z]/.test(t)) return false;
     const lower = words.filter((w) => /^[a-z]/.test(w)).length;
     return lower / words.length >= 0.5;
   }
@@ -277,19 +337,29 @@
    */
   function deckStatements(outline) {
     const out = [];
-    const words = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 3);
+    const qs = dep('quizSubjects', './quiz-subjects.js');
+    const words = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !GENERIC_SUBJECT_WORDS.has(w));
     for (const sec of (outline && outline.sections) || []) {
       for (const tp of sec.topics || []) {
         // The slide's name without its brand names or asides: "Epsiprantel (Cestex®)" -> "Epsiprantel"
         const nameOf = (t) => String(t || '').replace(/\*\*/g, '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
         for (const e of tp.slides || []) {
-          const subject = nameOf(e.title || tp.title || sec.title);
-          const texts = (e.bullets || []).flatMap((b) => [b.text, ...(b.children || []).map((c) => (typeof c === 'string' ? c : c.text))]);
+          const rawTitle = nameOf(e.title || tp.title || sec.title);
+          const topicName = nameOf(tp.title);
+          const subject = rawTitle.split(/\s+/).length > 6
+            ? (qs && qs.specificOf(rawTitle, {})) || (!/\?\s*$/.test(topicName) ? topicName : '') || rawTitle
+            : rawTitle;
+          const texts = (e.bullets || []).flatMap((b) => {
+            const kids = (b.children || []).map((c) => (typeof c === 'string' ? c : c.text));
+            if (readsAsStatement(b.text)) return [b.text, ...kids];
+            const parent = String(b.text || '').replace(/\*\*/g, '').replace(/:$/, '').trim();
+            return kids.map((k) => (parent && parent.split(/\s+/).length <= 5 && readsAsStatement(k) ? `${parent}: ${k}` : k));
+          });
           const first = texts.find(readsAsStatement);
           if (!first) continue;
           const text = String(first).replace(/\*\*/g, '').trim();
           const named = words(subject).some((w) => words(text).includes(w));
-          out.push({ page: e.slide || e.page, text: named || !subject || subject.split(' ').length > 6 ? text : `${subject} — ${text}` });
+          out.push({ page: e.slide || e.page, text: named || !subject || /\?\s*$/.test(subject) || subject.split(' ').length > 6 ? text : `${subject} — ${text}` });
         }
       }
     }

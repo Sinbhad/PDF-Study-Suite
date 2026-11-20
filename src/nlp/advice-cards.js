@@ -25,6 +25,8 @@
   const SITUATION_RE = /^((?:To|When|Whenever|Before|After|If|With|Once|Unless)\s+[^,]{3,90}),\s+(.+)$/;
   const PURPOSE_RE = /^Use\s+(.{3,70}?)\s+to\s+([a-z].{3,90})$/;
   const CONDITION_RE = /^Use\s+(.{3,70}?)\s+(if|when|whenever)\s+(.{3,90})$/;
+  // A gerund task clause after "when" ("when swapping two elements") names the goal, so ask for the tool.
+  const GERUND_TASK_RE = /^(?!string\b|thing\b|ring\b|king\b|spring\b|wing\b|nothing\b|something\b|anything\b|everything\b)[a-z]{3,}ing\s+\S/i;
   const AVOID_RE = /^Avoid\s+(.{3,60}?)\s+by\s+(.{3,90})$/;
   const INSTEAD_RE = /^(?:Do\s+not|Don['’]t|Never)\s+use\s+(.{2,60}?)\s+to\s+(.{3,80}?)\.\s+(?:Instead,\s+)?(?:Use|use)\s+(.{2,60}?)(?:\s+instead)?\.?$/;
   // "Instead, check whether ...", "Otherwise, ...": a sentence that only continues the advice before it.
@@ -62,7 +64,12 @@
     let m = t.match(PURPOSE_RE);
     if (m) return shaped(`To ${m[2]}, …`, `use ${m[1]}${tail ? `;${tail}` : ''}`, 'purpose');
     m = t.match(CONDITION_RE);
-    if (m) return shaped(`When should you use ${m[1]}?`, `${cap(m[2])} ${m[3]}`, 'condition');
+    if (m) {
+      if (/^when/i.test(m[2]) && GERUND_TASK_RE.test(m[3])) {
+        return shaped(`What should you use ${m[2]} ${m[3]}?`, `Use ${m[1]}${tail ? `;${tail}` : ''}`, 'condition');
+      }
+      return shaped(`When should you use ${m[1]}?`, `${cap(m[2])} ${m[3]}`, 'condition');
+    }
     m = t.match(AVOID_RE);
     if (m) return shaped(`How do you avoid ${m[1]}?`, `By ${m[2]}`, 'avoid');
     m = t.match(SITUATION_RE);

@@ -18,6 +18,8 @@
   const qf = () => dep('quizFacts', './quiz-facts.js');
 
   const REMARKS_COLUMN_RE = /^(?:notes?|comments?|remarks?)$/i;
+  // Elliptical/aside table remarks ("Also silver stain...", "need paired!") cannot stand alone as clear MC options.
+  const ELLIPTICAL_NOTE_RE = /^(?:also|however|moreover|furthermore|still|too)\b|!/i;
   const MIN_DISTRACTORS = 3;
   const MAX_NOTE_CHARS = 80;
   const MIN_SHARED_CHARS = 6; // "specific" inside "serospecific": one word inside another is the same remark
@@ -51,18 +53,19 @@
       const rows = [...t.rows.values()];
       for (const { row, entity, card } of rows) {
         const answer = tidy(row[t.col]);
-        if (!answer || answer.length > MAX_NOTE_CHARS || !tq().usableHeader(t.header[0])) continue;
+        if (!answer || answer.length > MAX_NOTE_CHARS || ELLIPTICAL_NOTE_RE.test(answer) || !tq().usableHeader(t.header[0])) continue;
         const value = bare(row[0]);
         const others = rows.filter((r) => r.row !== row);
         // The stem's value must pick out one row, and no option may come from a row that holds it.
         if (others.some((r) => tq().overlaps(bare(r.row[0]), value))) continue;
         const pool = others.filter((r) => !r.row.some((cell) => cell && tq().overlaps(bare(cell), value)))
           .map((r) => tidy(r.row[t.col]))
-          .filter((n) => n && n.length <= MAX_NOTE_CHARS && norm(n) !== norm(answer) && !related(n, answer) && !related(n, value));
+          .filter((n) => n && n.length <= MAX_NOTE_CHARS && !ELLIPTICAL_NOTE_RE.test(n) && norm(n) !== norm(answer) && !related(n, answer) && !related(n, value));
         const wrong = shuffle([...new Map(pool.map((n) => [norm(n), n])).values()], `${card.front}|notes`, seed).slice(0, MIN_DISTRACTORS);
         if (wrong.length < MIN_DISTRACTORS) continue;
         const column = String(t.header[t.col]).trim();
-        const question = `In the row where ${String(t.header[0]).trim()} is "${entity}", what do the ${column} say?`;
+        const shown = tq().qualifiedEntity ? tq().qualifiedEntity(card.table) : entity;
+        const question = `In the row where ${String(t.header[0]).trim()} is "${shown}", what do the ${column} say?`;
         const source = `${entity} — ${column}: ${answer}`;
         out.push({
           type: 'multiple_choice', badge: 'Multiple Choice • Table', question,

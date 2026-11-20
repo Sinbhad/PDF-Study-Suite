@@ -73,6 +73,15 @@
     const all = fmt(ls);
     check('limit keeps its bound', /\\lim_\{x \\to -3\}/.test(all), all);
     check('radical below takes no index from the bound above', /\\sqrt\{x \+ 1\}/.test(all) && !/\\sqrt\[/.test(all), all);
+    // Wingdings3 PUA bullet symbol (\uF0B4) on a non-math font recovers as bullet glyph without $...$ math wrapping
+    const puaFonts = new Map([['r', 'AAAAAA+Arial'], ['w3', 'AAAAAA+Wingdings3'], ['wr', 'AAAAAA+Wingdings-Regular']]);
+    const pua = S.pdfLoader.reconstructLines([
+      it('\uF0B4', 76, 120, 'w3', 24, 20), it('Region Alpha', 106, 120, 'r', 24, 150),
+      it('\uF0E0', 76, 160, 'wr', 24, 20), it('Next state', 106, 160, 'r', 24, 120),
+    ], {}, W, H, { fontNames: puaFonts });
+    check('PUA Wingdings3 bullet glyph recovers as plain bullet with indent kept',
+      pua[0] && pua[0].hasBullet && pua[0].text === '• Region Alpha' && pua[0].x0 === 76 && pua[0].textX0 === 106 && !pua[0].formattedText.includes('$') &&
+      pua[1] && pua[1].text.includes('→'), JSON.stringify(pua));
   }
 
   function checkCleaner(S, check) {

@@ -7,8 +7,8 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233F37C9'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h9' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="styles/tokens.css?v=20261118d" />
   <link rel="stylesheet" href="styles/base.css?v=20261113a" />
-  <link rel="stylesheet" href="styles/controls.css?v=20261118f" />
-  <link rel="stylesheet" href="styles/shell.css?v=20261118j" />
+  <link rel="stylesheet" href="styles/controls.css?v=20261120z" />
+  <link rel="stylesheet" href="styles/shell.css?v=20261120z" />
   <link rel="stylesheet" href="styles/study.css?v=20261118d" />
   <link rel="stylesheet" href="styles/math.css?v=20261113a" />
   <link rel="stylesheet" href="styles/practice.css?v=20261118h" />
@@ -105,7 +105,7 @@
             </div>
             <input type="range" id="readerPageScrubber" min="1" max="1" value="1" class="reader-scrub" aria-label="Page scrubber" />
             <div class="reader-group">
-              <button class="btn btn-ghost btn-sm" id="readerZoomOutBtn" type="button" aria-label="Zoom out">âˆ’</button>
+              <button class="btn btn-ghost btn-sm" id="readerZoomOutBtn" type="button" aria-label="Zoom out">&minus;</button>
               <span id="readerZoomLabel" aria-live="polite">100%</span>
               <button class="btn btn-ghost btn-sm" id="readerZoomInBtn" type="button" aria-label="Zoom in">+</button>
             </div>
@@ -127,10 +127,10 @@
         <span class="doc-pages hw-check-doc" id="hwCheckDoc"></span>
       </div>
       <div class="reader-group hw-check-nav">
-        <button class="btn btn-secondary btn-sm" id="hwPrevPageBtn" type="button" data-act="prev-page" aria-label="Previous page"><span class="hw-wide">Previous page</span><span class="hw-narrow" aria-hidden="true">â€¹</span></button>
+        <button class="btn btn-secondary btn-sm" id="hwPrevPageBtn" type="button" data-act="prev-page" aria-label="Previous page"><span class="hw-wide">Previous page</span><span class="hw-narrow" aria-hidden="true">&lsaquo;</span></button>
         <label class="sr-only" for="hwPageSelect">Go to page</label>
         <select class="input hw-page-select" id="hwPageSelect"></select>
-        <button class="btn btn-secondary btn-sm" id="hwNextPageBtn" type="button" data-act="next-page" aria-label="Next page"><span class="hw-wide">Next page</span><span class="hw-narrow" aria-hidden="true">â€º</span></button>
+        <button class="btn btn-secondary btn-sm" id="hwNextPageBtn" type="button" data-act="next-page" aria-label="Next page"><span class="hw-wide">Next page</span><span class="hw-narrow" aria-hidden="true">&rsaquo;</span></button>
       </div>
       <p class="hw-check-status" id="hwCheckStatus"></p>
       <button class="btn btn-secondary btn-sm" id="hwDoneBtn" type="button" data-act="done">Done</button>
@@ -158,7 +158,7 @@
   <script src="src/pdf/formula-builder.js?v=20261113a"></script>
   <script src="src/pdf/column-layout.js?v=20261113a"></script>
   <script src="src/pdf/span-format.js?v=20261118f"></script>
-  <script src="src/pdf/line-builder.js?v=20261113a"></script>
+  <script src="src/pdf/line-builder.js?v=20261120z"></script>
   <script src="src/pdf/page-kind.js?v=20261113a"></script>
   <script src="src/pdf/ink-geometry.js?v=20261113a"></script>
   <script src="src/pdf/ink-detect.js?v=20261113a"></script>
@@ -174,14 +174,14 @@
   <script src="src/pdf/invisible-text.js?v=20261118a"></script>
   <script src="src/pdf/line-kinds.js?v=20261118a"></script>
   <script src="src/pdf/parsed-page-cache.js?v=20261118a"></script>
-  <script src="src/pdf/page-scheduler.js?v=20261118a"></script>
+  <script src="src/pdf/page-scheduler.js?v=20261120z"></script>
   <script src="src/pdf/printed-pages.js?v=20261118j"></script>
-  <script src="src/pdf/pdf-loader.js?v=20261118f"></script>
+  <script src="src/pdf/pdf-loader.js?v=20261120z"></script>
   <script src="src/pdf/classifier.js?v=20261118d"></script>
-  <script src="src/pdf/table-grid.js?v=20261118a"></script>
-  <script src="src/pdf/slide-columns.js?v=20261118c"></script>
-  <script src="src/pdf/slide-captions.js?v=20261118c"></script>
-  <script src="src/pdf/slide-lines.js?v=20261118e"></script>
+  <script src="src/pdf/table-grid.js?v=20261120z"></script>
+  <script src="src/pdf/slide-columns.js?v=20261120z"></script>
+  <script src="src/pdf/slide-captions.js?v=20261120z"></script>
+  <script src="src/pdf/slide-lines.js?v=20261120z"></script>
   <script src="src/pdf/slide-reveal.js?v=20261118f"></script>
   <script src="src/pdf/slide-extractor.js?v=20261118c"></script>
   <script src="src/pdf/scope-lines.js?v=20261118f"></script>
@@ -193,57 +193,57 @@
   <script src="src/pdf/margin-notes.js?v=20261118a"></script>
   <script src="src/pdf/scope-emitter.js?v=20261118a"></script>
   <script src="src/pdf/scope-blocks.js?v=20261118a"></script>
-  <script src="src/pdf/text-cleaner.js?v=20261113a"></script>
+  <script src="src/pdf/text-cleaner.js?v=20261120z"></script>
   <script src="src/pdf/scope-builder.js?v=20261113a"></script>
   <script src="src/pdf/book-hierarchy.js?v=20261118d"></script>
   <script src="src/nlp/math-text.js?v=20261113a"></script>
-  <script src="src/nlp/stem-noise.js?v=20261118b"></script>
+  <script src="src/nlp/stem-noise.js?v=20261120z"></script>
   <script src="src/nlp/noise-filter.js?v=20261113a"></script>
   <script src="src/nlp/tokenizer.js?v=20261118b"></script>
-  <script src="src/nlp/bold-terms.js?v=20261113a"></script>
+  <script src="src/nlp/bold-terms.js?v=20261120z"></script>
   <script src="src/nlp/definition-miner.js?v=20261113a"></script>
   <script src="src/nlp/keywords.js?v=20261113a"></script>
-  <script src="src/nlp/key-terms.js?v=20261113a"></script>
+  <script src="src/nlp/key-terms.js?v=20261120z"></script>
   <script src="src/nlp/graph-rank.js?v=20261113a"></script>
   <script src="src/nlp/summary-damage.js?v=20261118f"></script>
-  <script src="src/nlp/summarizer.js?v=20261118g"></script>
-  <script src="src/nlp/summary-statements.js?v=20261118b"></script>
+  <script src="src/nlp/summarizer.js?v=20261120z"></script>
+  <script src="src/nlp/summary-statements.js?v=20261120z"></script>
   <script src="src/nlp/page-lines.js?v=20261118f"></script>
   <script src="src/nlp/book-sections.js?v=20261118f"></script>
-  <script src="src/nlp/book-blocks.js?v=20261118f"></script>
+  <script src="src/nlp/book-blocks.js?v=20261120z"></script>
   <script src="src/nlp/book-formulas.js?v=20261118f"></script>
   <script src="src/nlp/book-law-table.js?v=20261118f"></script>
   <script src="src/nlp/book-placement.js?v=20261118f"></script>
-  <script src="src/nlp/book-outline.js?v=20261118f"></script>
+  <script src="src/nlp/book-outline.js?v=20261120z"></script>
   <script src="src/nlp/deck-sections.js?v=20261118c"></script>
-  <script src="src/nlp/slide-units.js?v=20261118f"></script>
-  <script src="src/nlp/deck-terms.js?v=20261118d"></script>
-  <script src="src/nlp/deck-outline.js?v=20261118g"></script>
+  <script src="src/nlp/slide-units.js?v=20261120z"></script>
+  <script src="src/nlp/deck-terms.js?v=20261120z"></script>
+  <script src="src/nlp/deck-outline.js?v=20261120z"></script>
   <script src="src/nlp/stem-cards.js?v=20261113a"></script>
-  <script src="src/nlp/content-filter.js?v=20261118d"></script>
+  <script src="src/nlp/content-filter.js?v=20261120z"></script>
   <script src="src/nlp/content-spans.js?v=20261118a"></script>
   <script src="src/nlp/slide-kinds.js?v=20261118d"></script>
   <script src="src/nlp/slide-subjects.js?v=20261118a"></script>
-  <script src="src/nlp/slide-model.js?v=20261118d"></script>
-  <script src="src/nlp/card-quality.js?v=20261118e"></script>
+  <script src="src/nlp/slide-model.js?v=20261120z"></script>
+  <script src="src/nlp/card-quality.js?v=20261120z"></script>
   <script src="src/nlp/card-answers.js?v=20261118e"></script>
   <script src="src/nlp/self-contained.js?v=20261118c"></script>
   <script src="src/nlp/card-fields.js?v=20261118c"></script>
   <script src="src/nlp/abbreviations.js?v=20261113a"></script>
   <script src="src/nlp/note-patterns.js?v=20261113a"></script>
-  <script src="src/nlp/prose-definitions.js?v=20261118c"></script>
-  <script src="src/nlp/table-cards.js?v=20261118c"></script>
+  <script src="src/nlp/prose-definitions.js?v=20261120z"></script>
+  <script src="src/nlp/table-cards.js?v=20261120z"></script>
   <script src="src/nlp/contrast-cards.js?v=20261118c"></script>
   <script src="src/nlp/aspect-groups.js?v=20261118a"></script>
-  <script src="src/nlp/slide-line-shapes.js?v=20261118c"></script>
-  <script src="src/nlp/slide-structure-cards.js?v=20261118e"></script>
-  <script src="src/nlp/slide-cards.js?v=20261118d"></script>
+  <script src="src/nlp/slide-line-shapes.js?v=20261120z"></script>
+  <script src="src/nlp/slide-structure-cards.js?v=20261120z"></script>
+  <script src="src/nlp/slide-cards.js?v=20261120z"></script>
   <script src="src/nlp/definition-rules.js?v=20261118c"></script>
-  <script src="src/nlp/key-statements.js?v=20261118c"></script>
-  <script src="src/nlp/advice-cards.js?v=20261118e"></script>
+  <script src="src/nlp/key-statements.js?v=20261120z"></script>
+  <script src="src/nlp/advice-cards.js?v=20261120z"></script>
   <script src="src/nlp/syntax-cards.js?v=20261118e"></script>
-  <script src="src/nlp/condition-cards.js?v=20261118e"></script>
-  <script src="src/nlp/boxed-cards.js?v=20261118e"></script>
+  <script src="src/nlp/condition-cards.js?v=20261120z"></script>
+  <script src="src/nlp/boxed-cards.js?v=20261120z"></script>
   <script src="src/nlp/logic-eval.js?v=20261118e"></script>
   <script src="src/nlp/code-expr.js?v=20261118e"></script>
   <script src="src/nlp/logic-tables.js?v=20261118e"></script>
@@ -253,7 +253,7 @@
   <script src="src/nlp/section-rules.js?v=20261118j"></script>
   <script src="src/nlp/rule-cards.js?v=20261118e"></script>
   <script src="src/nlp/code-cards.js?v=20261118e"></script>
-  <script src="src/nlp/array-rules.js?v=20261118m6"></script>
+  <script src="src/nlp/array-rules.js?v=20261120z"></script>
   <script src="src/nlp/branch-rules.js?v=20261118m6"></script>
   <script src="src/nlp/gate-rules.js?v=20261118m6"></script>
   <script src="src/nlp/flashcard-engine.js?v=20261118m6"></script>
@@ -268,50 +268,50 @@
   <script src="src/nlp/sentence-terms.js?v=20261118a"></script>
   <script src="src/nlp/quiz-content.js?v=20261118c"></script>
   <script src="src/nlp/quiz-subjects.js?v=20261118b"></script>
-  <script src="src/nlp/fact-statements.js?v=20261118b"></script>
+  <script src="src/nlp/fact-statements.js?v=20261120z"></script>
   <script src="src/nlp/quiz-facts.js?v=20261118e"></script>
   <script src="src/nlp/subject-claims.js?v=20261118b"></script>
   <script src="src/nlp/subject-peers.js?v=20261118e"></script>
-  <script src="src/nlp/altered-statements.js?v=20261118e"></script>
+  <script src="src/nlp/altered-statements.js?v=20261120z"></script>
   <script src="src/nlp/quiz-kinds.js?v=20261118d"></script>
   <script src="src/nlp/quiz-rank.js?v=20261118d"></script>
   <script src="src/nlp/deck-facts.js?v=20261118b"></script>
   <script src="src/nlp/structured-gate.js?v=20261118b"></script>
   <script src="src/nlp/borrowed-statements.js?v=20261118d"></script>
-  <script src="src/nlp/fact-questions.js?v=20261118g"></script>
+  <script src="src/nlp/fact-questions.js?v=20261120z"></script>
   <script src="src/nlp/marked-terms.js?v=20261118a"></script>
   <script src="src/nlp/term-kinds.js?v=20261118a"></script>
   <script src="src/nlp/cloze-questions.js?v=20261118h"></script>
   <script src="src/nlp/naming-questions.js?v=20261118b"></script>
-  <script src="src/nlp/recall-outline.js?v=20261118r8"></script>
-  <script src="src/nlp/recall-statements.js?v=20261118r8"></script>
-  <script src="src/nlp/recall-labels.js?v=20261118r8"></script>
-  <script src="src/nlp/recall-questions.js?v=20261118r8"></script>
-  <script src="src/nlp/table-questions.js?v=20261118m6"></script>
-  <script src="src/nlp/table-notes.js?v=20261118m6"></script>
-  <script src="src/nlp/list-questions.js?v=20261118m6"></script>
-  <script src="src/nlp/number-questions.js?v=20261118m6"></script>
+  <script src="src/nlp/recall-outline.js?v=20261120z"></script>
+  <script src="src/nlp/recall-statements.js?v=20261120z"></script>
+  <script src="src/nlp/recall-labels.js?v=20261120z"></script>
+  <script src="src/nlp/recall-questions.js?v=20261120z"></script>
+  <script src="src/nlp/table-questions.js?v=20261120z"></script>
+  <script src="src/nlp/table-notes.js?v=20261120z"></script>
+  <script src="src/nlp/list-questions.js?v=20261120z"></script>
+  <script src="src/nlp/number-questions.js?v=20261120z"></script>
   <script src="src/nlp/typed-numbers.js?v=20261118m6"></script>
   <script src="src/nlp/typed-forms.js?v=20261118m6"></script>
   <script src="src/nlp/typed-terms.js?v=20261118m6"></script>
   <script src="src/nlp/typed-check.js?v=20261118m6"></script>
   <script src="src/nlp/typed-shape.js?v=20261118m6"></script>
-  <script src="src/nlp/typed-questions.js?v=20261118m6"></script>
-  <script src="src/nlp/typed-values.js?v=20261118m6"></script>
-  <script src="src/nlp/typed-tables.js?v=20261118m6"></script>
+  <script src="src/nlp/typed-questions.js?v=20261120z"></script>
+  <script src="src/nlp/typed-values.js?v=20261120z"></script>
+  <script src="src/nlp/typed-tables.js?v=20261120z"></script>
   <script src="src/nlp/typed-round.js?v=20261118m6"></script>
   <script src="src/nlp/annotation-notes.js?v=20261118c"></script>
-  <script src="src/nlp/quiz-assembly.js?v=20261118h"></script>
+  <script src="src/nlp/quiz-assembly.js?v=20261120z"></script>
   <script src="src/nlp/quiz-scope.js?v=20261118c"></script>
   <script src="src/nlp/worked-algebra.js?v=20261118e"></script>
   <script src="src/nlp/worked-expressions.js?v=20261118e"></script>
   <script src="src/nlp/worked-forms.js?v=20261118e"></script>
   <script src="src/nlp/worked-sets.js?v=20261118e"></script>
 <script src="src/nlp/worked-arrays.js?v=20261118r6"></script>
-<script src="src/nlp/worked-branches.js?v=20261118r6"></script>
-<script src="src/nlp/worked-gates.js?v=20261118r6"></script>
+<script src="src/nlp/worked-branches.js?v=20261120z"></script>
+<script src="src/nlp/worked-gates.js?v=20261120z"></script>
   <script src="src/nlp/worked-questions.js?v=20261118e"></script>
-  <script src="src/nlp/quiz-engine.js?v=20261118h"></script>
+  <script src="src/nlp/quiz-engine.js?v=20261120z"></script>
   <script src="src/nlp/test-engine.js?v=20261118h"></script>
   <script src="src/nlp/study-keys.js?v=20261113a"></script>
   <script src="src/nlp/doc-state.js?v=20261118j"></script>

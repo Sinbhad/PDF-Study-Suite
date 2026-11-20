@@ -43,7 +43,7 @@
   const DATED_RE = /\b(?:1[6-9]|20)\d\d\b/;
   const P_DATED = 0.6;
   // Names from a worked example's program or schema: "CookieCost", "NumberOfBoxes", "STUDENT_ADVISOR".
-  const IDENTIFIER_RE = /\b[A-Z][a-z]+(?:[A-Z][a-z0-9]+)+\b|\b[A-Za-z]+_[A-Za-z_]+\b/;
+  const IDENTIFIER_RE = /\b[A-Z][a-z]+(?:[A-Z][a-z0-9]+)*[A-Z]{2,}\b|\b[A-Z][a-z]+(?:[A-Z][a-z0-9]+)+\b|\b[A-Za-z]+_[A-Za-z_]+\b/;
   // A figure or table title run into the sentence after it: "Sample EMPLOYEE Columns in ...".
   const GLUED_CAPTION_RE = /^[A-Z][a-z]+\s+[A-Z]{3,}\s+[A-Z][a-z]/;
   const OBJECTIVE_RE = /^(?:■|▪|•|■)|^(?:To\s+(?:understand|learn|know|be\s+able|describe|explain|identify|use|apply|define)|After\s+(?:reading|studying|completing)|Upon\s+completion|Students\s+will|You\s+(?:should|will)\s+be\s+able)\b/i;
@@ -113,8 +113,8 @@
     if (sn && (sn.isDangling(s) || sn.hasUnresolvedReference(s))) return 'dangling';
     if (CONTINUATION_RE.test(s) || PERSON_ASIDE_RE.test(s)) return 'dangling';
     if (SETUP_RE.test(s)) return 'setup';
-    // An analogy ("Like a train that changes tracks, ...") or a dated aside ("In 1982, ...") frames the topic.
-    if (/^Like\s+(?:a|an|the)\s/.test(s) || /^In\s+(?:1[6-9]|20)\d\d\b/.test(s)) return 'aside';
+    // An analogy ("Like a train that changes tracks, ..."), dated aside ("In 1982, ..."), or opener hook frames the topic.
+    if (/^Like\s+(?:a|an|the)\s/.test(s) || /^In\s+(?:1[6-9]|20)\d\d\b/.test(s) || /^(?:In\s+truth,|Sometimes\s+(?:we|the|a)\b|Many\s+problems\s+involve\b)/i.test(s)) return 'aside';
     if (NUMBERED_REFERENCE_RE.test(s) || COUNTED_BACK_RE.test(s)) return 'dangling';
     if (sn && sn.isStemNoise(s)) return 'callout';
     if (GLUED_HEADING_RE.test(s) || CAPS_HEADING_RE.test(s) || GLUED_BOLD_RE.test(raw) || GLUED_LOWER_HEADING_RE.test(s) || GLUED_CAPTION_RE.test(s)) return 'glued';

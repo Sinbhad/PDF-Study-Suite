@@ -144,6 +144,19 @@
     'being has have had do does did can could will would shall should may might must not very only often ' +
     'usually always never also then thus hence however therefore there here who whom whose which what').split(' '));
 
+  // An unqualified plural definite noun at sentence start ("The circuits are ...", "The storage elements are ...")
+  // refers back to specific elements just introduced in context, unlike a bare generic plural ("Logic gates are ...").
+  const PLURAL_THE_SUBJECT_RE =
+    /^The\s+((?:[a-z][a-z-]*\s+){0,2}[a-z]{2,}(?:s|es|ies))\s+(?:are|were|have|can|may|might|must|will|shall|should|do|did|remain|become|contain|include|use|need|require|represent|store|hold|operate|perform)\b/;
+  const QUALIFIER_WORD_RE = /\b(?:of|in|on|for|from|with|by|at|between|that|which|where|whose)\b|^(?:following|same|other)\b/i;
+
+  function isAnaphoricPluralDefinite(s) {
+    const m = s.match(PLURAL_THE_SUBJECT_RE);
+    if (!m || QUALIFIER_WORD_RE.test(m[1])) return false;
+    const last = m[1].trim().split(/\s+/).pop().toLowerCase();
+    return !/(?:ss|us|is|ics|gas)$/.test(last);
+  }
+
   /**
    * True when a statement shown on its own points at something the reader cannot see: "the table below",
    * "this process", "such cells", "in that case", an arrow in a picture, or "it"/"they" with no noun
@@ -152,6 +165,7 @@
   function hasUnresolvedReference(text) {
     const s = prose(String(text || '').replace(/\*\*|__/g, '')).trim();
     if (POINTS_OUTSIDE_RE.test(s) || DEMONSTRATIVE_RE.test(s) || THAT_NOUN_RE.test(s) || OPENING_ONE_RE.test(s)) return true;
+    if (isAnaphoricPluralDefinite(s)) return true;
     const pronoun = s.match(PRONOUN_RE);
     if (!pronoun) return false;
     // "It is clear that ..." / "It follows that ...": an expletive, not a reference.

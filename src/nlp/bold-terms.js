@@ -197,7 +197,7 @@
       if (explained.has(quality.frontKey(named)) || !isTermShape(term) || !quality.goodFront(named)) continue;
       const t = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const push = (back, strength) => {
-        const answer = quality.withoutAsides(back);
+        const answer = quality.tidySentence(back);
         if (!answer || answer.length > MAX_INTRODUCTION_CHARS || !quality.goodBack(answer, named)) return;
         out.push({ term: /^[a-z]/.test(named) ? named[0].toUpperCase() + named.slice(1) : named, back: answer, strength });
       };

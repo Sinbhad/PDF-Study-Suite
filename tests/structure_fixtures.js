@@ -214,6 +214,34 @@
     check('grid slide becomes kind=table with rows and no cell bullets', tb.kind === 'table' && tb.bullets.length === 0 &&
       JSON.stringify(tb.table.rows) === JSON.stringify([['x', 'y', 'x + y'], ['0', '1', '1'], ['1', '1', '2']]), JSON.stringify(tb));
     check('slide extractor never throws on odd pages', S.slideExtractor.extractSlideDeck({ pages: [null, {}, { pageNumber: 3, lines: [{}, { text: 'Only text' }] }] }).slides.length >= 1);
+
+    // Subheadings sharing m.x0 with child bullets' marker glyphs stay parent (L0) while children indent via textX0 (L1);
+    // side captions left of content bullets never hijack tier 0 or push bullets deeper.
+    const ns = S.slideExtractor.extractSlidePage(pg(6, [
+      ln('Valve Maintenance', { y: 40, x0: 48, fontSize: 36, isBold: true, pageWidth: 960, pageHeight: 540 }),
+      ln('Inspection', { y: 110, x0: 58, fontSize: 24, pageWidth: 960, pageHeight: 540 }),
+      ln('•', { y: 142, x0: 58, fontSize: 24, x1: 72, pageWidth: 960, pageHeight: 540 }),
+      ln('Check seals yearly', { y: 142, x0: 85, fontSize: 24, x1: 300, pageWidth: 960, pageHeight: 540 }),
+      ln('Replacement', { y: 180, x0: 58, fontSize: 24, pageWidth: 960, pageHeight: 540 }),
+      ln('Side diagram label', { y: 220, x0: 290, fontSize: 16, x1: 480, pageWidth: 960, pageHeight: 540 }),
+      ln('Timing Steps', { y: 250, x0: 540, fontSize: 28, isBold: true, x1: 720, pageWidth: 960, pageHeight: 540 }),
+      ln('•', { y: 290, x0: 540, fontSize: 24, x1: 554, pageWidth: 960, pageHeight: 540 }),
+      ln('Drain coolant first', { y: 290, x0: 600, fontSize: 24, x1: 820, pageWidth: 960, pageHeight: 540 }),
+    ], 960, 540)).nestedBullets;
+    const lvl = (t) => (ns.find((b) => b.text === t) || {}).level;
+    check('unbulleted heading at marker x0 stays parent (L0) over textX0 bullet child (L1)',
+      lvl('Inspection') === 0 && lvl('Check seals yearly') === 1 && lvl('Replacement') === 0, JSON.stringify(ns));
+
+    const cs = S.slideExtractor.extractSlidePage(pg(7, [
+      ln('Flow Notes', { y: 40, x0: 48, fontSize: 36, isBold: true, pageWidth: 960, pageHeight: 540 }),
+      ln('• Top group item', { y: 110, x0: 610, fontSize: 24, x1: 800, hasBullet: true, pageWidth: 960, pageHeight: 540 }),
+      ln('Pump Calibration', { y: 180, x0: 540, fontSize: 30, isBold: true, x1: 760, pageWidth: 960, pageHeight: 540 }),
+      ln('• Zero pressure gauge', { y: 220, x0: 610, fontSize: 24, x1: 830, hasBullet: true, pageWidth: 960, pageHeight: 540 }),
+      ln('Diagram figure caption', { y: 240, x0: 260, fontSize: 16, x1: 460, pageWidth: 960, pageHeight: 540 }),
+    ], 960, 540)).nestedBullets;
+    const clvl = (t) => (cs.find((b) => b.text === t) || {}).level;
+    check('small left diagram caption never shifts heading to L1 or creates orphan leading L1',
+      clvl('Top group item') === 0 && clvl('Pump Calibration') === 0 && clvl('Zero pressure gauge') === 1, JSON.stringify(cs));
   }
 
   function runStructureChecks() {

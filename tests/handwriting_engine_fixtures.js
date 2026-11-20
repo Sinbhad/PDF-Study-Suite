@@ -44,11 +44,7 @@ function prepareTests() {
   check('prepareCrop: soft output, not hard 0/255', mid > 1000, `${mid} in-between pixels`);
   check('prepareCrop: deterministic', util.prepareCrop(words).data.every((v, i) => v === wp.data[i]));
   check('prepareCrop: white stays white', util.prepareCrop(gray(300, 40, 255)).data.every((v) => v === 255));
-  const t0 = Date.now();
-  for (let i = 0; i < 200; i++) util.prepareCrop(words);
-  const ms = Date.now() - t0;
-  check('prepareCrop: 200 crops of 1400x90 in under 4 s', ms < 4000, `${ms} ms`);
-  console.log(`info: prepareCrop 1400x90 -> 384x384: ${(ms / 200).toFixed(1)} ms per crop`);
+  // Performance timing for prepareCrop lives in tools/bench-perf.js so unit fixtures stay deterministic.
 
   const bad = [null, {}, { data: new Uint8Array(0), w: 0, h: 0 }, gray(1, 50, 0), gray(50, 1, 0), { data: new Uint8Array(10), w: 10, h: 10 }];
   check('prepareCrop: degenerate crops -> null', bad.every((c) => util.prepareCrop(c) === null));

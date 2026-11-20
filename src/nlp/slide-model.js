@@ -31,7 +31,8 @@
   // Candidate answers listed on a question slide: "R_1 = {...}", "(a) ...", "B. ..."
   const CANDIDATE_RE = /^(?:[A-Za-z](?:_\{?\w+\}?|\d+)?\s*(?:=|:)\s*\S|\(?[a-eA-E][.)]\s+\S)/;
 
-  const clean = (s) => tok().cleanMarkdown(String(s || '')).replace(/(?:\s*[✦✧▪◦‣•]\s*)+$/g, '').trim();
+  const COLOR_ASIDE_RE = /\s*\(\s*shown\s+in\s+(?:red|blue|green|yellow|orange|purple|black|white|pink)(?:\s+(?:below|above))?\s*\)/gi;
+  const clean = (s) => tok().cleanMarkdown(String(s || '')).replace(COLOR_ASIDE_RE, '').replace(/(?:\s*[✦✧▪◦‣•]\s*)+$/g, '').trim();
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
   /** Fraction of tokens that are real words: equation dumps and table cells score low. */
@@ -96,6 +97,21 @@
       const childLevel = Math.min(...below.map((n) => n.level));
       groups.push({ head: node.text, items: below.filter((n) => n.level === childLevel).map((n) => n.text) });
     });
+    if (groups.length) return groups;
+    // A multi-column diagram slide sets each bold column label above a smaller explanation that extraction tagged as
+    // a caption only for its small type ("Blood-brain barrier" > "Tight junctions between ...").
+    const cf = dep('contentFilter', './content-filter.js');
+    const nb = slide.nestedBullets || [];
+    const cols = [...new Set(nb.map((b) => b && b.column).filter((c) => c != null))];
+    if (cols.length < 2) return groups;
+    for (const col of cols) {
+      const colItems = nb.filter((b) => b && b.column === col).map((b) => ({ ...b, text: clean(b.text) })).filter((b) => b.text);
+      if (colItems.length < 2) continue;
+      const head = colItems[0];
+      if (!head.isBold || (head.fontSize || 0) < 16 || head.text.split(/\s+/).length > 5 || /[.!?]$/.test(head.text)) continue;
+      const items = colItems.slice(1).map((b) => b.text).filter((t) => !/^\d+$/.test(t) && cf.lineKind(t, ctx) === 'content');
+      if (items.length) groups.push({ head: head.text, items });
+    }
     return groups;
   }
 

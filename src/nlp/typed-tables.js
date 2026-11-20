@@ -33,6 +33,10 @@
   const MIN_HEAD_CHARS = 3;
   const MIN_STEM_CHARS = 5;
   const TABLE_WORD_RE = /^(?:tables?|rows?|columns?|cells?|entry|entries|items?|values?)$/i;
+  // Assay/diagnostic row tables ask free-text targets/purposes with many equivalent lab phrasings ("DNA", "Bacterial DNA",
+  // "leptospiral DNA"): keep those as comparison MCQs or study cards, never brittle exact-string typed blanks.
+  const ASSAY_HEADER_RE = /^(?:assay|test|method|diagnostic|procedure|technique)s?$/i;
+  const FREE_TEXT_TARGET_COL_RE = /^(?:target|purpose|goal|indication|mechanism|principle|advantage|disadvantage|limitation)s?$/i;
   const ADJECTIVE_END_RE = /(?:ial|al|ic|ous|ar|ary|ive)$/;
   const PLURAL_END_RE = /(?:ae|um|us|a|i|es|s)$/;
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -74,6 +78,9 @@
     const t = card.table;
     if ([t.header[0], t.column].some((h) => ABBREVIATED_HEADER_RE.test(String(h || '').trim()))) return 'clipped header';
     if ([t.header[0], t.column].some((h) => TABLE_WORD_RE.test(String(h || '').trim()))) return 'header names a part of the table';
+    if (!isNumber && (ASSAY_HEADER_RE.test(String(t.header[0] || '').trim()) || FREE_TEXT_TARGET_COL_RE.test(String(t.column || '').trim()))) {
+      return 'assay or open target cell';
+    }
     // The row is named by a fragment: lower case where the other rows' names are capitalised.
     const rowName = String(t.entity || '').trim();
     if (/^[a-z]/.test(rowName)) return 'row named by a fragment';

@@ -216,6 +216,86 @@ function checkSlideLayouts() {
   const lb = S.slideExtractor.extractSlidePage(labels).nestedBullets.map((b) => b.text);
   check('a diagram label row and a short heading line are not joined to their neighbours', lb.includes('F4 F3 F2 F1') && lb.includes('Housings') &&
     lb.includes('Inject the sealant just below the second flange'), JSON.stringify(lb));
+
+  // Table improvements: wide centered headers, right-aligned numbers, wrapped last-col explanations,
+  // cross-column split table coalescing, equation derivation rejection, and off-center corner headers.
+  const wideTbl = [
+    L('Code Result Notes', 100, { fontSize: 9, segments: [{ text: 'Code', x0: 140, x1: 170 }, { text: 'Result', x0: 258, x1: 288 }, { text: 'Notes', x0: 380, x1: 420 }] }),
+    L('A < B true Values strictly ordered; checks standard less-than', 120, { fontSize: 9.5, segments: [{ text: 'A < B', x0: 88, x1: 118 }, { text: 'true', x0: 262, x1: 284 }, { text: 'Values strictly ordered; checks standard less-than', x0: 298, x1: 502 }] }),
+    L('comparison behavior across inputs.', 131, { fontSize: 9.5, x0: 298, x1: 452 }),
+    L('A == B false Both operands differ in magnitude here.', 150, { fontSize: 9.5, segments: [{ text: 'A == B', x0: 88, x1: 122 }, { text: 'false', x0: 260, x1: 284 }, { text: 'Both operands differ in magnitude here.', x0: 298, x1: 472 }] }),
+  ];
+  const wt = S.tableGrid.fromSegments(wideTbl, 12);
+  check('tableGrid keeps centered header, wrapped explanation continuation, and subsequent rows',
+    wt.length === 1 && wt[0].header.join('|') === 'Code|Result|Notes' && wt[0].rows.length === 2 &&
+    wt[0].rows[0][2].includes('comparison behavior across inputs.'), JSON.stringify(wt));
+
+  const rightNum = [
+    L('Alloy Mass State', 100, { fontSize: 9, segments: [{ text: 'Alloy', x0: 200, x1: 230 }, { text: 'Mass', x0: 300, x1: 325 }, { text: 'State', x0: 390, x1: 418 }] }),
+    L('Brass 8 Solid', 120, { fontSize: 9, segments: [{ text: 'Brass', x0: 200, x1: 228 }, { text: '8', x0: 328, x1: 334 }, { text: 'Solid', x0: 390, x1: 415 }] }),
+    L('Zinc 7 Solid', 138, { fontSize: 9, segments: [{ text: 'Zinc', x0: 200, x1: 222 }, { text: '7', x0: 328, x1: 334 }, { text: 'Solid', x0: 390, x1: 415 }] }),
+  ];
+  check('right-aligned numeric data keeps its word header', S.tableGrid.fromSegments(rightNum, 13)[0].header.join('|') === 'Alloy|Mass|State');
+
+  const deriv = [
+    L('= A + B by law 1', 200, { fontSize: 10, segments: [{ text: '= A + B', x0: 200, x1: 260 }, { text: 'by law 1', x0: 320, x1: 370 }] }),
+    L('= B + A by law 2', 216, { fontSize: 10, segments: [{ text: '= B + A', x0: 200, x1: 260 }, { text: 'by law 2', x0: 320, x1: 370 }] }),
+    L('= C by law 3', 232, { fontSize: 10, segments: [{ text: '= C', x0: 200, x1: 225 }, { text: 'by law 3', x0: 320, x1: 370 }] }),
+  ];
+  check('equation derivations starting with "=" are not tables', S.tableGrid.fromSegments(deriv, 14).length === 0);
+
+  const splitCols = [
+    L('In1 In2', 100, { fontSize: 8, column: 5, x0: 280, x1: 315 }), L('Result', 100, { fontSize: 8, column: 6, x0: 330, x1: 380 }),
+    L('0 0', 118, { fontSize: 8, column: 5, x0: 280, x1: 300 }), L('Hold', 118, { fontSize: 8, column: 6, x0: 330, x1: 365 }),
+    L('1 0', 132, { fontSize: 8, column: 5, x0: 280, x1: 300 }), L('Set', 132, { fontSize: 8, column: 6, x0: 330, x1: 360 }),
+  ];
+  const ct = S.tableGrid.fromPageLines(splitCols, 15);
+  check('fromPageLines coalesces split-column function table rows cleanly', ct.length === 1 && ct[0].header.join('|') === 'In1 In2|Result' && ct[0].rows.length === 2, JSON.stringify(ct));
+
+  const slideCorner = { pageNumber: 16, width: 960, height: 540, lines: [
+    cell('Sample Grid', 60, 40, { x1: 320, fontSize: 36 }),
+    cell('Unit ID', 60, 126, { x1: 115, fontSize: 18 }),
+    cell('Alpha', 160, 140, { x1: 210, fontSize: 18 }), cell('Beta Gamma', 260, 140, { x1: 480, fontSize: 18 }), cell('Delta', 540, 140, { x1: 600, fontSize: 18 }),
+    cell('1', 80, 175, { x1: 92 }), cell('10', 165, 175, { x1: 190 }), cell('20', 295, 175, { x1: 320 }), cell('30', 420, 175, { x1: 445 }), cell('40', 550, 175, { x1: 575 }),
+    cell('2', 80, 210, { x1: 92 }), cell('11', 165, 210, { x1: 190 }), cell('21', 295, 210, { x1: 320 }), cell('31', 420, 210, { x1: 445 }), cell('41', 550, 210, { x1: 575 }),
+  ] };
+  const sc = (S.slideExtractor.extractSlidePage(slideCorner).tables || [])[0];
+  check('slide table rescues top-left corner header and splits wide multi-column header over centered cells',
+    sc && sc.header.join('|') === 'Unit ID|Alpha|Beta|Gamma|Delta' && sc.rows.length === 2, JSON.stringify(sc));
+
+  // Multi-column diagram splitting, centered multi-line wrap merging, and lastX1 wrap separation
+  const threeDiag = { pageNumber: 17, width: 800, height: 540, lines: [
+    L('Testing Methods', 40, { fontSize: 34, isBold: true, x0: 40, x1: 400 }),
+    L('Rapid', 180, { fontSize: 16, x0: 640, x1: 710 }),
+    L('Assay Culture antigen scan', 200, { fontSize: 16, x0: 30, x1: 750,
+      segments: [{ text: 'Assay', x0: 30, x1: 130 }, { text: 'Culture', x0: 330, x1: 430 }, { text: 'antigen scan', x0: 615, x1: 735 }] }),
+    L('PCR Stains', 280, { fontSize: 16, x0: 80, x1: 560,
+      segments: [{ text: 'PCR', x0: 80, x1: 120 }, { text: 'Stains', x0: 500, x1: 560 }] }),
+  ] };
+  const td = S.slideExtractor.extractSlidePage(threeDiag);
+  check('3-column slide diagram separates middle column from right column and joins centered wrapped label',
+    td.bullets.includes('Rapid antigen scan') && td.bullets.includes('Culture') && !td.bullets.some((b) => /Culture.*antigen/.test(b)),
+    JSON.stringify(td.nestedBullets));
+
+  const asymStacked = { pageNumber: 18, width: 800, height: 540, lines: [
+    L('Pathology Notes', 40, { fontSize: 34, isBold: true, x0: 40, x1: 400 }),
+    L('Primary lesion', 200, { fontSize: 20, x0: 25, x1: 185 }),
+    L('Secondary form note', 210, { fontSize: 20, x0: 340, x1: 540 }),
+    L('in tissue', 224, { fontSize: 20, x0: 75, x1: 135 }),
+  ] };
+  const as = S.slideExtractor.extractSlidePage(asymStacked);
+  check('asymmetric stacked diagram boxes merge centered lines and do not interleave',
+    as.bullets.includes('Primary lesion in tissue') && as.bullets.includes('Secondary form note'), JSON.stringify(as.nestedBullets));
+
+  const shortStep = { pageNumber: 19, width: 800, height: 540, lines: [
+    L('Procedure Steps', 40, { fontSize: 36, isBold: true, x0: 40, x1: 400 }),
+    L('Saw across from axial to', 180, { fontSize: 32, x0: 80, x1: 500 }),
+    L('abaxial', 218, { fontSize: 32, x0: 80, x1: 180 }),
+    L('Trim middle segment next', 270, { fontSize: 32, x0: 80, x1: 500 }),
+  ] };
+  const ss = S.slideExtractor.extractSlidePage(shortStep);
+  check('wrapped short ending line does not glue onto next capitalized step at list spacing',
+    ss.bullets.join('|') === 'Saw across from axial to abaxial|Trim middle segment next', JSON.stringify(ss.bullets));
 }
 
 for (const fn of [checkLineKinds, checkBlocksAndScope, checkTables, checkSlideColumns, checkGlyphsAndMath, checkSlideLayouts]) {

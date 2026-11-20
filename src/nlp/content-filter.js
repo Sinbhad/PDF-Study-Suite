@@ -89,9 +89,12 @@
     return words(t.replace(LINK_RE, ' ')).length < MIN_WORDS_BESIDE_LINK;
   }
 
+  const COLOR_ASIDE_RE = /\s*\(\s*shown\s+in\s+(?:red|blue|green|yellow|orange|purple|black|white|pink)(?:\s+(?:below|above))?\s*\)/i;
   function isCaption(text) {
-    const t = plain(text);
-    // "Ultrasound is extremely valuable for ..." states a fact; "CT scan of a dog with ..." describes a picture.
+    const raw = plain(text);
+    const t = raw.replace(COLOR_ASIDE_RE, '').trim();
+    // "Ultrasound is extremely valuable for ..." states a fact; "Ischemia ... supplied by the middle cerebral artery (shown in red below)" keeps its pathology fact once the color aside is stripped, while "Areas in red ..." stays a caption.
+    if (!t || /^(?:areas?|regions?|highlighted|outlined|structures?)\s+in\s+(?:red|blue|green|yellow|orange)\b/i.test(t)) return true;
     const describes = SPECIMEN_RE.test(t) && !/\b(?:is|are|was|were|can|has|have|should|must|will)\b/.test(t);
     return CAPTION_START_RE.test(t) || CAPTION_MARK_RE.test(t) || describes || PICTURED_RE.test(t) || PICTURED_CAUSE_RE.test(t);
   }

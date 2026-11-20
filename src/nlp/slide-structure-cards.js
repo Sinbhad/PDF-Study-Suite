@@ -39,6 +39,10 @@
   const MIN_DEFINING_WORDS = 2;
   const ATTRIBUTE_RUN_RE = /^(?:very\s+)?[a-z]+,\s+[a-z]/i;
 
+  // Shorthand "a = b" notes starting lower case, or instructional/dosing contraindications that are not standalone definitions.
+  const NON_DEF_NOTE_RE = /^(?:do\s+not|never|always|avoid|keep|use|give|consider|these|those|this|they|it)\b|\b(?:contraindicated|advisable|injections?|series\s+of|intranasally|weeks?\s+apart|twice\s+daily|q\d+hrs?|\d+\s*(?:cc|ml|mg)\b)\b/i;
+  const ROUTE_TERM_RE = /^(?:live|killed(?:\s+\w+)*|intranasal|intramuscular|subcutaneous|oral)$/i;
+
   const tidy = (s) => String(s || '').replace(/\s+/g, ' ').trim();
   // "Infrequently progressive and fatal:" leads into the lines after it: no "; " after its colon.
   const joinItems = (items) => items.map((x, i) => (i < items.length - 1 && !/[:;.!?]$/.test(x) ? `${x};` : x)).join(' ');
@@ -57,13 +61,20 @@
     const nodes = slide.outline || [];
     const at = nodes.findIndex((n) => n.text === text);
     if (at <= 0) return '';
-    const parent = nodes.slice(0, at).reverse().find((n) => n.level < nodes[at].level && (n.column == null || n.column === nodes[at].column));
-    if (!parent) return '';
     const { LABEL_RE, needsEntity, isLabelHead } = shapes();
-    const labelled = parent.text.match(LABEL_RE);
-    const name = tidy(labelled ? labelled[1] : parent.text).replace(/:$/, '');
-    if (!name || needsEntity(name) || wordCount(name) > MAX_PARENT_NAME_WORDS || !isLabelHead(name) || stemNoise().isLabelTerm(name)) return '';
-    return name;
+    let want = nodes[at].level;
+    for (let i = at - 1; i >= 0; i--) {
+      const parent = nodes[i];
+      if (parent.column != null && nodes[at].column != null && parent.column !== nodes[at].column) continue;
+      if (parent.level >= want) continue;
+      want = parent.level;
+      const labelled = parent.text.match(LABEL_RE);
+      const raw = tidy(labelled ? labelled[1] : parent.text).replace(/:$/, '');
+      const name = wordCount(raw) > MAX_PARENT_NAME_WORDS ? tidy(raw.replace(/\s*\([^)]*\)\s*$/, '')) : raw;
+      if (!name || needsEntity(name) || wordCount(name) > MAX_PARENT_NAME_WORDS || !isLabelHead(name) || stemNoise().isLabelTerm(name)) continue;
+      return name;
+    }
+    return '';
   }
   const MAX_PARENT_NAME_WORDS = 5;
 
@@ -75,7 +86,8 @@
       // A child of a labelled heading is shown on that heading's card; only a named term of two or more words
       // ("Annulus fibrosis: outer fibrous shell") also earns a card of its own ("Hind: ..." does not).
       const label0 = (bullet.match(LABEL_RE) || bullet.match(EQUALS_RE) || [])[1] || '';
-      if (ctx.grouped.has(bullet) && !(wordCount(label0) >= 2 && !needsEntity(label0))) continue;
+      const parallelCase = Boolean(label0 && ctx.caseLabels && ctx.caseLabels.has(bullet));
+      if (ctx.grouped.has(bullet) && !(wordCount(label0) >= 2 && !needsEntity(label0)) && !parallelCase) continue;
       // "Adverse Effects None are documented ...": an aspect run into its fact is a label line without the colon.
       const inline = !LABEL_RE.test(bullet) && !EQUALS_RE.test(bullet) ? aspects().inlineAspect(bullet) : null;
       const m = bullet.match(LABEL_RE) || bullet.match(EQUALS_RE) || (inline && wordCount(inline.value) >= MIN_INLINE_VALUE_WORDS ? [bullet, inline.label, inline.value] : null);
@@ -92,14 +104,16 @@
       if (/!\s*$/.test(value) && wordCount(value) <= 3) continue; // "Before any surgical procedure: Anesthesia!" is a cheer
       // "Urine collection: zoonotic": one lower-case word is a note on the line, not an answer to it.
       if (/^[a-z][a-z-]+$/.test(value)) continue;
-      if (needsEntity(label) || definingWords(value) < MIN_DEFINING_WORDS) {
+      // A lower-case shorthand "increased time in the GI = increased absorption" is an internal note, not a standalone label.
+      if (/^[a-z]/.test(label) && wordCount(label) >= 3 && EQUALS_RE.test(bullet)) continue;
+      if (needsEntity(label) || ROUTE_TERM_RE.test(label) || definingWords(value) < MIN_DEFINING_WORDS) {
         // The line belongs to what its outline parent names ("Treatment: ..." under "Purpura hemorrhagica: ...")
         // and keeps what a lead-in said of it ("KNOW TOXIC DOSES!" over "Goats: 4-5 mg/kg").
         const owner = parentName(slide, bullet) || ctx.entity;
         const qualifier = slide.qualifiers && slide.qualifiers.get ? slide.qualifiers.get(bullet) : '';
         const named = qualifier ? `${owner} (${qualifier})` : owner;
         if (owner) out.push({ front: `${named} — ${label}`, back: value, category: 'Slide Fact', kind: 'concept', subject: owner === ctx.entity ? ctx.subject : owner });
-      } else if ((numberedKind || (gates.isValidTerm(label) && quality().goodFront(label))) && value.length >= 10 && !/!\s*$/.test(value)) {
+      } else if ((numberedKind || (gates.isValidTerm(label) && quality().goodFront(label))) && value.length >= 10 && !/!\s*$/.test(value) && !NON_DEF_NOTE_RE.test(value)) {
         out.push({ front: label, back: value, category: 'Slide Term', kind: 'concept', subject: label });
       }
     }
@@ -122,6 +136,8 @@
       // A slide definition starts in lower case ("infection involving the lung"); judge it as a sentence would read.
       const definition = value ? value[0].toUpperCase() + value.slice(1) : '';
       if (!m || needsEntity(m[1]) || !gates.isValidTerm(m[1]) || !quality().goodFront(m[1]) || stemNoise().isUnusableSentence(definition)) continue;
+      const { definingWords } = shapes();
+      if (definingWords(value) < MIN_DEFINING_WORDS) continue;
       // One word glued to its hyphen on a slide about something, followed by a name or a number rather than a
       // lower-case definition ("Live- Brand X, two doses 2 weeks apart"), is a kind of that thing; "Allele - one
       // version of a gene" and "Allele – One version of a gene" are a term and its definition.
@@ -133,8 +149,9 @@
         continue;
       }
       // "Fungal spherules – large, marked size variation": a run of attributes (a word and a comma) describes the
-      // thing on the slide's picture; it is not what the term means.
-      if (ATTRIBUTE_RUN_RE.test(value)) continue;
+      // thing on the slide's picture; it is not what the term means. Route words ("Live", "Killed Intramuscular")
+      // and dosing notes are not standalone terms either once unqualified by a parent slide entity.
+      if (ATTRIBUTE_RUN_RE.test(value) || ROUTE_TERM_RE.test(tidy(m[1])) || NON_DEF_NOTE_RE.test(value)) continue;
       out.push({ front: tidy(m[1]), back: definition, category: 'Slide Term', kind: 'concept', subject: tidy(m[1]) });
     }
     return out;
@@ -260,7 +277,18 @@
     const withFlat = { ...slide, groups: [...flat, ...(slide.groups || [])] };
     // Lines shown as the children of a labelled heading belong to that heading's card, not to cards of their own.
     const grouped = new Set(withFlat.groups.filter((g) => shapes().goodHead(g.head, g.items.length, g.items)).flatMap((g) => g.items));
-    const ctx = { entity, subject: subject || entity, grouped };
+    // Parallel "Species: value" cases inside a grouped aspect heading ("Indications (labeled)" > "Dogs: ...", "Cats: ...")
+    // earn individual case cards when at least two siblings carry short "Label: value" pairs.
+    const caseLabels = new Set();
+    const qs = dep('quizSubjects', './quiz-subjects.js');
+    for (const g of withFlat.groups) {
+      if (!shapes().goodHead(g.head, g.items.length, g.items)) continue;
+      const headName = tidy(g.head).replace(/:$/, '');
+      if (!(qs ? qs.isGenericHeading(headName, {}) : shapes().needsEntity(headName))) continue;
+      const pairs = g.items.filter((it) => shapes().LABEL_RE.test(it));
+      if (pairs.length >= 2) pairs.forEach((it) => caseLabels.add(it));
+    }
+    const ctx = { entity, subject: subject || entity, grouped, caseLabels };
     const tables = dep('tableCards', './table-cards.js');
     const cards = slide.kind === 'table'
       ? tables.rowCards(slide.table, { subject: ctx.subject, ambiguous: gates.ambiguous })

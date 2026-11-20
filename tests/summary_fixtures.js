@@ -396,5 +396,64 @@ const labelCols = su.units([g('Rotary pumps', 0, false), g('gear', 0, true), g('
 check('units: a column of labelled lists gives one unit per label', labelCols.map((u) => `${u.node.text}:${u.children.map((c) => c.text).join(',')}`).join('|') ===
   'Rotary pumps:gear,vane|Piston pumps:plunger|Jet pumps:steam,water', JSON.stringify(labelCols));
 
+// ---------- 11. Regression guards: page provenance, keyFormulas fallback, deck-terms filtering, table dedupe & subheading context ----------
+const formulaBookText = [
+  '1.1 Pipe Flow Basics',
+  'A pump that moves liquid by spinning vanes is called a centrifugal pump.',
+  'Taken together, the two continuity equations are written below.',
+  '$$Q_1 + Q_2 = Q_3$$',
+  'are referred to as the continuity law of the loop.',
+].join('\n\n');
+const bookSum = summarizer.summarizeText(formulaBookText, {
+  headings: ['1.1 Pipe Flow Basics'],
+  outline: {
+    pages: [{ pageNumber: 12, lines: [
+      { text: '1.1 Pipe Flow Basics', fontSize: 18, pageNumber: 12, x0: 40, topY: 40 },
+      { text: 'Taken together, the two continuity equations are written below.', fontSize: 11, pageNumber: 12, x0: 40, topY: 80 },
+      { text: '$$Q_1 + Q_2 = Q_3$$', fontSize: 11, pageNumber: 12, x0: 80, topY: 110 },
+      { text: 'are referred to as the continuity law of the loop.', fontSize: 11, pageNumber: 12, x0: 40, topY: 140 },
+    ] }],
+    startPage: 12, endPage: 12, title: 'Pipes',
+  },
+});
+check('summarizer: mined definition carries page and keyFormulas populates from outline formulas',
+  bookSum.definitions.some((d) => d.term === 'Centrifugal pump' && d.page === 12) &&
+  bookSum.keyFormulas.some((f) => f.title === 'Continuity law' && /Q_1 \+ Q_2/.test(f.body)), JSON.stringify([bookSum.definitions, bookSum.keyFormulas]));
+
+const dtMod = nlp('deck-terms.js');
+check('deck-terms: unbolded copula/genus definition is extracted while generic/case headings are rejected',
+  dtMod.labelledTerm('Cavitation: vapor bubble process that erodes bronze impeller blades') === 'Cavitation' &&
+  !dtMod.labelledTerm('Clinical Findings: mild vibration is noted under load') &&
+  !dtMod.labelledTerm('Dogs: 5 mg/kg twice daily is the standard dose') &&
+  !dtMod.labelledTerm('At shows: do not run pumps without suction water'));
+
+const snb = (text, level = 0, glyph = true) => ({ text, formattedText: text, level, x0: 40 + level * 20, topY: 100, fontSize: 14, glyph });
+const dupTableSlides = [
+  { slideNumber: 2, title: 'Centrifugal Pump',
+    bullets: ['Seal Assembly', 'Primary ring:', 'o Graphite face prevents dry friction', 'Secondary spring maintains axial load'],
+    nestedBullets: [snb('Seal Assembly', 0, false), snb('Primary ring:', 1, true), snb('o Graphite face prevents dry friction', 2, true), snb('Secondary spring maintains axial load', 1, true)],
+    blocks: [{ kind: 'table', header: ['Part', 'Material'], rows: [['Impeller', 'Bronze'], ['Casing', 'Cast iron']] }],
+    tables: [{ header: ['Part', 'Material'], rows: [['Impeller', 'Bronze'], ['Casing', 'Cast iron']] }] },
+  { slideNumber: 3, title: 'Centrifugal Pump (cont.)',
+    bullets: ['Adverse Effects', 'Cavitation pitting erodes impeller blades under low intake head'],
+    nestedBullets: [snb('Adverse Effects', 0, false), snb('Cavitation pitting erodes impeller blades under low intake head', 1, true)],
+    blocks: [{ kind: 'table', header: ['Part', 'Material'], rows: [['Impeller', 'Bronze'], ['Casing', 'Cast iron']] }],
+    tables: [{ header: ['Part', 'Material'], rows: [['Impeller', 'Bronze'], ['Casing', 'Cast iron']] }] },
+];
+const dedupOut = dout.build(dupTableSlides);
+const slideSum = summarizer.summarizeSlides(dupTableSlides, 2);
+check('deck outline: colon-child collapses cleanly, duplicate adjacent table drops, and overview prefixes slide subject',
+  dedupOut.sections[0].topics[0].slides[0].bullets[0].children.includes('Primary ring: o Graphite face prevents dry friction') &&
+  Boolean(dedupOut.sections[0].topics[0].slides[0].table) && !dedupOut.sections[0].topics[0].slides[1].table &&
+  slideSum.overviewSentences.some((s) => /^Centrifugal Pump — Adverse Effects:/.test(s)), JSON.stringify([dedupOut.sections[0].topics[0].slides, slideSum.overviewSentences]));
+
+const qTitleDeck = [
+  { slideNumber: 2, title: 'Which of the Following is Valid?', bullets: ['A pump runs smoothly at low pressure without noisy vibration.'] },
+  { slideNumber: 3, title: 'A flow rate depends strictly on rotor speed and head pressure.', bullets: ['Flow scales directly with speed when fluid viscosity stays constant.'] },
+];
+const qSum = summarizer.summarizeSlides(qTitleDeck, 4);
+check('summarizer: question-form topic titles are never prepended onto slide overview statements',
+  !qSum.overviewSentences.some((s) => /\?\s*—/.test(s)), JSON.stringify(qSum.overviewSentences));
+
 console.log(`${failed ? 'FAIL' : 'PASS'}  summary fixtures: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

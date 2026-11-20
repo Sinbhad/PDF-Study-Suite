@@ -49,7 +49,7 @@
 
   // Words that name a part of a lecture or a book, never a concept it teaches ("Learning Objectives",
   // "Kahoot Question", "Problem Statement", "Clinical signs" as a slide heading). Structure, not subject.
-  const FURNITURE_RE = /^(?:learning\s+)?(?:objectives?|targets?|outcomes?)$|^(?:summary|overview|introduction|intro|review|recap|references?|questions?|answers?|quiz|kahoot(?:\s+question)?|poll|case(?:\s+\d+)?|example|exercises?|figure|table|note|notes|tip|error|errors|warning|problem(?:\s+statement)?|solution|discussion|conclusions?|background|using|left(?:\s+side)?|right(?:\s+side)?|reality|clinical\s+signs|signs|treatment|diagnosis|prognosis|adverse\s+effects?(?:\s+\w+)?|indications|contraindications|pros|cons|definition(?:\s+\d+)?|theorem(?:\s+\d+)?|terms?|words?|items?|values?)$/i;
+  const FURNITURE_RE = /^(?:(?:course|learning)\s+)?(?:objectives?|targets?|outcomes?)$|^(?:summary|overview|introduction|intro|review|recap|references?|questions?|answers?|quiz|kahoot(?:\s+question)?|poll|case(?:\s+\d+)?|example|exercises?|figure|table|note|notes|tip|error|errors|warning|problem(?:\s+statement)?|solution|discussion|conclusions?|background|using|left(?:\s+side)?|right(?:\s+side)?|reality|clinical\s+(?:signs|findings|presentation|features)|differential\s+diagnosis|(?:fat|small|large|food)\s+animals|physical\s+exam(?:ination)?|diagnostic\s+(?:testing|imaging|workup|tests?)|supportive\s+therapy|general\s+(?:features|principles|overview)|other\s+causes|major\s+carriers|signs|treatment|diagnosis|prognosis|adverse\s+effects?(?:\s+\w+)?|indications|contraindications|pros|cons|definition(?:\s+\d+)?|theorem(?:\s+\d+)?|terms?|words?|items?|values?)$/i;
   const MAX_TERM_WORDS = 5;
 
   /**

@@ -248,8 +248,8 @@
       }
     }
 
-    // A section taught through a short listing ("7.3.1 Filling": one loop) shows that listing as code
-    if (formulas.length + blocks.length + definitions.length <= 1) {
+    // A section teaching a code pattern ("7.3.1 Filling", "5.3 Multiple Alternatives") keeps its representative listing.
+    if (!formulas.some((f) => f.kind === 'code') && (formulas.length + blocks.length + definitions.length <= 2 || sec.paragraphs.some((p) => p.kind === 'code'))) {
       const code = codePattern(sec.paragraphs);
       if (code) formulas.push(code);
     }

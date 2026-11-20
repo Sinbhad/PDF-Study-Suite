@@ -186,6 +186,7 @@
         continue;
       }
       const vGap = line.topY - prev.bottomY;
+      const endX = prev.lastX1 !== undefined ? prev.lastX1 : prev.x1;
       // Never join a row of one side-by-side column onto the other column's row
       const sameColumn = line.column === prev.column || line.column === undefined || prev.column === undefined;
       const sameFont = sameColumn && Math.abs(line.fontSize - prev.fontSize) <= 1.2;
@@ -194,34 +195,46 @@
       const isLabel = /^\S+(?:\s+\S+){0,2}:$/.test(norm.cleanText) || /:\s*$/.test(prev.cleanText);
       // A caption never joins body text, and body text never joins a caption.
       const sameKind = (line.kind || '') === (prev.kind || '');
+      const midPhrase = /[,;:(–—→-]$|\b(?:and|or|of|the|a|an|to|in|for|with|by|on|at|as|is|are|was|were|that|which|from|into)$/i.test(prev.cleanText);
       // Centred lines that each open with a capital and follow a complete line are separate points, not one
       // wrapped sentence ("Clinical signs overlap ..." / "Serology is of limited use ..." under a heading).
-      const restarts = !aligned && !prev.hasBullet && /^[A-Z]/.test(norm.cleanText) && !/[,;(–—→-]$|…\.?$|\.\.\.$|\b(?:and|or|of|the|a|an|to|in|for|with|by|on|at|as)$/i.test(prev.cleanText);
+      const restarts = !aligned && !prev.hasBullet && /^[A-Z]/.test(norm.cleanText) && !midPhrase && !/…\.?$|\.\.\.$/.test(prev.cleanText);
       // "Polioencephalitis: ..." then "Leukoencephalitis: ...": each "Term: meaning" line is an item of its own
       const nextTerm = TERM_LINE_RE.test(norm.cleanText.replace(/^¿/, '')) && TERM_LINE_RE.test(prev.cleanText.replace(/^¿/, ''));
       // A short heading line ("Tapeworms", "Adverse Effects") over a sentence that starts afresh is a label for
       // that sentence, not the first half of it: a wrapped line runs most of the width of the line after it.
-      const shortHead = /^[A-Z]/.test(norm.cleanText) && prev.cleanText.split(/\s+/).length <= 3 && !/[,;(–—-]$/.test(prev.cleanText) &&
-        !/\b(?:and|or|of|the|a|an|to|in|for|with|by|on|at|as)$/i.test(prev.cleanText) && (prev.x1 - prev.x0) < (line.x1 - line.x0) * 0.5;
+      const shortHead = /^[A-Z]/.test(norm.cleanText) && prev.cleanText.split(/\s+/).length <= 3 && !midPhrase &&
+        (prev.x1 - prev.x0) < (line.x1 - line.x0) * 0.5;
       // A row of a diagram's labels ("L4 L3 L2 L1 T13") never continues the sentence above it
       const codes = LABEL_ROW_RE.test(norm.cleanText);
       // A capitalised line after a line that ended a phrase with room to spare is a new item whose bullet
       // glyph was lost ("Tick larvae feed on 1˚ host (...)" / "Larvae molt into nymphs, ..."): a wrapped line
       // breaks only when its next word would not fit.
-      const roomy = /^[A-Z]/.test(norm.cleanText) && !/[,;:(–—-]$|\b(?:and|or|of|the|a|an|to|in|for|with|by|on|at|as)$/i.test(prev.cleanText) &&
-        (/[)\].!?”"]$/.test(prev.cleanText) || prev.x1 + firstWordWidth(line) < rightEdge(bodyLines, prev) - 4);
-      const plain = !hasBul && !line.isCode && !prev.isCode && sameFont && sameKind && vGap >= -4 && !isLabel && !restarts && !nextTerm && !shortHead && !codes && !roomy;
-      const tight = plain && vGap <= prev.fontSize * 0.72 && (aligned || prev.x1 > w * 0.62);
-      // Hard break inside a sentence: previous line runs wide and stops mid-sentence, next starts lowercase
-      const loose = plain && vGap <= prev.fontSize * 1.35 && prev.x1 > w * 0.62 && !TERMINAL_RE.test(prev.cleanText) &&
-        /^[a-z(]/.test(norm.cleanText) && line.x0 >= (prev.textX0 || prev.x0) - 10;
-      // A numbered label of a diagram wraps centred under itself ("7. Virus moves" / "down peripheral").
+      const roomy = /^[A-Z]/.test(norm.cleanText) && !midPhrase &&
+        (/[)\].!?”"]$/.test(prev.cleanText) || endX + firstWordWidth(line) < rightEdge(bodyLines, prev) - 4);
+      const lineTxtX0 = line.textX0 !== undefined ? line.textX0 : line.x0;
+      // An unbulleted capitalized heading stepping back out to a bullet's marker left edge is a new parent, not a wrap.
+      const outdented = prev.hasBullet && prev.textX0 > prev.x0 + 4 && lineTxtX0 < prev.textX0 - 6 && /^[A-Z]/.test(norm.cleanText) && !midPhrase;
+      const plain = !hasBul && !outdented && !line.isCode && !prev.isCode && sameFont && sameKind && vGap >= -4 && !isLabel && !restarts && !nextTerm && !shortHead && !codes && !roomy;
       const centre = (l) => (l.x0 + l.x1) / 2;
+      const centeredWrap = Math.abs(centre(line) - centre(prev)) <= CENTRE_WRAP_TOL && vGap <= prev.fontSize * 0.55 &&
+        (/^[a-z(]/.test(norm.cleanText) || midPhrase || prev.step != null);
+      // Separate unbulleted items sit at paragraph spacing (~0.6-0.7*fs); soft wraps starting capitals without mid-phrase cue need <= 0.48*fs
+      const tightGap = (/^[a-z(]/.test(norm.cleanText) || midPhrase || prev.hasBullet) ? prev.fontSize * 0.72 : prev.fontSize * 0.48;
+      const tight = plain && vGap <= tightGap && (aligned || centeredWrap || endX > w * 0.62);
+      // Hard break inside a sentence: previous line runs wide and stops mid-sentence, next starts lowercase; or parenthetical qualifier directly under its term
+      const parenSub = /^\([A-Za-z][^)]{2,}\)[.,;]?$/.test(norm.cleanText) && !/^\([a-z0-9]{1,2}\)/i.test(norm.cleanText) &&
+        Math.abs(line.x0 - prev.x0) <= 10;
+      const loose = plain && vGap <= prev.fontSize * 1.35 && !TERMINAL_RE.test(prev.cleanText) &&
+        ((endX > w * 0.62 && /^[a-z(]/.test(norm.cleanText) && line.x0 >= (prev.textX0 || prev.x0) - 10) || parenSub);
+      // A numbered label of a diagram wraps centred under itself ("7. Virus moves" / "down peripheral").
       const labelWrap = plain && prev.step != null && vGap <= prev.fontSize * 0.72 && Math.abs(centre(line) - centre(prev)) <= CENTRE_WRAP_TOL;
       if (tight || loose || labelWrap) {
         prev.cleanText = `${prev.cleanText} ${norm.cleanText}`.trim();
         prev.formattedText = `${prev.formattedText} ${norm.formattedText}`.trim();
         prev.bottomY = Math.max(prev.bottomY, line.bottomY);
+        prev.lastX1 = line.x1;
+        prev.x0 = Math.min(prev.x0, line.x0);
         prev.x1 = Math.max(prev.x1, line.x1);
       } else merged.push(norm);
     }
@@ -263,10 +276,21 @@
     return nodes.map((n, i) => (slots.has(i) ? sorted[next++] : n));
   }
 
-  /** Indent tiers of one set of rows: distinct x0 values more than 14pt apart. */
+  const indentOf = (b) => (b.hasBullet && b.textX0 > b.x0 + 4 ? b.textX0 : b.x0);
+  const sideFsRef = (blocks) => {
+    const bul = blocks.filter((b) => b.hasBullet && b.fontSize);
+    const pool = (bul.length >= 2 ? bul : blocks).map((b) => b.fontSize).filter(Boolean).sort((a, b) => a - b);
+    return pool.length ? pool[Math.floor(pool.length / 2)] : 0;
+  };
+  const isSideNote = (b, refFs) => Boolean(b && (b.kind === 'caption' || b.kind === 'label' || b.kind === 'url' ||
+    (!b.hasBullet && refFs && b.fontSize && b.fontSize < refFs * 0.78 && (b.wordCount || 0) <= 5)));
+
+  /** Indent tiers of one set of rows: distinct content indent values more than 14pt apart. */
   function tiersOf(blocks) {
     const tiers = [];
-    for (const x of [...new Set(blocks.map((b) => Math.round(b.x0)))].sort((a, b) => a - b)) {
+    const refFs = sideFsRef(blocks);
+    const content = blocks.filter((b) => !isSideNote(b, refFs));
+    for (const x of [...new Set((content.length ? content : blocks).map((b) => Math.round(indentOf(b))))].sort((a, b) => a - b)) {
       if (!tiers.length || x - tiers[tiers.length - 1] > 14) tiers.push(x);
     }
     return tiers;
@@ -280,13 +304,15 @@
    * labels). Returns a level function, or null when the lines are not centred.
    */
   function centredLevels(rows) {
-    if (rows.length < 4) return null;
-    const centres = rows.map((b) => (b.x0 + b.x1) / 2);
-    const lefts = rows.map((b) => b.x0);
+    const refFs = sideFsRef(rows);
+    const content = rows.filter((b) => !isSideNote(b, refFs));
+    if (content.length < 4) return null;
+    const centres = content.map((b) => (b.x0 + b.x1) / 2);
+    const lefts = content.map((b) => b.x0);
     const spread = (v) => Math.max(...v) - Math.min(...v);
     if (spread(centres) > CENTRE_TOL || spread(lefts) < CENTRE_TOL * 2) return null;
     const isLabelRow = (b) => !b.hasBullet && /^\S+(?:\s+\S+){0,2}:$/.test(b.cleanText);
-    const labels = rows.some(isLabelRow);
+    const labels = content.some(isLabelRow);
     return (b) => (b.hasBullet ? (labels ? 2 : 1) : isLabelRow(b) ? 1 : 0);
   }
   const CENTRE_TOL = 40; // pt: centres of a centred block stay this close; their left edges spread wider
@@ -298,27 +324,51 @@
   function toNested(blocks) {
     const sideBySide = new Set(blocks.map((b) => b.column).filter((c) => c >= 1000));
     const tierMap = new Map();
+    const refMap = new Map();
+    const keyOf = (b) => (sideBySide.has(b.column) ? b.column : 'main');
+    const colBlocks = (key) => blocks.filter((o) => keyOf(o) === key);
+    const refFor = (b) => {
+      const key = keyOf(b);
+      if (!refMap.has(key)) refMap.set(key, sideFsRef(colBlocks(key)));
+      return refMap.get(key);
+    };
     const tiersFor = (b) => {
-      const key = sideBySide.has(b.column) ? b.column : 'main';
-      if (!tierMap.has(key)) tierMap.set(key, tiersOf(blocks.filter((o) => (sideBySide.has(o.column) ? o.column : 'main') === key)));
+      const key = keyOf(b);
+      if (!tierMap.has(key)) tierMap.set(key, tiersOf(colBlocks(key)));
       return tierMap.get(key);
     };
     const centred = new Map();
     const centredLevel = (b) => {
-      const key = sideBySide.has(b.column) ? b.column : 'main';
-      if (!centred.has(key)) centred.set(key, centredLevels(blocks.filter((o) => (sideBySide.has(o.column) ? o.column : 'main') === key)));
+      const key = keyOf(b);
+      if (!centred.has(key)) centred.set(key, centredLevels(colBlocks(key)));
       return centred.get(key) ? centred.get(key)(b) : null;
     };
+    const colState = new Map();
     const nodes = blocks
       .map((b, i) => {
-        const tiers = tiersFor(b);
-        let level = tiers.findIndex((t) => Math.abs(b.x0 - t) <= 14);
-        if (level === -1) level = tiers.length - 1;
+        const key = keyOf(b);
+        if (!colState.has(key)) colState.set(key, { prevLevel: -1, minIndent: Infinity });
+        const st = colState.get(key);
+        let level = 0;
+        const refFs = refFor(b);
         const byCentre = centredLevel(b);
-        if (byCentre !== null) level = byCentre;
-        // A deeper line far below the line above it (a picture between them) is not that line's child.
-        const prev = blocks.slice(0, i).reverse().find((o) => o.column === b.column);
-        if (byCentre === null && prev && b.topY - prev.bottomY > FAR_GAP * (prev.fontSize || 12) && b.x0 > prev.x0 + 14) level = 0;
+        if (!isSideNote(b, refFs)) {
+          const tiers = tiersFor(b);
+          const ind = indentOf(b);
+          level = tiers.findIndex((t) => Math.abs(ind - t) <= 14);
+          if (level === -1) level = tiers.length - 1;
+          if (byCentre !== null) level = byCentre;
+          else {
+            // A deeper line far below the line above it (a picture between them) is not that line's child.
+            const prev = blocks.slice(0, i).reverse().find((o) => o.column === b.column && !isSideNote(o, refFs));
+            if (prev && b.topY - prev.bottomY > FAR_GAP * (prev.fontSize || 12) && ind > indentOf(prev) + 14) level = 0;
+            // No orphan child before any parent tier in this column, and no skipping >1 indent level downward.
+            if (st.minIndent === Infinity || ind <= st.minIndent + 14) level = 0;
+            else if (st.prevLevel >= 0 && level > st.prevLevel + 1) level = st.prevLevel + 1;
+          }
+          st.minIndent = Math.min(st.minIndent, ind);
+          st.prevLevel = Math.max(0, Math.min(level, 2));
+        }
         return {
           level: Math.max(0, Math.min(level, 2)),
           text: b.cleanText,

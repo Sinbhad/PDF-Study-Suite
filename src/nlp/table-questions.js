@@ -33,6 +33,8 @@
   const REMARKS_COLUMN_RE = /^(?:notes?|comments?|remarks?|other|misc\.?|details?|description)$/i;
   // "Assay target Notes": a lower-case word then a capitalised one inside a header cell is two headers read as one.
   const GLUED_HEADER_RE = /\b[a-z][a-z.]*\s+[A-Z][a-z]/;
+  // Method/assay/stage rows ("Serology", "IDEXX Snap") depend on the table's subject when asked outside the slide.
+  const METHOD_HEADER_RE = /^(?:assay|test|method|diagnostic|procedure|technique|sample|stage|phase|class|type|grade|group|category)s?$/i;
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   /** "Dogs, Cats, Humans" -> {dogs, cats, humans}; "Blood (urine)" -> {blood, urine}. */
@@ -70,6 +72,14 @@
   /** A header cell a question can name: present, short and not two headers read as one. */
   const usableHeader = (h) => Boolean(String(h || '').trim()) && !GLUED_HEADER_RE.test(h) && String(h).trim().split(/\s+/).length <= MAX_HEADER_WORDS;
 
+  /** Qualifies a generic method/assay row ("PCR") with its table's specific subject ("PCR (Leptospira spp.)") for standalone questions. */
+  function qualifiedEntity(t) {
+    const entity = String((t && t.entity) || '').trim();
+    const sub = String((t && t.subject) || '').trim();
+    if (!sub || !Array.isArray(t.header) || !METHOD_HEADER_RE.test(String(t.header[0] || '').trim())) return entity;
+    return entity.toLowerCase().includes(sub.toLowerCase()) ? entity : `${entity} (${sub})`;
+  }
+
   /**
    * The stem that asks one cell, naming both the column asked about and the column the row's own value sits in:
    * "In the row where Assay is "PCR", what is the Sample?". '' when either header is missing or merged: a value
@@ -78,7 +88,7 @@
   function stemFor(card) {
     const t = card && card.table;
     if (!t || !Array.isArray(t.header) || !usableHeader(t.header[0]) || !usableHeader(t.column)) return '';
-    return `In the row where ${t.header[0].trim()} is "${t.entity}", what is the ${t.column.trim()}?`;
+    return `In the row where ${t.header[0].trim()} is "${qualifiedEntity(t)}", what is the ${t.column.trim()}?`;
   }
 
   /** The rows of each table (by its key), as rowCards recorded them on their cards: row name -> cells. */
@@ -170,7 +180,7 @@
   /** A column a question may ask down: not remarks, not two headers read as one. */
   const isAskableColumn = (card) => !REMARKS_COLUMN_RE.test(String(card.table.column || '').trim()) && !GLUED_HEADER_RE.test(card.table.column || '');
 
-  const api = { candidates, overlaps, stemFor, rowIsUnique, columnValues, isAskableColumn, usableHeader };
+  const api = { candidates, overlaps, stemFor, qualifiedEntity, rowIsUnique, columnValues, isAskableColumn, usableHeader };
   PDFStudy.tableQuestions = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

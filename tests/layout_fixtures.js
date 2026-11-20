@@ -182,6 +182,18 @@
       thm.body === 'Let $b$ and $c$ be real numbers, and let $n$ be a positive integer.\n1. $\\lim_{x \\to c}b = b$\n2. $\\lim_{x \\to c}x = c$', JSON.stringify(thm));
     const odd = S.textCleaner.processSectionPages([{ pageNumber: 1, lines: [{ text: 'x' }, { text: 'Plain line without geometry survives.' }, {}] }, null, {}]);
     check('odd input degrades to plain lines without throwing', odd.text === 'Plain line without geometry survives.' && odd.exerciseText === '', JSON.stringify(odd));
+    // Segmented numeric table row near the bottom band tagged kind="folio" still stays in its table
+    const tblRow = (cells, topY, extra = {}) => ({
+      text: cells.join(' '), cleanText: cells.join(' '), formattedText: cells.join(' '),
+      topY, bottomY: topY + 9, fontSize: 9, x0: 160, x1: 310, isBold: false, wordCount: cells.length,
+      segments: cells.map((t, i) => ({ text: t, x0: 160 + i * 50, x1: 180 + i * 50 })), ...extra,
+    });
+    const folioTblPg = { pageNumber: 2, height: PAGE_H, width: PAGE_W, lines: [
+      tblRow(['A', 'B', 'A and B'], 700), tblRow(['0', '0', '0'], 714), tblRow(['0', '1', '0'], 728),
+      tblRow(['1', '1', '1'], 742, { kind: 'folio' }),
+    ] };
+    const folioOut = S.textCleaner.processSectionPages([folioTblPg]);
+    check('segmented bottom table row tagged folio stays part of its table', folioOut.tables.length === 1 && folioOut.tables[0].rows.length === 3, JSON.stringify(folioOut.tables));
   }
 
   function runLayoutChecks() {

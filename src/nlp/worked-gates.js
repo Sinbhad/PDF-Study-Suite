@@ -29,7 +29,7 @@
         const pages = (g) => (g.page ? ` (p. ${g.page})` : '');
         const q = question({
           kind: 'gate-row', key: `${x}${y}|${want}|${answer.gate}`, label: 'Gates', card, seed,
-          stem: `With inputs X = ${x} and Y = ${y}, which gate outputs ${want}?`,
+          stem: `With inputs \`X = ${x}\` and \`Y = ${y}\`, which gate outputs ${want}?`,
           answer: answer.gate, wrong: wrong.map((g) => g.gate),
           explanation: `With X = ${x} and Y = ${y}: ${shown.map((g) => `${g.gate} gives ${gr().output(g.gate, x, y)}${pages(g)}`).join('; ')}.`,
         });

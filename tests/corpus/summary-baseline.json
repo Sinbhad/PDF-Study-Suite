@@ -1,0 +1,432 @@
+{
+ "corpus": "tests/corpus/manifest.json",
+ "documents": [
+  {
+   "id": "sample-textbook",
+   "kind": "pdf",
+   "mode": "book",
+   "scopeWords": 584,
+   "summaryWords": 608,
+   "ratioPct": 104.1,
+   "sections": 6,
+   "blocksAndTables": {
+    "captured": 4,
+    "expected": 4
+   },
+   "gold": {
+    "hit": 16,
+    "total": 20,
+    "pct": 80,
+    "missing": [
+     "continuity",
+     "indeterminate form",
+     "binary heap",
+     "Dijkstra's algorithm"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 7,
+    "duplicatePct": 38.9
+   },
+   "subscores": {
+    "structure": 25,
+    "blocksAndTables": 20,
+    "goldCoverage": 20,
+    "lengthScaling": 2,
+    "cleanliness": 12
+   },
+   "score": 79
+  },
+  {
+   "id": "sample-slides",
+   "kind": "pdf",
+   "mode": "slide_deck",
+   "scopeWords": 261,
+   "summaryWords": 546,
+   "ratioPct": 209.2,
+   "sections": 4,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 15,
+    "total": 15,
+    "pct": 100,
+    "missing": []
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 6,
+    "duplicatePct": 23.1
+   },
+   "subscores": {
+    "structure": 25,
+    "blocksAndTables": 20,
+    "goldCoverage": 25,
+    "lengthScaling": 2,
+    "cleanliness": 15
+   },
+   "score": 87
+  },
+  {
+   "id": "bio-respiration",
+   "kind": "text",
+   "mode": "book",
+   "scopeWords": 443,
+   "summaryWords": 167,
+   "ratioPct": 37.7,
+   "sections": 0,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 10,
+    "total": 16,
+    "pct": 62.5,
+    "missing": [
+     "NADH",
+     "oxidative phosphorylation",
+     "electron transport chain",
+     "ATP synthase",
+     "chemiosmosis",
+     "fermentation"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 0,
+    "duplicatePct": 0
+   },
+   "subscores": {
+    "structure": 18,
+    "blocksAndTables": 20,
+    "goldCoverage": 16,
+    "lengthScaling": 10,
+    "cleanliness": 20
+   },
+   "score": 84
+  },
+  {
+   "id": "psych-memory",
+   "kind": "text",
+   "mode": "book",
+   "scopeWords": 502,
+   "summaryWords": 114,
+   "ratioPct": 22.7,
+   "sections": 0,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 10,
+    "total": 24,
+    "pct": 41.7,
+    "missing": [
+     "encoding",
+     "storage",
+     "retrieval",
+     "chunking",
+     "working memory",
+     "central executive",
+     "phonological loop",
+     "visuospatial sketchpad",
+     "episodic buffer",
+     "hippocampus",
+     "levels of processing",
+     "encoding specificity principle",
+     "forgetting curve",
+     "misinformation effect"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 0,
+    "duplicatePct": 0
+   },
+   "subscores": {
+    "structure": 12,
+    "blocksAndTables": 20,
+    "goldCoverage": 10,
+    "lengthScaling": 10,
+    "cleanliness": 20
+   },
+   "score": 72
+  },
+  {
+   "id": "econ-supply-demand",
+   "kind": "text",
+   "mode": "book",
+   "scopeWords": 507,
+   "summaryWords": 148,
+   "ratioPct": 29.2,
+   "sections": 0,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 7,
+    "total": 20,
+    "pct": 35,
+    "missing": [
+     "normal good",
+     "inferior good",
+     "substitutes",
+     "complements",
+     "equilibrium price",
+     "shortage",
+     "invisible hand",
+     "elastic",
+     "inelastic",
+     "price ceiling",
+     "price floor",
+     "deadweight loss",
+     "producer surplus"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 1,
+    "duplicatePct": 12.5
+   },
+   "subscores": {
+    "structure": 12,
+    "blocksAndTables": 20,
+    "goldCoverage": 9,
+    "lengthScaling": 10,
+    "cleanliness": 17
+   },
+   "score": 68
+  },
+  {
+   "id": "linalg-eigen",
+   "kind": "text",
+   "mode": "book",
+   "scopeWords": 500,
+   "summaryWords": 238,
+   "ratioPct": 47.6,
+   "sections": 0,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 13,
+    "total": 17,
+    "pct": 76.5,
+    "missing": [
+     "characteristic equation",
+     "trace",
+     "determinant",
+     "diagonal matrix"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 1,
+    "duplicatePct": 10
+   },
+   "subscores": {
+    "structure": 25,
+    "blocksAndTables": 20,
+    "goldCoverage": 19,
+    "lengthScaling": 10,
+    "cleanliness": 18
+   },
+   "score": 92
+  },
+  {
+   "id": "os-scheduling",
+   "kind": "text",
+   "mode": "book",
+   "scopeWords": 526,
+   "summaryWords": 172,
+   "ratioPct": 32.7,
+   "sections": 0,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 13,
+    "total": 19,
+    "pct": 68.4,
+    "missing": [
+     "throughput",
+     "first-come, first-served",
+     "convoy effect",
+     "starvation",
+     "aging",
+     "multilevel feedback queue"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 0,
+    "duplicatePct": 0
+   },
+   "subscores": {
+    "structure": 19,
+    "blocksAndTables": 20,
+    "goldCoverage": 17,
+    "lengthScaling": 10,
+    "cleanliness": 20
+   },
+   "score": 86
+  },
+  {
+   "id": "history-french-rev",
+   "kind": "text",
+   "mode": "book",
+   "scopeWords": 494,
+   "summaryWords": 205,
+   "ratioPct": 41.5,
+   "sections": 0,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 8,
+    "total": 19,
+    "pct": 42.1,
+    "missing": [
+     "Third Estate",
+     "Declaration of the Rights of Man and of the Citizen",
+     "Civil Constitution of the Clergy",
+     "Jacobins",
+     "Maximilien Robespierre",
+     "Committee of Public Safety",
+     "Reign of Terror",
+     "Girondins",
+     "Directory",
+     "Napoleon Bonaparte",
+     "Coup of 18 Brumaire"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 1,
+    "duplicatePct": 11.1
+   },
+   "subscores": {
+    "structure": 18,
+    "blocksAndTables": 20,
+    "goldCoverage": 11,
+    "lengthScaling": 10,
+    "cleanliness": 18
+   },
+   "score": 77
+  },
+  {
+   "id": "notes-chem-bonding",
+   "kind": "text",
+   "mode": "book",
+   "scopeWords": 399,
+   "summaryWords": 341,
+   "ratioPct": 85.5,
+   "sections": 0,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 20,
+    "total": 21,
+    "pct": 95.2,
+    "missing": [
+     "octet rule"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 0,
+    "duplicatePct": 0
+   },
+   "subscores": {
+    "structure": 12,
+    "blocksAndTables": 20,
+    "goldCoverage": 24,
+    "lengthScaling": 6,
+    "cleanliness": 20
+   },
+   "score": 82
+  },
+  {
+   "id": "notes-networking",
+   "kind": "text",
+   "mode": "book",
+   "scopeWords": 423,
+   "summaryWords": 338,
+   "ratioPct": 79.9,
+   "sections": 0,
+   "blocksAndTables": {
+    "captured": 0,
+    "expected": 0
+   },
+   "gold": {
+    "hit": 30,
+    "total": 31,
+    "pct": 96.8,
+    "missing": [
+     "socket"
+    ]
+   },
+   "cleanlinessIssues": {
+    "mathDamage": 0,
+    "boilerplate": 0,
+    "cutFragments": 0,
+    "dupes": 0,
+    "duplicatePct": 0
+   },
+   "subscores": {
+    "structure": 12,
+    "blocksAndTables": 20,
+    "goldCoverage": 24,
+    "lengthScaling": 10,
+    "cleanliness": 20
+   },
+   "score": 86
+  }
+ ],
+ "total": {
+  "id": "TOTAL",
+  "documents": 10,
+  "scopeWords": 4639,
+  "summaryWords": 2877,
+  "gold": {
+   "hit": 142,
+   "total": 202,
+   "pct": 70.3
+  },
+  "issues": {
+   "mathDamage": 0,
+   "boilerplate": 0,
+   "cutFragments": 0,
+   "dupes": 16
+  },
+  "score": 81.3
+ }
+}

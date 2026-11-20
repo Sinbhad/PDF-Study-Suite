@@ -72,7 +72,7 @@
   function isPointStatement(statement) {
     const s = String(statement || '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
     if (!PREDICATE_WORD_RE.test(s.toLowerCase())) return false;
-    if (isHeadingLine(s) || isSubjectlessRemark(s)) return false;
+    if (isHeadingLine(s) || isSubjectlessRemark(s) || GENERIC_OUTCOME_ARROW_RE.test(s)) return false;
     const label = s.match(/^([^:]{2,60}):\s+(.+)$/);
     if (label) {
       const value = label[2].trim();
@@ -93,10 +93,13 @@
   // volume of lidocaine needed" (less than what?), "Screening to identify carriers" (a heading of a to-do list).
   const EVALUATIVE_OPENER_RE = /^(?:great|good|better|best|ideal|useful|excellent|poor|bad|worse|worst|helpful|preferred|nice)\s+(?:for|at|in|to|with|when|if)\b/i;
   const BARE_COMPARATIVE_RE = /^(?:less|more|fewer|greater|lower|higher|better|worse|smaller|larger|shorter|longer)\b/i;
+  const HEDGED_OPENER_RE = /^(?:likely|unlikely|possibly|probably|potentially|presumably|apparently)\b/i;
+  const REFERRING_VERB_RE = /^(?:reflects?|suggests?|indicates?|depends?\s+on|correlates?\s+with|varies|differs?\s+from)\b/i;
+  const GENERIC_OUTCOME_ARROW_RE = /^(?:[A-Za-z]+\s+){0,2}(?:dysfunction|damage|inflammation|infection|injury|lesions?)\s*(?:→|->)\s*(?:clinical\s+)?(?:signs?|symptoms?|disease|death|illness)(?:\s+and\s+(?:clinical\s+)?(?:signs?|symptoms?|disease|death|illness))*\.?$/i;
   const GERUND_OPENER_RE = /^[A-Z][a-z]+ing\b/;
   const MAX_GERUND_HEADING_WORDS = 6;
   function isSubjectlessRemark(s) {
-    if (EVALUATIVE_OPENER_RE.test(s)) return true;
+    if (EVALUATIVE_OPENER_RE.test(s) || HEDGED_OPENER_RE.test(s) || REFERRING_VERB_RE.test(s)) return true;
     if (BARE_COMPARATIVE_RE.test(s) && !/\bthan\b/i.test(s)) return true;
     return GERUND_OPENER_RE.test(s) && s.split(/\s+/).length <= MAX_GERUND_HEADING_WORDS && !HEADING_VERB_RE.test(s);
   }
@@ -116,7 +119,10 @@
   const EXPANSION_RE = /^(?:stands\s+for|short\s+for|abbreviat(?:ion|ed)\b)/i;
   // "Long term administration contraindicated because ...": a definition says what a thing is; it does not argue.
   const ARGUES_RE = /\b(?:because|although|though|since\s+(?:it|the|a|an|they))\b/i;
-  const isDefinitionText = (text) => !RANKING_RE.test(text) && !GLUED_LABEL_RE.test(text) && !EXPANSION_RE.test(text) && !ARGUES_RE.test(text);
+  // First-person worked-example narration ("When we delete one row...") and condition clauses ("If and only if ...") are not definitions.
+  const NARRATED_EXAMPLE_RE = /^(?:when|if|as|once)\s+(?:we|you)\b/i;
+  const CONDITION_ANSWER_RE = /^if\s+and\s+only\s+if\b/i;
+  const isDefinitionText = (text) => !RANKING_RE.test(text) && !GLUED_LABEL_RE.test(text) && !EXPANSION_RE.test(text) && !ARGUES_RE.test(text) && !NARRATED_EXAMPLE_RE.test(text) && !CONDITION_ANSWER_RE.test(text);
 
 
   // Something only one subject could own: a number, a name or acronym inside the line, or a technical word (a

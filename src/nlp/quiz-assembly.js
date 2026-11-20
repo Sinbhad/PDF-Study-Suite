@@ -24,6 +24,7 @@
 
   const SAME_FACT_JACCARD = 0.7;
   const SAME_FACT_CONTAINMENT = 0.85;
+  const DISPARATE_CONTAINMENT = 0.9; // matches eval-quiz-set-lints when a large multi-point answer encloses a small one
   const MIN_FACT_WORDS = 4;
   const SHORT_ANSWER_WORDS = 8; // longer answers are statements; those are compared as facts instead
   const MAX_TRUE_FALSE_SHARE = 0.4; // 4 of 10, 8 of 20
@@ -49,7 +50,7 @@
 
   /** Content words of the fact a question tests: its stem with the blank filled in, plus a term answer. */
   function factWords(q) {
-    const body = stemBody(q);
+    const body = stemBody(q).replace(/\s*\(\d+\s+points?\)\.?$/i, '');
     const answer = q.type === 'true_false' ? '' : String(q.answer || '');
     const text = /_{4,}/.test(body) ? body.replace(/_{4,}/, answer) : `${body} ${answer}`;
     return new Set(qf().contentStems(text));
@@ -60,7 +61,8 @@
     if (small.size < MIN_FACT_WORDS) return false;
     let shared = 0;
     for (const w of small) if (large.has(w)) shared++;
-    return shared / (small.size + large.size - shared) >= SAME_FACT_JACCARD || shared / small.size >= SAME_FACT_CONTAINMENT;
+    const containment = large.size >= small.size * 2 ? DISPARATE_CONTAINMENT : SAME_FACT_CONTAINMENT;
+    return shared / (small.size + large.size - shared) >= SAME_FACT_JACCARD || shared / small.size >= containment;
   }
 
   const MIN_SHORT_FACT_WORDS = 2;
@@ -71,7 +73,8 @@
     if (small.size < MIN_SHORT_FACT_WORDS) return false;
     let shared = 0;
     for (const w of small) if (large.has(w)) shared++;
-    return shared / small.size >= SAME_FACT_CONTAINMENT;
+    const containment = large.size >= small.size * 2 ? DISPARATE_CONTAINMENT : SAME_FACT_CONTAINMENT;
+    return shared / small.size >= containment;
   }
 
   // "$\neg q \to \neg p$ (p. 32)": a rule card's answer cites its page; the answer is what comes before.
@@ -197,8 +200,9 @@
       if (q.subject && kept.some((k) => k.subject === q.subject && containedIn(words, factWords(k)))) return 'same subject fact';
       if (kept.some((k) => (isSelfGraded(q) || isSelfGraded(k)) && sameFormula(q, k))) return 'same formula';
       if (kept.some((k) => sameStatement(q, k))) return 'same sentence';
-      // The cells of one table are one figure: a set recalls a few of them, not the whole figure.
-      if (q.recallGroup && kept.filter((k) => k.recallGroup === q.recallGroup).length >= MAX_PER_RECALL_GROUP) return 'figure asked enough';
+      // The cells of one table are one figure: a quiz recalls at most 2 cells; a full practice test (>= 20) may draw up to 4 (20%).
+      const recallGroupCap = Number.isFinite(opts.maxPerRecallGroup) ? opts.maxPerRecallGroup : (max >= 20 ? 4 : MAX_PER_RECALL_GROUP);
+      if (q.recallGroup && kept.filter((k) => k.recallGroup === q.recallGroup).length >= recallGroupCap) return 'figure asked enough';
       if (avoid.length) {
         if (q.factKey && avoidFacts.has(q.factKey)) return 'asked elsewhere';
         if (oKey && avoidOptions.has(oKey)) return 'options shown elsewhere';
@@ -208,18 +212,27 @@
         if (avoid.some((k) => (isSelfGraded(q) || isSelfGraded(k)) && sameFormula(q, k))) return 'asked elsewhere (formula)';
         if (avoid.some((k) => sameStatement(q, k))) return 'asked elsewhere (sentence)';
         // A False that borrows a statement tests whether it belongs to this subject: its own fact key says
-        // whether that was asked; the borrowed statement's source and words were shown in another role.
+        // whether that was asked; a source sentence already asked in Quiz is never reused under the same source.
         const borrowed = isSwap(q, 'False') && /\|not\|/.test(q.factKey || '');
-        if (!borrowed && sourceOf(q) && avoidSources.has(sourceOf(q))) return 'asked elsewhere';
+        if (sourceOf(q) && avoidSources.has(sourceOf(q))) return 'asked elsewhere';
+        // Refuse a borrowed False if quiz already asked the non-borrowed fact or already asked the exact same False pairing.
         if (!borrowed && avoidWords.some((f) => sameFact(words, f))) return 'asked elsewhere (words)';
+        if (borrowed && avoid.some((k, idx) => k.answer === 'False' && sameFact(words, avoidWords[idx]))) return 'asked elsewhere (false claim)';
       }
       if (reviewOf.length) {
         // Another form asks another thing: the same answer, or the same question with other letters, is the same form
-        // whatever the type ("Type the missing term" and "Name the term" over one sentence).
+        // whatever the type ("Type the missing term" and "Name the term" over one sentence); a second False swap
+        // on the same subject ("this statement defines Encephalitis" => False) also repeats the Quiz True/False form.
+        const notOwner = (x) => {
+          const m = x && x.type === 'true_false' && String(x.factKey || '').match(/^([^|]+)\|not\|/);
+          return m ? m[1] : '';
+        };
+        const owner = notOwner(q);
         const sameForm = (k) => k.type === q.type || norm(k.question) === norm(q.question) || (aKey && answerKey(k) === aKey) ||
           template(k) === template(q);
         const twins = reviewWords.filter(({ q: k, words: w }) => (q.factKey && k.factKey === q.factKey) ||
-          (sourceOf(q) && sourceOf(k) === sourceOf(q)) || sameFact(words, w) || (aKey && answerKey(k) === aKey));
+          (sourceOf(q) && sourceOf(k) === sourceOf(q)) || (owner && notOwner(k) === owner) ||
+          sameFact(words, w) || (aKey && answerKey(k) === aKey));
         if (twins.some(({ q: k }) => sameForm(k))) return 'same form as before';
       }
       if (isExcluded(q, opts.excludeSources, opts.sourceKey)) return 'flagged source';

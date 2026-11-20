@@ -13,11 +13,13 @@
   const dep = (k, f) => PDFStudy[k] || (typeof require === 'function' ? require(f) : null);
   const shuffle = (...a) => dep('stemDistractors', './stem-distractors.js').deterministicShuffle(...a);
   const qf = () => dep('quizFacts', './quiz-facts.js');
+  const subjects = () => dep('quizSubjects', './quiz-subjects.js');
 
   const MIN_MEMBERS = 4;
   const MAX_ITEM_WORDS = 6;
   const LENGTH_TELL_RATIO = 2.2; // an outsider far longer or shorter than the members stands out
   const LENGTH_TELL_CHARS = 14;
+  const PREPOSITION_RE = /^(?:in|on|at|for|with|without|during|after|before|outside|inside|under|from|within)\b/i;
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const words = (s) => String(s || '').split(/\s+/).filter(Boolean);
@@ -25,7 +27,11 @@
   function itemsOf(card) {
     const lines = String(card.back || '').split('\n').map((l) => l.trim()).filter(Boolean);
     if (lines.length < 2 || !lines.every((l) => /^•\s*\S/.test(l))) return [];
-    const items = lines.map((l) => l.replace(/^•\s*/, '').replace(/\*+/g, '').replace(/\s+/g, ' ').trim());
+    const items = lines.map((l) => l.replace(/^•\s*/, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/(\S)\s+\*([^*]+)\*/g, '$1 ($2)')
+      .replace(/\*+/g, '')
+      .replace(/\s+/g, ' ').trim());
     // Short names only: a "Label: value" line, a sentence or a bracketed note is a point, not a member.
     if (items.some((x) => words(x).length > MAX_ITEM_WORDS || /[:;.!?]$|:\s/.test(x) || /^\(/.test(x))) return [];
     return items;
@@ -57,6 +63,7 @@
     for (const l of lists) underLabel.set(norm(l.label), [...(underLabel.get(norm(l.label)) || []), ...l.items]);
     const out = [];
     for (const asked of lists.filter((l) => l.items.length >= MIN_MEMBERS)) {
+      if (subjects() && subjects().isGenericHeading(asked.head, {}) && (PREPOSITION_RE.test(asked.label) || subjects().isGenericHeading(asked.label, {}))) continue;
       const siblings = lists.filter((l) => l !== asked && l.page === asked.page && norm(l.head) === norm(asked.head) && norm(l.label) !== norm(asked.label));
       const listed = underLabel.get(norm(asked.label)) || asked.items;
       const listedStems = new Set(listed.flatMap((x) => qf().contentStems(x)));
@@ -70,7 +77,7 @@
       };
       const membersShown = shuffle(asked.items, asked.card.front, seed).slice(0, 3);
       const outsider = shuffle(outsiders, `${asked.card.front}|out`, seed)[0];
-      const notStem = `Which of these is NOT listed under ${where}?`;
+      const notStem = `Which item is NOT listed under ${where}?`;
       out.push({
         type: 'multiple_choice', badge: 'Multiple Choice • List', question: notStem,
         options: shuffle([outsider, ...membersShown], notStem, seed), answer: outsider,
@@ -80,7 +87,7 @@
       if (outsiders.length >= 3) {
         const member = shuffle(asked.items, `${asked.card.front}|in`, seed)[0];
         const wrong = shuffle(outsiders, `${asked.card.front}|outs`, seed).slice(0, 3);
-        const inStem = `Which of these is listed under ${where}?`;
+        const inStem = `Which item is listed under ${where}?`;
         out.push({
           type: 'multiple_choice', badge: 'Multiple Choice • List', question: inStem,
           options: shuffle([member, ...wrong], inStem, seed), answer: member,

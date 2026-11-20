@@ -108,7 +108,7 @@
       const marginRows = [];
       const labels = lb ? lb.alignMarginLabels(page.lines || []) : { byMain: new Map(), used: new Set() };
       // Book tables: rows of aligned cells on one baseline each (table-grid.js); emitted where the first row stood
-      const pageTables = tg ? tg.fromSegments((page.lines || []).filter((l) => !l.isMargin && !l.isCode && !l.kind), pageNumber) : [];
+      const pageTables = tg ? (tg.fromPageLines ? tg.fromPageLines(page.lines || [], pageNumber) : tg.fromSegments((page.lines || []).filter((l) => !l.isMargin && !l.isCode && (!l.kind || (l.kind === 'folio' && l.segments && l.segments.length >= 2))), pageNumber)) : [];
       const tableOf = new Map(pageTables.flatMap((t) => [...t.lines].map((l) => [l, t])));
       const emittedTables = new Set();
 

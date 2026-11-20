@@ -13,7 +13,7 @@
   'quiz-assembly', 'quiz-scope', 'quiz-engine', 'test-engine']
   .forEach((m) => require(`../src/nlp/${m}.js`));
 const S = globalThis.PDFStudy;
-const L = require('../tools/eval-quiz-third-lints.js');
+const L = require('../tools/eval-quiz-lints.js');
 
 let failures = 0;
 function check(name, ok, detail = '') {

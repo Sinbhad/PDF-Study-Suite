@@ -46,8 +46,8 @@
     return [lo * SCALE, hi === null ? null : hi * SCALE];
   }
 
-  // "Pastures should be rested 4 weeks": a recommended minimum stays sound when the number grows, so it is not moved.
-  const BOUND_RE = /\b(?:should|must|at\s+least|minimum|up\s+to|no\s+more\s+than|recommended|or\s+(?:more|longer|less))\b/i;
+  // "Pastures should be rested 4 weeks" or "changes in 6 hours": a minimum or onset-in-time window still holds when scaled up.
+  const BOUND_RE = /\b(?:should|must|at\s+least|minimum|up\s+to|no\s+more\s+than|recommended|within|or\s+(?:more|longer|less))\b|\b(?:changes?|rises?|begins?|starts?|appears?|occurs?|develops?|resolves?)\s+in\s+(?:~?\s*)?\d/i;
 
   function alterNumber(statement, text) {
     if (BOUND_RE.test(statement)) return null;

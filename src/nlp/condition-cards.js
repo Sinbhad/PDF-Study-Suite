@@ -53,7 +53,8 @@
       const before = i > 0 ? plain(sentences[i - 1]) : '';
       if (named && before && words(before) <= MAX_WORDS && !LEANS_RE.test(before) && !PRONOUN_START_RE.test(before) && !/[?:]\s*$/.test(before)) {
         const term = named[1].trim();
-        add(term, term.charAt(0).toUpperCase() + term.slice(1), before.replace(/\bthis\s+(table|relation|structure)\b/gi, 'the $1'), `${before} ${plain(raw)}`);
+        const general = before.replace(/\bthis\s+(table|relation|structure)\b/gi, 'the $1').replace(/:\s+a\s+[a-z-]{3,}\s+and\s+a\s+[a-z-]{3,}\.?$/i, '.');
+        add(term, term.charAt(0).toUpperCase() + term.slice(1), general, `${before} ${plain(raw)}`);
       }
     });
     return out;

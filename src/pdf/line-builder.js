@@ -36,6 +36,11 @@
       }
       const raw = item.__recovered ? item.str : dec ? dec.decode(item.str) : item.str;
       let text = raw.replace(/[\u0000-\u001f\u007f-\u009f\uFFFD]/g, ' ').replace(/\s+/g, ' ');
+      // Wingdings/Symbol bullet glyphs sit in PUA U+F021..U+F0FF; when non-math decoding drops one to "",
+      // preserve a standard bullet marker so the item keeps its bullet status and glyph x0.
+      const recoveredBullet = !text.trim() && !item.__recovered && /^[\uF021-\uF0FF]$/.test(item.str.trim()) &&
+        !(dec && dec.fam && dec.fam.isMath) && (item.width === undefined || item.width > 0);
+      if (recoveredBullet) text = '•';
       if (!text.trim()) continue;
 
       const tr = item.transform || [1, 0, 0, 1, 0, 0];
@@ -50,7 +55,7 @@
       rawSpans.push({
         text, x0, x1: x0 + width, topY: baseY - fontSize, bottomY: baseY, baselineY: baseY, fontSize,
         isBold: font.isBold, isLarge: fontSize >= 13.5, isItalic: font.isItalic, isCode: Boolean(font.isCode),
-        isMath: font.isMath || Boolean(dec && dec.fam.isMath),
+        isMath: !recoveredBullet && (font.isMath || Boolean(dec && dec.fam.isMath)),
       });
     }
 

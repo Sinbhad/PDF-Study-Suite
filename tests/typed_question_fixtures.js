@@ -71,6 +71,8 @@ check('table: a singular value beside lists is asked', hostsQs.includes('Fluke g
 check('table: a row named by a fragment ("beta (Taeniidae)") is not asked', !hostsQs.some((x) => /^beta/.test(x)), hostsQs.join(' / '));
 const bones = asked(grid('bones', ['Site', 'Tissue'], [['Shaft', 'Compact bone'], ['End', 'Spongy bone'], ['Joint', 'Hyaline cartilage']]));
 check('table: a shared head leaves the modifier to ask ("Compact bone")', bones.includes('Shaft|Compact bone'), bones.join(' / '));
+const assays = asked(grid('assays', ['Assay', 'Target'], [['PCR', 'Bacterial DNA'], ['IHC', 'Bacterial antigen'], ['Culture', 'Bacteria'], ['Serology', 'Antibodies']]));
+check('table: non-numeric assay/target cells are not asked typed', assays.length === 0, assays.join(' / '));
 
 // "Defined" questions: a generic head the definition does not name is the student's to choose.
 check('generic head: a head the scope uses for many things', shape.genericHead('limit error', 'A limit error stops the run. A parse error and a type error do not. Errors are reported.') === 'error' &&
@@ -94,6 +96,13 @@ check('number: one value blanked in its own line', numbers.some((q) => /Survives
 check('number: an approximate value is not asked', !numbers.some((q) => /soil/.test(q.question)), show(numbers));
 const goats = numbers.find((q) => q.answer === '4-5 mg/kg');
 check('number: the checker takes the range in other forms', goats && tc.check(goats, '4 to 5 mg per kg').correct && !tc.check(goats, '4-5 g/kg').correct);
+const pctCard = { front: 'Pump Reliability — Winter', back: '• 25% of pumps stall in winter', sourceKind: 'list', page: 6 };
+const rateCard = { front: 'Condition Z — Treatment', back: '• Patients receive 0.5-1.0 mg/kg once daily', sourceKind: 'list', page: 7 };
+const rateDoseCard = { front: 'Condition Z (doses)', back: '• Patients receive 0.5-1.0 mg/kg once daily', sourceKind: 'list', page: 7 };
+check('number: a bare percentage is not asked as a typed blank', tv.numbers([pctCard], { specific: () => true }).length === 0);
+check('number: a compound rate under a non-quantity front is not asked as a typed blank', tv.numbers([rateCard], { specific: () => true }).length === 0);
+check('number: a compound rate under a quantity front is still asked', tv.numbers([rateDoseCard], { specific: () => true }).some((q) => q.answer === '0.5-1.0 mg/kg'));
+check('number: a blanked range asks for a missing range with its unit', numbers.some((q) => /type the missing range with its unit/.test(q.question) && q.answer === '4-6 weeks'));
 
 // ---------------------------------------------------------------- worked answers, computed and checked independently
 const rule = (kind, extra) => ({ front: `${kind} rule`, back: 'rule', page: 9, rule: { kind, page: 9, statement: 'The rule.', ...extra } });
@@ -167,6 +176,26 @@ const state = ds.empty();
 ds.addOverride(state, { questionKey: 'q1', source: 's', answer: 'Vat', typed: 'cask' }, 1);
 ds.addOverride(state, { questionKey: 'q1', source: 's', answer: 'Vat', typed: 'barrel' }, 2);
 check('stored: "I was right" is kept once per question for review', state.overrides.length === 1 && state.overrides[0].typed === 'barrel' && ds.upgrade({}).overrides.length === 0);
+
+// Guard: blanked-number typed questions carry only their matched line as `source`, not sibling bullets.
+const numQ = tv.numbers([{
+  front: 'Turbine — Maintenance',
+  back: '• Rated for high-load industrial plants\n• Inspection threshold BEFORE 8wks continuous duty\n• Covers both steam and gas loops.',
+  category: 'Slide Fact', kind: 'concept', sourceKind: 'label', subject: 'Turbine', pageNumber: 9,
+}]);
+check('typed-values: blanked-number source stays scoped to its line, not sibling bullets',
+  numQ.length === 1 && numQ[0].answer === '8wks' &&
+  numQ[0].source === 'Turbine — Maintenance: Inspection threshold BEFORE 8wks continuous duty' &&
+  !/steam and gas/.test(numQ[0].source), JSON.stringify(numQ));
+
+// Guard: non-definitional action clauses are refused as standalone "Which term is defined as" prompts.
+const actionPrompt = S.quizEngine.generateQuiz(
+  'Control Circuitry\n\nFlip-flops are the storage elements used in the simplest form of clocked sequential circuits.\n\n**Trigger**: A change in value on the control input allows the state of a latch in a flip-flop to switch.',
+  { maxQuestions: 10, mode: 'book' }
+);
+check('typed-questions: action clause without noun genus is refused as standalone defined prompt',
+  !actionPrompt.some((q) => q.type === 'typed' && /Which term is defined as/i.test(q.question) && q.answer === 'trigger'),
+  show(actionPrompt));
 
 console.log(`typed questions: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

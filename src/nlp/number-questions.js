@@ -15,12 +15,16 @@
   const shuffle = (...a) => dep('stemDistractors', './stem-distractors.js').deterministicShuffle(...a);
   const altered = () => dep('alteredStatements', './altered-statements.js');
   const qf = () => dep('quizFacts', './quiz-facts.js');
+  const sn = () => dep('stemNoise', './stem-noise.js');
+  const subjects = () => dep('quizSubjects', './quiz-subjects.js');
 
   const MIN_DISTRACTORS = 3;
   const MAX_RATIO = 5; // a value more than five times larger or smaller than the answer is easy to rule out
   const MIN_PERCENT_GAP = 10; // percentages this close are a matter of rounding, not a different fact
   const MIN_SHARE_APART = 0.25;
   const BLANK = '________';
+  const VERB_FRAGMENT_RE = /^(?:can|could|may|might|will|would|shall|should|must|is|are|was|were|has|have|had|does|do|did)\b/i;
+  const STUDY_ANECDOTE_RE = /\b(?:in\s+all\s+cases|in\s+most\s+cases|in\s+some\s+cases|in\s+this\s+study|in\s+one\s+study)\b/i;
   // "weeks", "wk", "week" are one unit; a dose per kg is not a mass.
   const UNIT_KEYS = [
     [/^(?:s|secs?|seconds?)$/, 'second'], [/^(?:mins?|minutes?)$/, 'minute'], [/^(?:h|hrs?|hours?)$/, 'hour'],
@@ -68,11 +72,16 @@
       const back = String(c.back || '');
       const front = String(c.front || '').trim();
       const source = `${front}: ${back.replace(/\s*\n\s*/g, ' ')}`;
+      const parts = front.split(/\s+[—–]\s+/);
+      let subject = c.subject || front;
+      if (parts.length >= 2 && subjects() && subjects().isGenericHeading(c.subject || parts[0], {}) && !subjects().isGenericHeading(parts[parts.length - 1], {})) {
+        subject = parts[parts.length - 1].trim();
+      }
       for (const raw of back.split('\n')) {
         const text = raw.replace(/^•\s*/, '').trim();
         // A list card's front is its own question ("What are the key points of ...?"): the subject names the line.
         const about = /\?$/.test(front) ? `this line about "${c.subject || c.topic}"` : `this line under "${front}"`;
-        if (text) out.push({ text, about, group: norm(c.subject || front), subject: c.subject || front,
+        if (text) out.push({ text, about, group: norm(subject), subject,
           explanation: `${front}: ${text}`, source, factKey: `n|${norm(source)}`, category: c.category, page: c.pageNumber || c.page || null });
       }
     }
@@ -93,6 +102,7 @@
       const q = altered().soleQuantity(it.text);
       // ("This is still not 100%, but ..." is a figure of speech, not a value to learn.)
       if (!q || asked.has(norm(it.text)) || (q.unit === '%' && (q.lo === 100 || q.lo === 0) && q.hi === null)) continue;
+      if (VERB_FRAGMENT_RE.test(it.text) || STUDY_ANECDOTE_RE.test(it.text) || (sn() && (sn().hasUnresolvedReference(it.text) || sn().hasExtractionDebris(it.text)))) continue;
       asked.add(norm(it.text));
       const own = new Set(qf().contentStems(it.text.replace(q.text, ' ')));
       const said = norm((linesOf.get(it.group) || []).filter((s) => s !== it.text && qf().contentStems(s).some((w) => own.has(w))).join(' '));

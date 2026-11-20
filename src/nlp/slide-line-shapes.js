@@ -35,9 +35,9 @@
     'absorption|metabolism|elimination|excretion|pharmacokinetics|pharmacodynamics|anesthesia|anaesthesia|technique|procedure|' +
     'disease|condition|syndrome|organism|pathogen|drug|answer|question';
   const GENERIC_LABEL_RE = new RegExp(`^(?:${GENERIC_LABELS})\\b`, 'i');
-  // Positions, sides, stages and grades: "Hind: lateral claw > medial" only means something under its heading.
+  // Positions, sides, stages, grades, and bare anatomical/clinical qualifiers: "Hind: ..." or "Venous: ..." only mean something under their heading.
   const POSITION_LABEL_RE =
-    /^(?:front|fore|hind|rear|left|right|top|bottom|upper|lower|inner|outer|medial|lateral|dorsal|ventral|cranial|caudal|proximal|distal|anterior|posterior|early|late|acute|chronic|mild|moderate|severe|before|after|male|female|adults?|juveniles?|young|old|yes|no|other|both)$/i;
+    /^(?:front|fore|hind|rear|left|right|top|bottom|upper|lower|inner|outer|medial|lateral|dorsal|ventral|cranial|caudal|proximal|distal|anterior|posterior|early|late|acute|chronic|mild|moderate|severe|before|after|male|female|adults?|juveniles?|young|old|yes|no|other|both|venous|arterial|capillary|focal|diffuse|local|systemic|central|peripheral|primary|secondary|tertiary|wet|dry|superficial|deep|internal|external|intrinsic|extrinsic|gross|microscopic|histologic|clinical|subclinical|typical|atypical|ischemic|hemorrhagic|motor|sensory|benign|malignant)$/i;
   // Figure captions and their pointers: "Right: intranuclear inclusions (arrow)".
   const CAPTION_RE = /^(?:right|left|top|bottom|above|below|center|centre|middle|inset|image|photo|figure|fig|arrows?|arrowheads?|source|credit|courtesy)\b/i;
   const CAPTION_NOTE_RE = /\((?:arrows?|arrowheads?|asterisks?|inset|circled?|star)\)|\b(?:photo|image|picture)\s+(?:by|credit)\b|\bcourtesy\s+of\b/i;

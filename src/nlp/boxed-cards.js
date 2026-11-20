@@ -65,7 +65,7 @@
     const sentences = dep('tokenizer', './tokenizer.js').splitSentences(tokens.slice(opener).join(' '))
       // "you must use the new operator: <listing>" ends where its listing was.
       .map((x) => plain(x).replace(/:\s+[A-Z].*$/, '.'))
-      .filter((x) => RULE_WORD_RE.test(x) && !TOOLING_RE.test(x) && !/[{};]|\/\//.test(x) && !sc.unresolvedBack(x) && x.split(/\s+/).length >= 6);
+      .filter((x) => RULE_WORD_RE.test(x) && !TOOLING_RE.test(x) && (!/^Programming\s+Tip/i.test(kind) || !EXAMPLE_PROP_RE.test(x)) && !/[{};]|\/\//.test(x) && !sc.unresolvedBack(x) && x.split(/\s+/).length >= 6);
     if (!sentences.length || TOOLING_RE.test(name)) return null;
     // What goes wrong, then what to write instead: a sentence that names the error or the failure, and one that
     // states the rule (must / never / always / instead). "Instead, the program will ..." continues the sentence
@@ -86,6 +86,7 @@
   const RULE_WORD_RE = /\b(?:must|never|always|do\s+not|don['’]t|should|instead|is\s+(?:an?\s+)?error|will\s+fail|fails|no\s+compiler\s+error|good\s+idea|avoid|common\s+error)\b/i;
   // Sentences about the working environment, not the subject being taught.
   const TOOLING_RE = /\b(?:editors?|IDEs?|keyboard|tab\s+key|space\s+bar|cursor|mouse|menu|toolbar|shortcut|printer|screen|scrolling|tabs?)\b/i;
+  const EXAMPLE_PROP_RE = /\b(?:account\s+numbers?|balances?|customers?|students?|employees?|cookies?|pizzas?)\b/i;
   const TITLE_SMALL_WORD_RE = /^(?:a|an|the|and|or|of|to|in|for|on|at|by|with|into|from|vs\.?)$/;
   // A sentence that names what goes wrong as an error ("A common error is to ...", "... is a mistake"); a sentence
   // that only reports a failure ("Even though both strings ..., the comparison fails") leans on the box's example.

@@ -197,20 +197,60 @@
       children: joinRuns(nestGrandchildren(u.children), (c) => c.text, (t) => ({ text: t, kids: [] })).map(childOf),
     }));
     units = joinRuns(units, (u) => u.text, (t) => ({ text: t, children: [] }));
-    const fresh = units.filter((u) => !seen.has(norm(u.text)));
+    const allTexts = units.flatMap((u) => [u.text, ...u.children.map(childText)]).map(norm);
+    // Drop broken line-wrap tails ("The caudal cerebellum herniates through the"), caption-glued lowercase repeats,
+    // repeated diagram tokens ("Protrusion Protrusion"), and tiny un-childed lowercase exclamations ("with your bare hands!").
+    const cutStub = (u) => {
+      const p = plain(u.text);
+      const np = norm(p);
+      if (/^(\w+)\s+\1$/i.test(p)) return true;
+      if (/^[a-z]/.test(p) && !u.children.length) {
+        if (CUT_TAIL_RE.test(p) && allTexts.some((t) => t.length > np.length + 6 && t.includes(np))) return true;
+        if (np.length >= 28 && allTexts.some((t) => t !== np && t.length < np.length && np.endsWith(t) && t.length >= 20)) return true;
+        if (wordCount(p) <= 4 && /!$/.test(p)) return true;
+        if (wordCount(p) <= 2 && allTexts.some((t) => t !== np && np.split(' ').every((w) => w.length >= 4 && t.includes(w)))) return true;
+      }
+      return false;
+    };
+    const fresh = units.filter((u) => !seen.has(norm(u.text)) && !cutStub(u));
     const fits = (u) => wordCount(u.text) <= MAX_BULLET_WORDS && !(CUT_TAIL_RE.test(plain(u.text)) && !u.children.length);
     // A numbered list of steps ("1. ..." to "8. ...") is shown whole: holding its end back cuts the sequence
     const steps = fresh.filter((u) => /^\d{1,2}[.)]\s/.test(plain(u.text))).length;
     const cap = steps >= 3 ? Math.max(MAX_UNITS, Math.min(steps, MAX_STEPS)) : MAX_UNITS;
     const show = new Set(fresh.filter(fits).slice(0, cap));
-    const shape = (u) => {
+    // Format outline list items cleanly: collapse empty trailing-colon child labels ("Albendazole:", "ruminants:"),
+    // fold short parent/epithet pairs (e.g. "Genomospecies" + 2 species words), and capitalize standalone bullets
+    // without touching bold markdown openers or binomial species epithets.
+    const capBullet = (s) => String(s || '').replace(/^(\*\*)?([a-z])/, (_, b, c) => `${b || ''}${c.toUpperCase()}`);
+    const mergeColonChild = (c) => {
+      if (typeof c === 'string') return capBullet(c.replace(/,$/, ''));
+      if (c.children && c.children.length && /:\s*$/.test(plain(c.text))) {
+        return capBullet(`${plain(c.text)} ${c.children.map((x) => plain(x)).join('; ')}`);
+      }
+      return { ...c, text: capBullet(c.text), children: (c.children || []).map((x) => capBullet(String(x || ''))) };
+    };
+    const foldShortEpithets = (u) => {
+      if (u.children.length >= 2 && u.children.every((c) => typeof c === 'string' && wordCount(c) <= 2 && /^[a-z]/.test(plain(c)))) {
+        const label = plain(u.text).replace(/:\s*$/, '');
+        if (/^[A-Z“"']/.test(label) && wordCount(label) <= 2) {
+          return { ...u, text: `${u.text.replace(/:\s*$/, '')}: ${u.children.map(plain).join(', ')}`, children: [] };
+        }
+      }
+      return u;
+    };
+    const shape = (rawUnit) => {
+      const u = foldShortEpithets(rawUnit);
       seen.add(norm(u.text));
-      const kids = u.children.filter((c) => !seen.has(norm(childText(c))));
-      kids.forEach((c) => seen.add(norm(childText(c))));
-      return { text: u.text, children: kids.slice(0, MAX_CHILDREN), more: kids.slice(MAX_CHILDREN) };
+      const rawKids = u.children.map(mergeColonChild).filter((c) => !seen.has(norm(childText(c))));
+      rawKids.forEach((c) => seen.add(norm(childText(c))));
+      return { text: u.text.replace(/,$/, ''), children: rawKids.slice(0, MAX_CHILDREN), more: rawKids.slice(MAX_CHILDREN) };
+    };
+    const brokenScrap = (u) => {
+      const p = plain(u.text);
+      return !u.children.length && (CUT_TAIL_RE.test(p) || (/^[a-z]/.test(p) && wordCount(p) <= 5));
     };
     const shown = fresh.filter((u) => show.has(u)).map(shape);
-    const more = fresh.filter((u) => !show.has(u)).map(shape);
+    const more = fresh.filter((u) => !show.has(u) && !brokenScrap(u) && !/^\*\*(?:This is the|clinical signs appear!)\*\*|\(\d+$/.test(plain(u.text))).map(shape);
     return { shown, more };
   }
 
@@ -239,8 +279,13 @@
     return { ...table, rows: table.rows.map((r) => r.map(strip)) };
   }
 
-  function slideEntry(slide, raw, seen, furniture = new Set()) {
-    const table = cleanTable(tableOf(raw, slide), furniture);
+  function slideEntry(slide, raw, seen, furniture = new Set(), seenTables = new Set()) {
+    let table = cleanTable(tableOf(raw, slide), furniture);
+    if (table && table.rows && table.rows.length >= 2) {
+      const sig = table.rows.map((r) => r.map(norm).join('|')).join('||');
+      if (seenTables.has(sig)) table = null;
+      else seenTables.add(sig);
+    }
     const read = readSlide(raw, slide);
     const picked = table && table.fromBullets ? { shown: [], more: [] } : pickBullets(raw, slide, seen, read, furniture);
     // A slide titled with a whole statement shows that statement as its first point
@@ -248,7 +293,8 @@
     const qa = (slide.qa || []).filter((q) => q.question && q.answer).map((q) => ({ question: q.question, answer: q.answer }));
     const pages = Array.isArray(raw && raw.pages) && raw.pages.length ? raw.pages : [slide.slideNumber];
     const held = picked.more.reduce((n, b) => n + 1 + b.children.length + b.more.length, 0) + picked.shown.reduce((n, b) => n + b.more.length, 0);
-    return { page: Math.max(...pages.filter(Number.isFinite), slide.slideNumber), slide: slide.slideNumber, title: slide.statement ? slide.title : read.title, bullets: picked.shown, more: picked.more, held, table, qa };
+    const entryTitle = slide.statement ? slide.title : (slide.displayTitle || read.title || slide.title);
+    return { page: Math.max(...pages.filter(Number.isFinite), slide.slideNumber), slide: slide.slideNumber, title: entryTitle, bullets: picked.shown, more: picked.more, held, table, qa };
   }
 
   const hasContent = (e) => e.bullets.length || e.more.length || e.table || e.qa.length;
@@ -331,6 +377,10 @@
         out.title = head !== plain(out.title) && wordCount(head) <= STATEMENT_HEAD_WORDS ? head : previous || head;
         if (out.kind === 'section') out.kind = 'content';
         if (!(out.bullets || []).length) out.bullets = [out.statement];
+      } else if (s.aspect && s.subject && !norm(out.title).includes(norm(s.subject))) {
+        // Preserve base title for grouping under parent section while tagging entry display title with parent drug/topic.
+        const subj = s.subject.replace(/^[a-z]/, (c) => c.toUpperCase());
+        out.displayTitle = `${subj} — ${out.title}`;
       }
       if (out.kind !== 'title') previous = out.title;
       return out;
@@ -338,12 +388,13 @@
     const grouped = dep('deckSections', './deck-sections.js').group(titled);
     const covers = coversOf(grouped.covers, rawBy);
     const furniture = furnitureOf(rawSlides);
+    const seenTables = new Set();
     const sections = grouped.sections.map((sec) => ({
       title: sec.title,
       page: sec.page,
       topics: sec.topics.map((tp) => {
         const seen = new Set(); // a bullet repeated on a follow-up slide is listed once per topic
-        const slides = tp.slides.map((s) => slideEntry(s, rawBy.get(s.slideNumber), seen, furniture)).filter(hasContent);
+        const slides = tp.slides.map((s) => slideEntry(s, rawBy.get(s.slideNumber), seen, furniture, seenTables)).filter(hasContent);
         return { title: tp.title, page: slides.length ? slides[0].page : tp.slides[0].slideNumber, slides };
       }).filter((tp) => tp.slides.length),
     })).filter((sec) => sec.topics.length);

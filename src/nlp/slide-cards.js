@@ -13,6 +13,8 @@
   // Per-slide defaults for card-fields.js, carried on each card until the deck is finished.
   const FIELDS = Symbol('cardFieldDefaults');
   const HOMEWORK_SLIDE_RE = /\bProblem\s+\d+\.\s*\(\d+\s*Points?\)|^Homework\s*#?\d/i;
+  const ASSAY_HEADER_RE = /^(?:assay|test|method|diagnostic|procedure|technique)s?$/i;
+  const GENERIC_MODALITY_RE = /^(?:serolog\w*|pcr|rt-pcr|qpcr|ihc|immuno\w*|culture|elisa|ifa(?:\s*\/\s*elisa)?|western\s+blot|mat|microscopy|histopath\w*)$/i;
   const titleKey = (t) => t.toLowerCase().replace(/\(cont(?:'d|inued)?\.?\)|\b(?:part|step|frame)\s*\d+\b|[\d#:]+/g, '').replace(/\s+/g, ' ').trim();
   const dotList = (items, max) => items.slice(0, max).map((b) => `• ${b}`).join('\n');
 
@@ -53,10 +55,29 @@
     const { slides: norm } = model.normalize(slides);
     // Row names two or more of the deck's tables list ("IHC" for two diseases): their cards name their table's subject.
     const tableCards = dep('tableCards', './table-cards.js');
+    const spellKey = (s) => String(s || '').toLowerCase().replace(/([a-z])\1+/g, '$1').replace(/rh/g, 'r').trim();
     const rowCount = new Map();
-    norm.filter((s) => s.kind === 'table' && s.table)
-      .forEach((s) => new Set(tableCards.rowNames(s.table)).forEach((n) => rowCount.set(n, (rowCount.get(n) || 0) + 1)));
-    const ambiguous = new Set([...rowCount].filter(([, n]) => n > 1).map(([name]) => name));
+    const spellMap = new Map();
+    const tableSlides = norm.filter((s) => s.kind === 'table' && s.table);
+    tableSlides.forEach((s) => {
+      new Set(tableCards.rowNames(s.table)).forEach((n) => {
+        rowCount.set(n, (rowCount.get(n) || 0) + 1);
+        const sk = spellKey(n);
+        spellMap.set(sk, (spellMap.get(sk) || new Set()).add(n));
+      });
+    });
+    const ambiguous = new Set([...rowCount].filter(([name, n]) => n > 1 || (spellMap.get(spellKey(name)) || new Set()).size > 1).map(([name]) => name));
+    const assayTables = tableSlides.filter((s) => {
+      const shaped = tableCards.shape(s.table);
+      return shaped && shaped.header && ASSAY_HEADER_RE.test(String(shaped.header[0] || '').trim());
+    });
+    if (assayTables.length >= 2) {
+      assayTables.forEach((s) => {
+        tableCards.rowNames(s.table).forEach((n) => {
+          if (GENERIC_MODALITY_RE.test(n.trim())) ambiguous.add(n);
+        });
+      });
+    }
     gates = { ...gates, ambiguous };
 
     for (const slide of norm) {
@@ -150,6 +171,9 @@ ${slide.prompt}` : title, back: dotList(steps, 6), ...ctx, category: 'Worked Exa
       const earlier = overviewsByTitle.get(tKey) || [];
       const said = new Set(earlier.flatMap((c) => c.back.split('\n')));
       if (overview.back.split('\n').some((line) => said.has(line))) continue;
+      // An overview slice that depends on an unresolved definite referent from a prior slide ("supplied by the artery")
+      // cannot stand alone without the earlier slide's noun phrase.
+      if (earlier.length && /\bthe\s+(?:artery|vein|nerve|vessel|lesion|parasite|virus|bacterium|fungus)\b(?!\s+(?:of|in|on|at|that|which|supplying)\b)/i.test(overview.back)) continue;
       const front = earlier.length ? overview.front.replace(/\??$/, (end) => ` (part ${earlier.length + 1})${end}`) : overview.front;
       const card = { ...overview, front, ...ctx, context: `Slide ${page}` };
       overviewsByTitle.set(tKey, [...earlier, card]);
@@ -168,8 +192,17 @@ ${slide.prompt}` : title, back: dotList(steps, 6), ...ctx, category: 'Worked Exa
     /** Cards read off the slide layout (slide-structure-cards.js): labels, heading groups, arrows, table rows. */
     function addStructureCards(slide, ctx) {
       let added = 0;
-      for (const card of structure.build(slide, { ...gates, isNoise: isNoiseTitle })) {
-        const key = card.category === 'Slide Term' ? dm.termKey(card.front) : `fact:${card.front.toLowerCase()}`;
+      const built = structure.build(slide, { ...gates, isNoise: isNoiseTitle });
+      const normKey = (s) => String(s || '').replace(/\*\*|__/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const spellFront = (f) => String(f || '').toLowerCase().replace(/([a-z])\1+/g, '$1').replace(/rh/g, 'r').trim();
+      const arrowTexts = new Set(
+        built.filter((c) => c.category === 'Cause and Effect').map((c) => normKey(`${c.front.replace(/^[^:]+:\s*/, '').replace(/\s*→\s*\?$/, '')} ${c.back}`))
+      );
+      for (const card of built) {
+        if (card.category === 'Slide Fact' && arrowTexts.has(normKey(card.back))) continue;
+        const key = card.sourceKind === 'table'
+          ? `tbl:${spellFront(card.front)}`
+          : card.category === 'Slide Term' ? dm.termKey(card.front) : `fact:${card.front.toLowerCase()}`;
         // A layout card's back is a fragment or a list: only a pointer at the page ("as shown") disqualifies it.
         if (selfContained.reason(card, { list: true }) || !take(key)) continue;
         groups.concept.push({ ...card, ...ctx });

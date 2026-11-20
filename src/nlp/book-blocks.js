@@ -171,10 +171,11 @@
       return { ...base, category: titleCase(cat || 'Theorem'), label, title: '', body: trimBody(body), flag: flagOf(body) };
     }
     if (kind === 'key-concept' || (!kind && /^key\s*(?:concept|point|idea)/i.test(cat))) {
-      // A margin note about reading the book ("unless you read this paragraph carefully") is not a concept.
+      // A margin note about reading the book ("unless you read this paragraph carefully") or a margin joke is not a concept.
       const st = dep('summaryStatements', './summary-statements.js');
       const tok = dep('tokenizer', './tokenizer.js');
       if (st && tok && tok.splitSentences(body).some((s) => st.rejectReason(s) === 'meta')) return null;
+      if (/\b(?:we|authors?)\s+(?:consider|joke|disagree)\b|\bquite\s+natural\b/i.test(body)) return null;
       return body ?{ ...base, category: 'Key concept', label: 'Key concept', title: '', body: trimBody(body), flag: flagOf(body) } : null;
     }
     if (kind === 'sidebar' && PITFALL_RE.test(cat || block.title || '')) {

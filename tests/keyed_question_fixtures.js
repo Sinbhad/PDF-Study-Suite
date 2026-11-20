@@ -49,6 +49,11 @@ check('array-rules: sum, max, search, ordered removal and swap read from their l
 check('array-rules: a loop that only prints is not read as an algorithm',
   ar.read({ text: '**2.1 Printing**\n\n```\nfor (int k = 0; k < n; k++)\n{\n  System.out.print(k);\n}\n```', lines: null, startPage: 1 }).length === 0);
 const arrayCards = ar.cards(arrayRules).map((c) => ({ ...c, page: c.page || 80 }));
+const byAlgo = Object.fromEntries(arrayCards.map((c) => [c.rule.algorithm, c]));
+check('array-rules: sum, max and search cards are conceptual and self-contained',
+  byAlgo.sum && !/sum loop leave/i.test(byAlgo.sum.front) &&
+  byAlgo.max && !/the section/i.test(byAlgo.max.front) &&
+  byAlgo.search && !/\bpos\b/.test(byAlgo.search.front));
 const traced = wq.build(arrayCards, { seed: 0, variant: 0 });
 const literal = (q) => (q.question.match(/\{\s*([\d,\s]+)\}/) || [])[1].split(',').map(Number);
 let tracedOk = traced.length >= 5;
@@ -92,9 +97,16 @@ let branchOk = true;
 for (const variant of [0, 1]) {
   for (const q of wq.build(branchCards, { seed: 3, variant })) {
     let want;
-    if (/sequence/.test(q.question)) {
-      const d = Number(q.question.match(/depth`? is (\d+(?:\.\d+)?)/)[1]);
-      want = d >= 9.5 ? '"Deep"' : d >= 6.0 ? '"Medium"' : d >= 2.5 ? '"Shallow"' : '"Puddle"';
+    if (/else if/.test(q.question)) {
+      const targetVal = (q.question.match(/set `?label`? to "([^"]+)"/) || [])[1];
+      const evalDepth = (d) => (d >= 9.5 ? 'Deep' : d >= 6.0 ? 'Medium' : d >= 2.5 ? 'Shallow' : 'Puddle');
+      const hits = q.options.filter((o) => evalDepth(Number(o)) === targetVal);
+      const hasEmbeddedChain = /\bif\s*\(depth\s*>=/.test(q.question) && /else\s*\{/.test(q.question);
+      if (!targetVal || !hasEmbeddedChain || hits.length !== 1 || hits[0] !== q.answer || new Set(q.options).size !== 4) {
+        branchOk = false;
+        console.log(`   branch: ${q.question} => ${q.answer} (hits ${hits.join(',')})`);
+      }
+      continue;
     } else {
       const level = Number(q.question.match(/level`? is (\d+)/)[1]);
       want = String(level > 20 ? level - 2 : level);
@@ -121,8 +133,8 @@ const gateCards = gr.cards(gateRule).map((c) => ({ ...c, page: 12 }));
 let gatesOk = true;
 for (const variant of [0, 1]) {
   for (const q of wq.build(gateCards, { seed: 1, variant })) {
-    const [, x, y, want] = q.question.match(/X = (\d) and Y = (\d), which gate outputs (\d)/).map(Number);
-    const hits = q.options.filter((o) => truth[o](x, y) === want);
+    const [, x, y, want] = q.question.match(/X = (\d)`? and `?Y = (\d)`?, which gate outputs (\d)/).map(Number);
+    const hits = q.options.filter((o) => truth[o.replace(/\s+gate$/i, '')](x, y) === want);
     if (hits.length !== 1 || hits[0] !== q.answer) {
       gatesOk = false;
       console.log(`   gates: ${q.question} => ${q.answer} (${q.options.join(', ')})`);
@@ -146,6 +158,13 @@ const listed = [...listCards, { ...listCard('Daily', ['Test nitrate', 'Feed once
 check('list-questions: an outsider the scope also lists under the asked label is never offered',
   lists.candidates(listed, { seed: 0 }).every((q) => !/NOT/.test(q.question) || q.answer !== 'Test nitrate'));
 check('list-questions: a list under three members is not asked', lists.candidates([listCard('Daily', ['A one', 'B two', 'C three']), listCard('Weekly', ['D four', 'E five'])], {}).length === 0);
+const genericPreps = [
+  { front: 'Supportive therapy — At the dock', back: '• Shade\n• Fresh water\n• Cool bath\n• Rest', sourceKind: 'label', subject: 'Supportive therapy', pageNumber: 4 },
+  { front: 'Supportive therapy — In the tank', back: '• Aeration\n• Salt dip', sourceKind: 'label', subject: 'Supportive therapy', pageNumber: 4 },
+];
+check('list-questions: generic heading with prepositional labels is not asked', lists.candidates(genericPreps, { seed: 0 }).length === 0);
+const notedItems = lists.itemsOf({ back: '• Cold rinse *swelling*\n• Warm bath' });
+check('list-questions: inline asterisk notes format cleanly in parentheses', notedItems[0] === 'Cold rinse (swelling)', JSON.stringify(notedItems));
 
 // 4. Numbers: the same unit, no overlap, not within rounding, not said of the same thing about the subject.
 const numberScope = {
@@ -160,6 +179,17 @@ check('number-questions: fair() rejects overlap, another unit and near values', 
   !numbers.fair({ lo: 4, hi: 5, unit: 'days', text: '4-5 days' }, { lo: 2, hi: null, unit: 'weeks', text: '2 weeks' }) &&
   numbers.fair({ lo: 4, hi: 5, unit: 'days', text: '4-5 days' }, { lo: 12, hi: 14, unit: 'days', text: '12-14 days' }) &&
   !numbers.fair({ lo: 4, hi: 5, unit: 'days', text: '4-5 days' }, { lo: 12, hi: null, unit: 'days', text: '12 days' }));
+const fragScope = {
+  text: '12% recover slowly. 25% need care. 43% fail early. 78% survive.',
+  facts: [],
+  allCards: [
+    { front: 'Pond check — Culture', back: '• Can be absent in 43% of ponds but tests were positive in all cases', sourceKind: 'label', subject: 'Pond check', pageNumber: 2 },
+    { front: 'Prognosis — Mild case', back: '• 78% survived to release', sourceKind: 'label', subject: 'Prognosis', pageNumber: 8 },
+  ],
+};
+const fragNums = numbers.candidates(fragScope, { seed: 0 });
+check('number-questions: verb-initial study anecdote fragment is refused', !fragNums.some((q) => /absent/.test(q.question)), JSON.stringify(fragNums));
+check('number-questions: generic heading card takes the concrete label as subject', fragNums.some((q) => q.subject === 'Mild case' && q.answer === '78%'), JSON.stringify(fragNums));
 
 // 5. Table remarks: a related note ("non-specific" / "not serospecific") or one naming the row is never offered.
 const header = ['Test', 'Sample', 'Notes'];
@@ -172,6 +202,12 @@ const swab = nn.find((q) => /"Swab"/.test(q.question));
 check('table-notes: the asked row\'s note is the key', nn.length > 0 && nn.every((q) => rows.find((r) => q.question.includes(`"${r[0]}"`))[2] === q.answer), nn.map((q) => q.answer).join(' | '));
 check('table-notes: a related remark is not offered', !swab || !swab.options.includes('Not serospecific at all'), swab && swab.options.join(' | '));
 check('table-notes: a remark naming the asked row is not offered', nn.filter((q) => /"Probe"/.test(q.question)).every((q) => !q.options.includes('Confirms the Probe result')));
+const ellipRows = [['Swab', 'Gill', 'Also needs a rinse'], ['Culture', 'Kidney', 'Needs paired tests!'], ['Smear', 'Skin', 'Slow growth in the lab'],
+  ['Probe', 'Blood', 'Stains cell walls clearly'], ['Panel', 'Serum', 'Confirms the early read'], ['Filter', 'Fluid', 'Clears debris before spin']];
+const ellipNotes = notes.candidates(ellipRows.map((r) => ({ ...tableCard(r), table: { ...tableCard(r).table, key: 'ellip|sample|notes' } })), { seed: 0, isDeck: true });
+check('table-notes: elliptical "Also ..." and exclamation notes are excluded as answers and distractors',
+  ellipNotes.length > 0 && ellipNotes.every((q) => !/^(?:Also|Needs paired tests!)/.test(q.answer) && !q.options.some((o) => /^(?:Also|Needs paired tests!)/.test(o))),
+  ellipNotes.map((q) => `${q.answer} [${q.options.join(' | ')}]`).join('\n'));
 
 // 6. Recall prompts of labelled cards (the templates and the slide nesting are covered by recall_question_fixtures.js),
 // and the card gates behind them.
@@ -196,7 +232,19 @@ const fs = src('fact-statements.js');
 check('fact-statements: a shouted common word or an abstract noun is no subject-specific claim, an acronym is',
   !fs.isSpecificClaim('Worms DIE before they are passed.') && !fs.isSpecificClaim('Neuronal dysfunction leads to signs and death.') &&
   fs.isSpecificClaim('Detected by PCR in urine'));
+check('fact-statements: narrated worked-example text and iff clauses are not definitions',
+  !fs.isDefinitionText('When we delete one row, we lose two facts.') &&
+  !fs.isDefinitionText('If and only if it is balanced and full.'));
+check('fact-statements: hedged openers, referring verbs and generic outcome arrows are not point statements',
+  !fs.isPointStatement('Likely caused by stronger river currents.') &&
+  !fs.isPointStatement('Reflects entry path along the gill arch.') &&
+  !fs.isPointStatement('Cell dysfunction → clinical signs and death'));
 check('altered-statements: upper/lower is not swapped without a contrast line', altered.alter('History of upper airway disease in the herd', { text: '' }) === null);
+check('altered-statements: upper-bound and onset-in-time durations are not scaled',
+  altered.alter('Symptoms resolve within 6 hours', { text: '' }) === null &&
+  altered.alter('Enzyme level changes in 6 hours', { text: '' }) === null);
+const shedAltered = altered.alter('Fish shed spores for 6 weeks after recovery', { text: '' });
+check('altered-statements: non-bound duration still alters to a scaled value', shedAltered && shedAltered.to === '18 weeks', JSON.stringify(shedAltered));
 
 console.log(`keyed_question_fixtures: ${passed} passed, ${failed} failed`);
 if (failed) process.exitCode = 1;

@@ -83,7 +83,7 @@
     if (card.sourceKind === 'key-concept' && /…$/.test(front)) return st().pinsOneAnswer(front, back, scope) ? st().completionPrompt(front, back) : '';
     // A margin note's advice asked as a question ("When should you use the enhanced for loop?", advice-cards.js) or a
     // syntax box's template ("How do you construct an array?", syntax-cards.js): the card's own question.
-    if ((card.sourceKind === 'key-concept' || card.category === 'Syntax') && /^(?:When|How|What|Which|Why)\b[^?]{8,}\?$/.test(front)) return front;
+    if ((card.sourceKind === 'key-concept' || card.sourceKind === 'definition' || card.category === 'Syntax') && /^(?:When|How|What|Which|Why)\b[^?]{8,}\?$/.test(front)) return front;
     // A common-error or tip box (boxed-cards.js): its heading names the pitfall, the answer is the book's rule for it
     const box = card.category === 'Rule' && !card.rule ? front.match(RULE_BOX_FRONT_RE) : null;
     if (box) return `${box[1]} (${box[2]}): what goes wrong, and what should you do instead?`;
@@ -126,7 +126,7 @@
       // (A rule card's code and notation, "`if (floor > 13) ...`", is checked notation, not recognition debris.)
       const fits = (t) => (card.rule ? String(t).length <= MAX_ANSWER_CHARS : answerOk(t, scope));
       if (!prompt || !fits(answer) || !fits(prompt)) return null;
-      const subject = card.subject || card.front;
+      const subject = (asked && typeof asked === 'object' && asked.subject) || card.subject || card.front;
       // The cells of one table are one figure: a set asks a few of them, not all (quizAssembly, recallGroup).
       const group = card.table && card.table.key ? `table|${card.table.key}` : '';
       return question(prompt, answer, { subject, source, factKey: factKey || `r|${norm(source)}`, group, page: card.pageNumber || card.page || placeOf(back, front(card)) });

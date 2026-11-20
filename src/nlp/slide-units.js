@@ -52,11 +52,12 @@
     // A glyph that extraction wrapped in a math span with the words after it: "$•Cephalosporins$".
     let s = String(text || '').replace(/\$([^$]*[•▪◦‣●■◆➢➤►▶][^$]*)\$/g, '$1');
     // A symbol-font sub-bullet read as the letter "o": "o rumen is a reservoir ... o acid pH ...".
-    if ((s.match(/(?:^|\s)o\s+(?=[A-Za-z0-9(])/g) || []).length >= 2) s = s.replace(/(^|\s)o\s+(?=[A-Za-z0-9(])/g, '$1• ');
-    if (!GLYPH_RE.test(s)) return [{ text: s, glyph: false }];
+    const subBullet = (s.match(/(?:^|\s)o\s+(?=[A-Za-z0-9(])/g) || []).length >= 2;
+    if (subBullet) s = s.replace(/(^|\s)o\s+(?=[A-Za-z0-9(])/g, '$1• ');
+    if (!GLYPH_RE.test(s)) return [{ text: s, glyph: false, sub: false }];
     const leading = GLYPH_RE.test(plain(s).charAt(0)) || /^\*\*\s*[•▪◦‣●■◆➢➤►▶]/.test(s.trim());
     return s.split(GLYPH_SPLIT_RE)
-      .map((part, i) => ({ text: part.replace(/^\*\*\s*\*\*/, '').trim(), glyph: i > 0 || leading }))
+      .map((part, i) => ({ text: part.replace(/^\*\*\s*\*\*/, '').trim(), glyph: i > 0 || leading, sub: subBullet }))
       .filter((p) => plain(p.text));
   }
 
@@ -75,7 +76,9 @@
       }))
       : ((slide && slide.bullets) || []).map((t) => ({ text: tidy(t), level: 0, fontSize: 0, isAnnotation: false, column: null }));
     // A line whose bullet glyph the extractor stripped (nestedBullets[].bullet) is a glyph item all the same
-    return base.flatMap((n) => splitGlyphs(n.text).map((p, i) => ({ ...n, text: p.text, glyph: p.glyph || (i === 0 && n.bullet) })));
+    return base.flatMap((n) => splitGlyphs(n.text).map((p, i) => ({
+      ...n, text: p.text, level: n.level + (p.sub ? 1 : 0), glyph: p.glyph || (i === 0 && n.bullet),
+    })));
   }
 
   /**
@@ -117,7 +120,10 @@
     const cf = dep('contentFilter', './content-filter.js');
     const kind = cf ? cf.lineKind(t) : 'content';
     if (['url', 'citation', 'caption', 'signalment'].includes(kind)) return 'caption';
-    if (kind === 'quip' && wordCount(t) <= QUIP_MAX_WORDS) return 'quip';
+    if (kind === 'quip' && (wordCount(t) <= QUIP_MAX_WORDS || /\b(?:this is why I|that'?s why they call|so fun!|i'?ve had them)\b|^(?:yup|haha|wow)\b/i.test(t))) return 'quip';
+    // Casual classroom banter or single-word orphan pronoun/determiner scraps ("Both", "someone").
+    if (/\b(?:this is why I|that'?s why they call|so fun!|i'?ve had them)\b/i.test(t)) return 'quip';
+    if (wordCount(t) === 1 && /^(?:both|neither|either|none|some|someone|anyone|everyone|other|more)$/i.test(t.replace(/^\*\*|\*\*$/g, ''))) return 'debris';
     // The lecturer's own aside under a photo: "My cat Luna, who ...".
     if (/^My\s+[a-z]/.test(t)) return 'quip';
     // Small type is a label or caption unless it is a sub-point set only a little smaller than its parent,
@@ -172,8 +178,15 @@
       if (isLabel(n, nodes[i + 1]) || (isLabel === isGlyphLabel && current && current.children.length && isSubheading(n))) {
         current = { node: n, children: [], label: true };
         out.push(current);
-      } else if (current) current.children.push(n);
-      else out.push({ node: n, children: [], label: false });
+      } else if (current) {
+        // A non-bulleted line returning to the label's own indent level ends the label's child block.
+        if (isLabel === isGlyphLabel && current.children.some((c) => c.level > current.node.level) && !n.glyph && n.level <= current.node.level) {
+          current = { node: n, children: [], label: false };
+          out.push(current);
+        } else {
+          current.children.push(n);
+        }
+      } else out.push({ node: n, children: [], label: false });
     });
     return out;
   }
@@ -191,7 +204,11 @@
 
   /** One column (or a slide without columns) read into units. */
   function readGroup(nodes) {
-    if (nodes.some(isColonLabel)) return byLabels(nodes, isColonLabel);
+    if (nodes.some(isColonLabel)) {
+      // If colon labels only sit below top-level headings ("Adverse Effects" > "Albendazole:"), let top-level nesting group the slide first.
+      const top = Math.min(...nodes.map((n) => n.level));
+      if (nodes.some((n) => isColonLabel(n) && n.level <= top)) return byLabels(nodes, isColonLabel);
+    }
     if (nodes.some((n) => n.glyph) && nodes.some((n, i) => isGlyphLabel(n, nodes[i + 1]))) return byLabels(nodes, isGlyphLabel);
     // Two or more short lines set wholly in bold over plain sentences ("Tapeworms" / "Flukes") head them
     if (nodes.filter((n, i) => isBoldLabel(n, nodes[i + 1])).length >= 2 && isBoldLabel(nodes[0], nodes[1])) return byLabels(nodes, isBoldLabel);

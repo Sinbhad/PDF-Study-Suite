@@ -31,18 +31,18 @@
   // A swap is printed one statement at a time beside a figure: the section's listings hold the first and last steps.
   const SWAP_FIRST_RE = /\b(?:double|int)\s+(\w+)\s*=\s*(\w+)\[(\w+)\]\s*;/;
   const FRONTS = {
-    sum: 'What does the sum loop leave in its total?',
-    max: 'How does the section find the largest element of an array?',
-    search: 'In the linear search, what does pos hold when the loop ends?',
+    sum: 'How do you compute the sum of all elements in an array?',
+    max: 'How do you find the largest element of an array?',
+    search: 'How does a linear search locate a target value in an array?',
     'remove-order': 'How do you remove the element at pos from a partially filled array and keep the order?',
-    'remove-last': 'How do you remove the element at pos when the order does not matter?',
+    'remove-last': 'How do you remove the element at pos from a partially filled array when the order does not matter?',
     'insert-order': 'How do you insert an element at pos in a partially filled array and keep the order?',
     swap: 'How do you swap two elements of an array?',
   };
   const BACKS = {
-    sum: 'The sum of all elements: it starts at 0 and adds each element in turn.',
-    max: 'Start with the first element as the largest, then visit the others from index 1 and keep any element that is larger.',
-    search: 'The index of the first element equal to the value searched for; the array length when there is none.',
+    sum: 'Initialize a running total to 0, then visit each element and add it to the total.',
+    max: 'Start with the first element as the largest, then visit the remaining elements from index 1 and keep any element that is larger.',
+    search: 'Inspect elements in sequence starting at index 0, stopping at the first match or when the end of the array is reached.',
     'remove-order': 'Move every element after pos down by one (values[i - 1] = values[i]), then decrease currentSize.',
     'remove-last': 'Overwrite it with the last element (values[pos] = values[currentSize - 1]), then decrease currentSize.',
     'insert-order': 'Increase currentSize, move the elements from the end down to pos + 1 up by one (values[i] = values[i - 1]), then store the new element at pos.',

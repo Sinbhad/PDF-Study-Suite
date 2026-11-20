@@ -323,6 +323,7 @@ NODE_FIXTURES: tuple[str, ...] = (
     "recall_question_fixtures.js",
     "typed_answer_fixtures.js",
     "typed_question_fixtures.js",
+    "eval_tooling_fixtures.js",
 )
 
 STYLESHEET_PATHS: tuple[str, ...] = (

@@ -20,6 +20,7 @@
   const ROW_GAP = 1.6; // x font size: a larger gap between table rows ends the table
   const MIN_FILL = 0.6; // share of grid cells that must hold text
   const MAX_CELL_CHARS = 60; // longer "cells" are prose columns
+  const MAX_NOTE_CELL_CHARS = 150; // wrapped explanation column in >= 3-column tables whose other columns stay compact
   const ROW_CELL_AVG = 25; // average cell length of one-baseline rows (two prose columns average far more)
   const STACKED_CELL_AVG = 40; // average cell length of stacked slide cells (wrapped notes are longer)
   const HEADER_MIN_CELLS = 3; // slide header band: at least this many side-by-side lines
@@ -41,36 +42,169 @@
     const full = cells.filter(Boolean);
     const filled = full.length / Math.max(1, cells.length);
     const avg = full.reduce((n, c) => n + c.length, 0) / Math.max(1, full.length);
-    if (filled < MIN_FILL || avg > maxAvg || cells.some((c) => c.length > MAX_CELL_CHARS)) return null;
+    let cellCap = MAX_CELL_CHARS;
+    let avgCap = maxAvg;
+    if (width >= 3) {
+      const colAvgs = h.map((_, ci) => {
+        const vals = body.map((r) => r[ci]).filter(Boolean);
+        return vals.length ? vals.reduce((n, v) => n + v.length, 0) / vals.length : 0;
+      });
+      if (colAvgs.filter((a) => a <= 20).length >= Math.ceil(width / 2)) {
+        cellCap = MAX_NOTE_CELL_CHARS;
+        avgCap = Math.max(maxAvg, 30);
+      }
+    }
+    if (filled < MIN_FILL || avg > avgCap || cells.some((c) => c.length > cellCap)) return null;
     return { kind: 'table', header: h, rows: body, pageNumber, text: tableText(h, body), lines: used };
+  }
+
+  /** Split a multi-column glued segment `seg` at word spaces matching established column starts `colStarts`. */
+  function splitGluedSeg(seg, colStarts, fs) {
+    const txt = String(seg.text || '').replace(/\*\*/g, '').trim();
+    const inner = colStarts.filter((x) => x > seg.x0 + fs * 1.6 && x < seg.x1 - fs * 0.6);
+    if (!inner.length || !/\s/.test(txt)) return [seg];
+    const perChar = (seg.x1 - seg.x0) / Math.max(1, txt.length);
+    const out = [];
+    let from = 0;
+    let left = seg.x0;
+    for (const x of inner) {
+      const at = (x - seg.x0) / perChar;
+      let cut = -1;
+      for (let k = from + 1; k < txt.length - 1; k++) if (txt[k] === ' ' && (cut < 0 || Math.abs(k - at) < Math.abs(cut - at))) cut = k;
+      if (cut <= from || Math.abs(cut - at) > 6) return [seg];
+      out.push({ text: txt.slice(from, cut).trim(), x0: left, x1: seg.x0 + cut * perChar, fontSize: seg.fontSize });
+      from = cut + 1;
+      left = x;
+    }
+    out.push({ text: txt.slice(from).trim(), x0: left, x1: seg.x1, fontSize: seg.fontSize });
+    return out.every((p) => p.text) ? out : [seg];
+  }
+
+  function matchSegments(segsA, segsB, fs, isHeaderRow) {
+    if (!segsA || !segsB || segsA.length !== segsB.length) return false;
+    let aligned = 0;
+    for (let i = 0; i < segsA.length; i++) {
+      const s = segsA[i];
+      const t = segsB[i];
+      const prevEnd = i > 0 ? Math.max(segsA[i - 1].x1, segsB[i - 1].x1) : -Infinity;
+      const nextStart = i + 1 < segsA.length ? Math.min(segsA[i + 1].x0, segsB[i + 1].x0) : Infinity;
+      const closeX = Math.abs(s.x0 - t.x0) <= fs * ALIGN || Math.abs(cx(s) - cx(t)) <= fs * ALIGN || Math.abs(s.x1 - t.x1) <= fs * ALIGN;
+      const overlap = Math.min(s.x1, t.x1) >= Math.max(s.x0, t.x0) - fs * 0.6 && s.x0 > prevEnd - fs * 0.5 && t.x0 > prevEnd - fs * 0.5;
+      const inCorridor = isHeaderRow && segsA.length >= 3 && s.x0 > prevEnd + fs * 0.4 && t.x0 > prevEnd + fs * 0.4 && s.x1 < nextStart - fs * 0.4 && t.x1 < nextStart - fs * 0.4;
+      if (closeX || overlap) aligned += 1;
+      else if (!inCorridor) return false;
+    }
+    return isHeaderRow ? aligned >= Math.max(1, segsA.length - 1) : aligned === segsA.length;
   }
 
   /** Book rows: consecutive lines with 2+ segments whose cell starts align column by column. */
   function fromSegments(lines, pageNumber) {
     const out = [];
     let run = [];
-    const fits = (a, b) => {
-      if (!a.segments || !b.segments || a.segments.length !== b.segments.length) return false;
-      const fs = Math.max(a.fontSize || 10, b.fontSize || 10);
-      if (b.topY - a.bottomY > fs * ROW_GAP) return false;
-      return a.segments.every((s, i) => Math.abs(s.x0 - b.segments[i].x0) <= fs * ALIGN || Math.abs(cx(s) - cx(b.segments[i])) <= fs * ALIGN);
+    let colStarts = [];
+    let colBounds = [];
+    let lastBottom = 0;
+    const seedCols = (segs) => {
+      colStarts = segs.map((s) => s.x0);
+      colBounds = segs.map((s) => ({ x0: s.x0, x1: s.x1, text: s.text.replace(/\*\*/g, '').trim() }));
     };
-    const flush = () => {
-      if (run.length >= MIN_ROWS && run[0].segments.length >= MIN_COLS) {
-        const grid = run.map((l) => l.segments.map((s) => s.text.replace(/\*\*/g, '').trim()));
-        const t = build(grid[0], grid.slice(1), pageNumber, new Set(run), ROW_CELL_AVG);
-        if (t) out.push(t);
+    const updateCols = (segs) => {
+      segs.forEach((s, i) => {
+        if (!colBounds[i]) colBounds[i] = { x0: s.x0, x1: s.x1 };
+        colBounds[i].x0 = Math.min(colBounds[i].x0, s.x0);
+        colBounds[i].x1 = Math.max(colBounds[i].x1, s.x1);
+      });
+    };
+    const flush = (linesList) => {
+      // Check if an unsplit header line directly above run (<= fs * ROW_GAP) splits into the run's columns
+      if (run.length >= 2 && linesList) {
+        const first = run[0].line;
+        const firstIdx = linesList.indexOf(first);
+        if (firstIdx > 0) {
+          const above = linesList[firstIdx - 1];
+          const fs = Math.max(above.fontSize || 10, first.fontSize || 10);
+          const vGap = first.topY - above.bottomY;
+          const abovePlain = plainOf(above);
+          const aboveSegs = above.segments || [{ text: abovePlain, x0: above.x0, x1: above.x1, fontSize: above.fontSize }];
+          if (above && !/\)\/\(/.test(abovePlain) && vGap >= -2 && vGap <= fs * ROW_GAP && aboveSegs.length < colBounds.length) {
+            const split = aboveSegs.flatMap((s) => splitGluedSeg(s, colBounds.map((b) => b.x0), fs));
+            if (matchSegments(split, colBounds, fs, true)) {
+              run.unshift({ line: above, segs: split.map((s) => s.text.replace(/\*\*/g, '').trim()) });
+            }
+          }
+        }
+      }
+      if (run.length >= MIN_ROWS && run[0].segs.length >= MIN_COLS) {
+        const grid = run.map((r) => r.segs.map((t) => String(t || '').replace(/\*\*/g, '').trim()));
+        const eqRows = grid.filter((r) => /^[=≈≤≥≠⇒→]/.test(r[0])).length;
+        const brokenHead = grid[0].some((h) => /\)\/\(|[,;]$/.test(h)) ||
+          (grid[0].length === 2 && /^[a-z]/.test(grid[0][0]) && grid[0][0].split(/\s+/).length >= 3);
+        if (!brokenHead && !/^[=≈≤≥≠⇒→]/.test(grid[0][0]) && eqRows * 2 <= grid.length) {
+          const used = new Set(run.flatMap((r) => [r.line, ...(r.extra || [])]));
+          const t = build(grid[0], grid.slice(1), pageNumber, used, ROW_CELL_AVG);
+          if (t) out.push(t);
+        }
       }
       run = [];
+      colStarts = [];
+      colBounds = [];
+      lastBottom = 0;
     };
-    for (const l of lines) {
-      if (run.length && fits(run[run.length - 1], l)) run.push(l);
-      else {
-        flush();
-        if (l.segments && l.segments.length >= MIN_COLS) run = [l];
+    for (let idx = 0; idx < lines.length; idx++) {
+      const l = lines[idx];
+      if (run.length) {
+        const prev = run[run.length - 1];
+        const fs = Math.max(prev.line.fontSize || 10, l.fontSize || 10);
+        const vGap = l.topY - lastBottom;
+        if (vGap <= fs * ROW_GAP) {
+          // 1) Normal matching segment count (or header->row1 transition)
+          let segs = l.segments;
+          if (segs && segs.length >= 2 && segs.length < colBounds.length) {
+            const reSplit = segs.flatMap((s) => splitGluedSeg(s, colBounds.map((b) => b.x0), fs));
+            if (reSplit.length === colBounds.length) segs = reSplit;
+          }
+          if (segs && matchSegments(colBounds, segs, fs, run.length === 1)) {
+            updateCols(segs);
+            run.push({ line: l, segs: segs.map((s) => s.text.replace(/\*\*/g, '').trim()) });
+            lastBottom = Math.max(lastBottom, l.bottomY);
+            continue;
+          }
+          // 2) Short side-note sitting completely right of the table between two rows (e.g. "Set state")
+          const lastCol = colBounds.length - 1;
+          if (!l.segments && run.length >= 1 && l.x0 > colBounds[lastCol].x1 + 2 && plainOf(l).length <= 24 && lines[idx + 1] && lines[idx + 1].segments) {
+            continue;
+          }
+          // 3) Wrapped single-column prose continuation inside the last column (e.g. a Comment column)
+          if ((!l.segments || l.segments.length === 1) && vGap <= fs * 0.9 && l.x0 >= colBounds[lastCol].x0 - fs * 1.2 && l.x1 <= colBounds[lastCol].x1 + fs * 3) {
+            const txt = plainOf(l);
+            if (txt) {
+              prev.segs[lastCol] = prev.segs[lastCol] ? `${prev.segs[lastCol]} ${txt}` : txt;
+              prev.extra = prev.extra || [];
+              prev.extra.push(l);
+              lastBottom = Math.max(lastBottom, l.bottomY);
+              continue;
+            }
+          }
+        }
+      }
+      flush(lines);
+      if (l.segments && l.segments.length >= MIN_COLS) {
+        // Re-split row 0 if the immediate next row has more aligned columns
+        let initSegs = l.segments;
+        const next = lines[idx + 1];
+        const fsNext = next ? Math.max(l.fontSize || 10, next.fontSize || 10) : 10;
+        if (next && next.segments && next.segments.length > initSegs.length && next.topY - l.bottomY <= fsNext * ROW_GAP) {
+          const candidate = initSegs.flatMap((s) => splitGluedSeg(s, next.segments.map((x) => x.x0), fsNext));
+          if (candidate.length === next.segments.length && matchSegments(candidate, next.segments, fsNext, true)) {
+            initSegs = candidate;
+          }
+        }
+        seedCols(initSegs);
+        run = [{ line: l, segs: initSegs.map((s) => s.text.replace(/\*\*/g, '').trim()) }];
+        lastBottom = l.bottomY;
       }
     }
-    flush();
+    flush(lines);
     return out;
   }
 
@@ -131,9 +265,9 @@
       // A start inside the header that some cell under the header's left part runs across is not a column
       const crossed = (x) => below.some((c) => c.x0 < x - fs && c.x1 > x + fs && c.x1 > l.x0 && c.x0 < l.x1);
       const inner = starts.filter((x) => x > l.x0 + fs * 2 && x < l.x1 - fs && !crossed(x));
-      // Two columns under one header line: cells start at the header's own left edge and again inside it
-      // (a single column of cells set off-centre under a wide header is not a second column)
-      const own = starts.some((x) => Math.abs(x - l.x0) <= fs * ALIGN);
+      // Two columns under one header line: cells start under the header's left half and again at an inner start
+      // (a single column of cells set off-centre under a wide header still fails, since it lacks the second start)
+      const own = starts.some((x) => x >= l.x0 - fs * ALIGN && x < inner[0] - fs * 1.5 && !crossed(inner[0]));
       if (!inner.length || !own || !/\s/.test(text)) return [l];
       const perChar = (l.x1 - l.x0) / Math.max(1, text.length);
       const parts = [];
@@ -143,7 +277,7 @@
         const at = (x - l.x0) / perChar;
         let cut = -1;
         for (let k = from + 1; k < text.length - 1; k++) if (text[k] === ' ' && (cut < 0 || Math.abs(k - at) < Math.abs(cut - at))) cut = k;
-        if (cut <= from || Math.abs(cut - at) > 4) return [l]; // no word break near the column start: leave it whole
+        if (cut <= from || Math.abs(cut - at) > 5) return [l]; // no word break near the column start: leave it whole
         parts.push({ ...l, text: text.slice(from, cut).trim(), x0: left, x1: l.x0 + cut * perChar, source: l.source || l });
         from = cut + 1;
         left = x;
@@ -160,7 +294,16 @@
     for (const band of headerBands(lines)) {
       const bandHead = band.slice().sort((a, b) => a.x0 - b.x0);
       const fs = Math.max(...bandHead.map((l) => l.fontSize || 10));
+      const topOfHead = Math.min(...bandHead.map((l) => l.topY));
       const bottomOfHead = Math.max(...bandHead.map((l) => l.bottomY));
+      // Rescue a short top-left corner column header ("Cat ID") slightly higher than a wide multi-col header row
+      const corner = lines.find((l) => !band.includes(l) && l.x1 < bandHead[0].x0 - fs * 0.3 &&
+        l.bottomY >= topOfHead && l.bottomY <= bottomOfHead + 2 && bottomOfHead - l.bottomY <= fs * 1.1 && plainOf(l).length <= 24 &&
+        lines.filter((c) => c.topY >= bottomOfHead - 1 && c.x0 >= l.x0 - fs && c.x1 <= l.x1 + fs).length >= 2);
+      if (corner) {
+        bandHead.unshift(corner);
+        band.push(corner);
+      }
       // Lines beside the table (a picture's caption or badge on the right, a row-group label on the left) are
       // not cells: a cell starts no further right than the table's right edge, and ends right of its left edge.
       const left = Math.min(...bandHead.map((l) => l.x0)) - fs * 2;
@@ -212,10 +355,76 @@
     return [];
   }
 
+  /**
+   * Book pages: runs standard fromSegments on main flow (including folio-tagged segmented rows), plus
+   * coalesces compact table cells that column-layout split across separate column ids on matching baselines.
+   */
+  function fromPageLines(pageLines, pageNumber) {
+    const elig = (pageLines || []).filter((l) => l && !l.isCode && (!l.kind || (l.kind === 'folio' && l.segments && l.segments.length >= 2)));
+    const main = elig.filter((l) => !l.isMargin);
+    const tables = fromSegments(main, pageNumber);
+    const claimed = new Set(tables.flatMap((t) => [...t.lines]));
+    // Only consider compact unused cells (<= 32 chars) across nearby split columns (gap <= 36pt)
+    const unused = elig.filter((l) => !claimed.has(l) && plainOf(l).length <= 32);
+    const byY = unused.slice().sort((a, b) => a.bottomY - b.bottomY || a.x0 - b.x0);
+    const bands = [];
+    for (const l of byY) {
+      const b = bands[bands.length - 1];
+      const fs = Math.min(l.fontSize || 10, b ? b[0].fontSize || 10 : 10);
+      if (b && Math.abs(l.bottomY - b[0].bottomY) <= fs * 0.4 && Math.abs((l.fontSize || 10) - (b[0].fontSize || 10)) <= 1.2) b.push(l);
+      else bands.push([l]);
+    }
+    const virtual = [];
+    for (const b of bands) {
+      if (b.length < 2 && !(b[0] && b[0].segments)) continue;
+      const xs = b.slice().sort((p, q) => p.x0 - q.x0);
+      // Skip unrelated margin notes far away (> 36pt from nearest non-margin sibling in band)
+      const kept = xs.filter((l, i) => !l.isMargin || xs.some((o, j) => j !== i && !o.isMargin &&
+        Math.max(o.x0 - l.x1, l.x0 - o.x1) <= 36));
+      if (!kept.length) continue;
+      if (kept.length === 1 && kept[0].segments) {
+        virtual.push(kept[0]);
+        continue;
+      }
+      if (kept.length < 2) continue;
+      const distinctCols = new Set(kept.map((l) => l.column)).size >= 2;
+      if (!distinctCols) continue;
+      const closeCells = kept.every((l, i) => i === 0 || (l.x0 >= kept[i - 1].x1 - 2 && l.x0 - kept[i - 1].x1 <= 36));
+      if (!closeCells) continue;
+      const segs = kept.flatMap((l) => l.segments || [{ text: plainOf(l), x0: l.x0, x1: l.x1, fontSize: l.fontSize }]);
+      if (segs.length < 2) continue;
+      const f = kept[0];
+      virtual.push({
+        ...f,
+        x0: kept[0].x0,
+        x1: kept[kept.length - 1].x1,
+        topY: Math.min(...kept.map((l) => l.topY)),
+        bottomY: kept.reduce((s, l) => s + l.bottomY, 0) / kept.length,
+        segments: segs,
+        __sources: kept,
+      });
+    }
+    for (const t of fromSegments(virtual, pageNumber)) {
+      // Never mistake 2-col prose fragment wraps or isolated code punctuation for a split-column table
+      if (t.header.some((h) => /[,;{}]$|^[a-z]/.test(h) && t.header.length === 2)) continue;
+      const real = new Set();
+      for (const l of t.lines) {
+        for (const orig of l.__sources || [l]) real.add(orig);
+      }
+      if ([...real].some((l) => claimed.has(l))) continue;
+      if (t.lines.size >= MIN_ROWS && [...real].some((l) => !claimed.has(l))) {
+        t.lines = real;
+        real.forEach((l) => claimed.add(l));
+        tables.push(t);
+      }
+    }
+    return tables;
+  }
+
   /** Public shape without the internal line set. */
   const publicTable = (t) => ({ kind: t.kind, header: t.header, rows: t.rows, pageNumber: t.pageNumber, text: t.text });
 
-  PDFStudy.tableGrid = { fromSegments, fromCells, publicTable, tableText };
+  PDFStudy.tableGrid = { fromSegments, fromCells, fromPageLines, publicTable, tableText };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = PDFStudy.tableGrid;
   }

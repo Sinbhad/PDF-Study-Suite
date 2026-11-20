@@ -284,6 +284,7 @@ const notes = [
   ['When comparing two decimals, avoid exact equality. Instead, test whether they are within a tolerance.', 'When comparing two decimals, …', 'avoid exact equality; instead, test whether they are within a tolerance'],
   ['Do not use the + operator to join many strings. Use a builder instead.', 'To join many strings, …', 'use a builder, not the + operator'],
   ['Use a guard clause if the input may be empty.', 'When should you use a guard clause?', 'If the input may be empty'],
+  ['Use a scratch slot when trading two items.', 'What should you use when trading two items?', 'Use a scratch slot'],
   ['Avoid magic numbers by naming every constant.', 'How do you avoid magic numbers?', 'By naming every constant'],
   ['A queue releases items in the order they arrived.', 'A queue releases …', 'items in the order they arrived'],
 ];

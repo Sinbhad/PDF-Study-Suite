@@ -41,13 +41,69 @@
     return Math.round((lo + (hi - lo) * 0.3) * 10) / 10;
   }
 
+  /** Candidate inputs spanning every region below, between and above the sorted branch thresholds. */
+  function chainRegions(rule) {
+    const sorted = [...rule.tests].sort((a, b) => a - b);
+    const round1 = (n) => Math.round(n * 10) / 10;
+    const stepLo = Math.max(0.5, (sorted[1] - sorted[0]) * 0.4);
+    const stepHi = Math.max(0.5, (sorted[sorted.length - 1] - sorted[sorted.length - 2]) * 0.4);
+    const regions = [round1(sorted[0] - stepLo)];
+    for (let i = 1; i < sorted.length; i++) regions.push(round1(sorted[i - 1] + (sorted[i] - sorted[i - 1]) * 0.3));
+    regions.push(round1(sorted[sorted.length - 1] + stepHi));
+    return regions;
+  }
+
+  const MAX_CHAIN_STEM = 295;
+
+  /**
+   * Compact if/else-if prefix up to `branchIndex`: keeps every earlier guard verbatim (never skips an
+   * earlier condition) and folds trailing branches into `; else { ... }` when the full chain would overflow.
+   */
+  function codeUpTo(rule, branchIndex) {
+    const parts = [];
+    for (let i = 0; i <= branchIndex && i < rule.tests.length; i++) {
+      const kw = i === 0 ? 'if' : 'else if';
+      parts.push(`${kw} (${rule.variable} ${rule.op} ${rule.tests[i]}) ${rule.target} = "${rule.values[i]}";`);
+    }
+    if (branchIndex >= rule.tests.length && rule.fallback) parts.push(`else ${rule.target} = "${rule.fallback}";`);
+    else parts.push('else { ... }');
+    return parts.join(' ');
+  }
+
   function chainQuestion(card, seed, variant, question) {
     const rule = card.rule;
     const fmt = fmtFor(rule);
-    const value = chainValue(rule, `${seed}|${variant}`, variant);
-    const run = runChain(rule, value);
-    const all = [...rule.values, rule.fallback];
-    const wrong = all.filter((_, i) => i !== run.index);
+    const regions = chainRegions(rule);
+    const makeStem = (code, val) => `For which value of \`${rule.variable}\` does \`${code}\` set \`${rule.target}\` to "${val}"?`;
+    let value = chainValue(rule, `${seed}|${variant}`, variant);
+    let run = runChain(rule, value);
+    let code = rule.code;
+    if (makeStem(code, run.value).length > MAX_CHAIN_STEM) {
+      // Pick a branch whose prefix-with-guards fits comfortably inside MAX_CHAIN_STEM so the stem stays self-contained.
+      const fitting = regions
+        .map((r) => ({ r, run: runChain(rule, r), code: codeUpTo(rule, runChain(rule, r).index) }))
+        .filter((x) => makeStem(x.code, x.run.value).length <= MAX_CHAIN_STEM);
+      if (fitting.length) {
+        const picked = fitting[(hash(`${seed}|${variant}`) + variant) % fitting.length];
+        value = picked.r;
+        run = picked.run;
+        code = picked.code;
+      } else {
+        code = codeUpTo(rule, run.index);
+      }
+    }
+    // Pick three distractors from distinct other branches so every option evaluates uniquely via runChain.
+    const seenOutcomes = new Set([run.value]);
+    const wrong = [];
+    for (const cand of regions) {
+      if (fmt(cand) === fmt(value)) continue;
+      const out = runChain(rule, cand);
+      if (seenOutcomes.has(out.value)) continue;
+      seenOutcomes.add(out.value);
+      wrong.push(fmt(cand));
+    }
+    if (wrong.length < 3) return null;
+    const chosenWrong = wrong.slice(0, 3);
     const steps = [];
     for (let i = 0; i < rule.tests.length; i++) {
       const holds = COMPARE[rule.op](value, rule.tests[i]);
@@ -56,10 +112,10 @@
     }
     const outcome = run.index < rule.tests.length ? `so that branch runs and no later test is tried` : `no test succeeds, so the final else runs`;
     return question({
-      kind: 'branch-chain', key: `${rule.variable}=${value}`, label: 'Trace', card, seed,
-      stem: `In the if / else if / else sequence of ${where(rule)}, \`${rule.variable}\` is ${fmt(value)}. What is \`${rule.target}\` afterwards?`,
-      answer: `"${run.value}"`, wrong: wrong.map((w) => `"${w}"`),
-      explanation: `${steps.join('; ')}: ${outcome}, setting ${rule.target} to "${run.value}". Rule: the first test that succeeds wins, ${where(rule)}.`,
+      kind: 'branch-chain', key: `${rule.variable}=${fmt(value)}`, label: 'Trace', card, seed,
+      stem: makeStem(code, run.value),
+      answer: fmt(value), wrong: chosenWrong,
+      explanation: `${steps.join('; ')}: ${outcome}, setting ${rule.target} to "${run.value}" (${where(rule).replace(/^\((.*)\)$/, '$1')}). Rule: the first branch whose test succeeds wins.`,
     });
   }
 

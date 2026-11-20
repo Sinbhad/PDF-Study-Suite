@@ -1,0 +1,31 @@
+name: Verify PDF Study Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check manifest sync & contracts
+        run: |
+          node tools/sync-manifest.js --check
+          node tools/check-contracts.js
+
+      - name: Run deterministic verification suite
+        run: python tests/verify_suite.py
+
+      - name: Run public corpus quality & summary gates
+        run: python tools/check-all.py --skip-local --skip-e2e

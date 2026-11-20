@@ -42,9 +42,15 @@
   const STEPS_RE = /^(?:technique|techniques|procedure|procedures|steps|method|protocol)$/;
   const PREPOSITION_RE = /^(?:in|on|at|for|with|without|during|after|before|outside|inside|under|from|within)\b/i;
   const STATES_RE = /\b(?:is|are|was|were|has|have|can|may|will|should|must|remains?)\b/i;
-  const CAUSAL_RE = /\b(?:lead(?:s|ing)?\s+to|results?\s+in|causes?|caused\s+by|triggers?|allows?|induces?|produces?)\b/i;
+  const CAUSAL_RE = /\b(?:lead(?:s|ing)?\s+to|results?\s+in|causes|cause(?!\s+of\b)|caused\s+by|triggers?|allows?|induces?|produces?)\b/i;
+  // A label starting with a relative qualifier ("Other causes ...") leans on earlier points on the slide.
+  const RELATIVE_START_RE = /^(?:other|additional|further|remaining|more|else|extra|similar|related|such|these|those)\b/i;
+  // A broad disease/event noun after "<aspect> of" ("Routes of infection") names no specific subject.
+  const GENERIC_BROAD_RE = /^(?:infection|infections|disease|diseases|illness|disorder|disorders|injury|injuries|trauma|pain|inflammation|pathology|treatment|therapy)$/i;
   // A header that is a table's own part ("Table | Column | Row"), not a property of its rows
   const TABLE_PART_RE = /^(?:table|column|row|field|record|cell|value|item|entry|name|term)s?$/i;
+  // Aspects whose sibling labels name members of the set rather than topics having that aspect ("Complications of X" > "Myositis").
+  const MEMBER_ASPECT_RE = /^(?:complications?|side\s+effects?|adverse\s+effects?|risk\s+factors?|causes?|types?|examples?|manifestations?|sequelae)$/i;
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const words = (s) => String(s || '').split(/\s+/).filter(Boolean);
@@ -139,11 +145,23 @@
     if (!(named || isAspect(tidyParent) || namesSet(tidyParent)) || !isCase(label) || !parallel(label, place)) return '';
     const l = lower(label);
     let phrase;
-    if (named && !parentNode) phrase = `${named} of ${l}`;
-    else if (PREPOSITION_RE.test(label)) phrase = `${lower(tidyParent)} ${l}`;
-    else if (parentNode && !subject) return '';
-    else if (parentNode) phrase = `${lower(tidyParent)} ${connector(subject)} ${subject} for ${l}`;
-    else phrase = `${lower(tidyParent)} for ${l}`;
+    if (PREPOSITION_RE.test(label)) {
+      if (named && !parentNode) phrase = `${lower(tidyParent)} ${l}`;
+      else if (subject) phrase = `${lower(tidyParent)} ${connector(subject)} ${subject} ${l}`;
+      else return '';
+    } else if (named && !parentNode && MEMBER_ASPECT_RE.test(named)) {
+      const parentCtx = lower(String(tidyParent).replace(/:\s*\d+%?$/, '').replace(/\s+\d+%$/, '').trim());
+      const n = countOf(place);
+      return n >= MIN_LIST_ITEMS ? `List the features of ${l} (${parentCtx}) (${n} points).` : `Describe ${l} (${parentCtx}).`;
+    } else if (named && !parentNode) {
+      phrase = `${named} of ${l}`;
+    } else if (parentNode && !subject) {
+      return '';
+    } else if (parentNode) {
+      phrase = `${lower(tidyParent)} ${connector(subject)} ${subject} for ${l}`;
+    } else {
+      phrase = `${lower(tidyParent)} for ${l}`;
+    }
     const n = countOf(place);
     if (n >= MIN_LIST_ITEMS) return `List the ${phrase} (${n} points).`;
     return `What ${plural(named || tidyParent) ? 'are' : 'is'} the ${phrase}?`;
@@ -174,11 +192,16 @@
     const name = printed.replace(/\s*\([^)]*[\d<>=][^)]*\)/g, '').trim();
     if (words(name).length > MAX_LABEL_WORDS || /[.!?…]$/.test(name) || (shapes() && shapes().isDescription && shapes().isDescription(name))) return null;
     if (shapes() && shapes().fusedNames && shapes().fusedNames(name)) return null;
+    if (RELATIVE_START_RE.test(name)) return null;
     // "List the treatment of Diagnosis": a subject that is itself a generic heading names nothing.
     const about = subject && !isAspect(subject) ? subject : '';
-    const prompt = isAspect(name) ? (about && aspectPrompt(name, about, n))
-      : labelledPointsPrompt(name, place) || (namesSet(name) ? setPrompt(name, about, place) : casePrompt(name, about, place, slide));
-    return prompt ? { prompt, answer: [note, answerOf(place)].filter(Boolean).join('\n') } : null;
+    const aspect = isAspect(name);
+    const labelledPts = !aspect && labelledPointsPrompt(name, place);
+    const isSet = !aspect && !labelledPts && namesSet(name);
+    const prompt = aspect ? (about && aspectPrompt(name, about, n))
+      : labelledPts || (isSet ? setPrompt(name, about, place) : casePrompt(name, about, place, slide));
+    const resolvedSubject = !about && !aspect && !labelledPts && !isSet && !PREPOSITION_RE.test(name) ? name : '';
+    return prompt ? { prompt, answer: [note, answerOf(place)].filter(Boolean).join('\n'), ...(resolvedSubject ? { subject: resolvedSubject } : {}) } : null;
   }
 
   /** "Subject: Left → ?": a chain asks what follows; a case arrow under an aspect asks its value; else nothing. */
@@ -186,10 +209,17 @@
     const m = String(card.front || '').match(ARROW_FRONT_RE);
     const right = String(card.back || '').trim();
     if (!m || !right) return null;
-    const subject = subjects().tidySubject(m[1]);
+    let subject = subjects().tidySubject(m[1]);
+    if (!subject || isAspect(subject)) return null;
+    if (aspectOf(subject)) {
+      const of = subject.match(/^.+?\s+of\s+(.+)$/i);
+      const target = of ? subjects().tidySubject(of[1]) : '';
+      if (!target || isAspect(target) || GENERIC_BROAD_RE.test(target)) return null;
+      subject = target;
+    }
     const left = m[2].trim();
     const line = `${left} → ${right}`;
-    if ((line.match(/→/g) || []).length >= 2 || CAUSAL_RE.test(line)) {
+    if ((line.match(/→/g) || []).length >= 2 || CAUSAL_RE.test(line.replace(/\([^)]*\)/g, ' '))) {
       // "Fibrocartilage is forced into circulation → …": a clause on the left asks what happens when it does.
       const clause = /\b(?:is|are|was|were|becomes?|gets?)\s+[a-z]+(?:ed|en)\b|\b(?:is|are)\b/.test(left);
       return { prompt: clause ? `In ${subject}, what happens when ${lowerFirst(left)}?` : `In ${subject}, what does ${lowerFirst(left)} lead to?`, answer: right };
@@ -257,7 +287,9 @@
     if (!t || !Array.isArray(t.header) || !header(t.header[0]) || !header(t.column)) return '';
     const entity = String(t.entity || '').trim();
     if (!entity || /^[a-z]/.test(entity)) return '';
-    return `What is the ${lower(header(t.column))} for the ${lower(header(t.header[0]))} "${entity}"?`;
+    const tq = dep('tableQuestions', './table-questions.js');
+    const shown = tq && tq.qualifiedEntity ? tq.qualifiedEntity(t) : entity;
+    return `What is the ${lower(header(t.column))} for the ${lower(header(t.header[0]))} "${shown}"?`;
   }
 
   const api = { labelled, cellPrompt, MAX_LABEL_WORDS };

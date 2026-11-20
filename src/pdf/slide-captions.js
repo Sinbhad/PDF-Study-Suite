@@ -47,7 +47,7 @@
 
   /** Short plain lines set wholly right of the slide's text, outside any side-by-side column. */
   function tagSideNotes(lines, h, isBulletLine) {
-    const isNote = (l) => !isBulletLine(l) && l.column == null && String(l.text || '').trim().split(/\s+/).length <= SIDE_NOTE_WORDS;
+    const isNote = (l) => !isBulletLine(l) && !l.column && String(l.text || '').trim().split(/\s+/).length <= SIDE_NOTE_WORDS;
     const body = lines.filter((l) => !isNote(l) && l.topY > h * TITLE_BAND && Number.isFinite(l.x1));
     if (body.length < 3) return lines;
     const edge = Math.max(...body.map((l) => l.x1));

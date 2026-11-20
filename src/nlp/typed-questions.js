@@ -53,6 +53,9 @@
   const LEAD_END_RE = /\s+(?:characteri[sz]ed|caused|resulting|marked|defined|consisting|containing|that|which|who|whose|with|of|in|by|for|from|to|on|at)\b/i;
   const MAX_LEAD_WORDS = 5;
   const OTHER_SUBJECT_RE = /^([A-Z][\w-]*(?:\s+[A-Z0-9][\w-]*){0,2})\s+(?:is|are|was|were|has|have|requires?|contains?|causes?|uses?|includes?)\b/;
+  const RELATIVE_BOUND_RE = /\b(?:that|which|who|whose|where|when)\b/i;
+  // An action clause ("A change in value ... allows ...") lacks a noun genus for a standalone term prompt.
+  const ACTION_CLAUSE_VERB_RE = /\b(?:allows|enables|prevents|determines|requires|occurs|happens|performs|computes|converts|switches\s+(?:the|a|an)|results\s+in)\b/i;
 
   const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const words = (s) => String(s || '').replace(/\$[^$]*\$/g, ' M ').split(/\s+/).filter(Boolean);
@@ -199,6 +202,9 @@
     // "Strepvax II requires a series of injections" under "Killed vaccine": a sentence about another name.
     const opener = def.match(OTHER_SUBJECT_RE);
     if (opener && !norm(fact.term).includes(norm(opener[1])) && !norm(opener[1]).includes(norm(fact.term))) return 'about another name';
+    const relAt = def.search(RELATIVE_BOUND_RE);
+    const headChunk = relAt >= 0 ? def.slice(0, relAt) : def;
+    if (/^(?:an?|the)\s+/i.test(headChunk) && ACTION_CLAUSE_VERB_RE.test(headChunk)) return 'action clause, not a definition';
     // "Large, marked size variation", "very thin and porous": a description, not a definition with a genus.
     const first = (def.match(/^[A-Za-z]+[,]?/) || [''])[0];
     if (!(kinds().genusOf(def, fact.term) || leadNoun(def)) || /,$/.test(first) || DESCRIPTION_START_RE.test(first.replace(/,$/, ''))) return 'no genus';

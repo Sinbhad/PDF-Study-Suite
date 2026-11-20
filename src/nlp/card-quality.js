@@ -63,7 +63,7 @@
     const t = plain(text);
     if (!t) return true;
     const endsInSymbol = /\b[A-Z]\s*[.,;:]?\s*$/.test(t); // "... in sorted array A." names a variable, not the article
-    if ((DANGLING_TAIL_RE.test(t) && !endsInSymbol) || /[,(\[{/&]\s*$/.test(t)) return true;
+    if ((DANGLING_TAIL_RE.test(t) && !endsInSymbol) || /[,(\[{/&]\s*$/.test(t) || /\([a-d]\)\s*$/i.test(t)) return true;
     const opens = (t.match(/[(\[]/g) || []).length;
     const closes = (t.match(/[)\]]/g) || []).length;
     return opens > closes;
@@ -126,7 +126,7 @@
   }
 
   const CONNECTIVE_RE =
-    /^(?:Instead|However|Thus|Therefore|For\s+instance|For\s+example|In\s+other\s+words|Similarly|Moreover|In\s+addition|Also|Then|Finally|In\s+turn|As\s+a\s+result|Consequently|Hence),\s+/;
+    /^(?:Instead|However|Thus|Therefore|Further|For\s+instance|For\s+example|In\s+other\s+words|Similarly|Moreover|In\s+addition|Also|Then|Finally|In\s+turn|As\s+a\s+result|Consequently|Hence),\s+/;
   // Asides that only make sense on the page: "(see Figure 3)", "..., which we will discuss later in this chapter".
   const ASIDE_RES = [
     /\s*\((?:see|as\s+shown\s+in|shown\s+in|cf\.?)\s+[^)]*\)/gi,

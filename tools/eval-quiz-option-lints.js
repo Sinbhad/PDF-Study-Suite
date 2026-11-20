@@ -1,19 +1,18 @@
 /**
- * Option lints for tools/eval-quiz-lints.js: defects a student can see in the answer options alone.
- * Each takes one generated question and returns null or { lint, detail }. True/False and reveal-style
- * questions have no options to lint and always pass.
+ * Option lints for tools/eval-quiz-lints.js: defects visible in the answer options
+ * (grammar/case/number/article/length tells, math formatting, identifier/class/kind/head-sibling/numeric-near issues).
+ * Pure heuristics; true/false and reveal questions have no choice options and pass.
  */
 const T = require('./eval-quiz-text.js');
+const kinds = require('../src/nlp/quiz-kinds.js');
 
 const found = (lint, detail) => ({ lint, detail });
 const quote = (list) => list.map((o) => `"${o}"`).join(', ');
 
 const MAX_PHRASE_WORDS = 6;
-/** Short phrase options only: formulas and sentence-length options (definition matching) are not terms. */
 const phraseOptions = (q) => T.choiceOptions(q).filter((o) => !T.isFormulaOption(o) && !/[.!?]$/.test(o.trim()) &&
   T.words(o).length >= 1 && T.words(o).length <= MAX_PHRASE_WORDS);
 
-/** Why this option is not a noun phrase, or '' when it passes. */
 function notNounPhraseReason(option) {
   const w = T.words(option);
   const first = w[0];
@@ -30,21 +29,11 @@ function notNounPhraseReason(option) {
   return '';
 }
 
-/**
- * option_not_noun_phrase: a short option starts with a verb form, clause gerund, adverb or preposition,
- * or ends in a verb, preposition/particle or determiner ("brings buyers", "price rises", "flow back").
- * A word-list heuristic, not a tagger: it only sees the first and last word, it only knows the verbs
- * in eval-quiz-text.js, and it lets noun-ambiguous verbs through ("chain backs", "complexes pump protons").
- */
 function lintOptionNotNounPhrase(q) {
   const bad = phraseOptions(q).map((o) => [o, notNounPhraseReason(o)]).filter(([, why]) => why);
   return bad.length ? found('option_not_noun_phrase', bad.map(([o, why]) => `"${o}" ${why}`).join('; ')) : null;
 }
 
-/**
- * option_case_mix: some options start with a capital and some do not, so the odd ones stand out (or the
- * one matching the blank's position gives the answer away). Acronym-like first words are neutral.
- */
 function lintOptionCaseMix(q) {
   const cases = T.choiceOptions(q).map((o) => [o, T.leadingCase(o)]).filter(([, c]) => c);
   const upper = cases.filter(([, c]) => c === 'upper').map(([o]) => o);
@@ -53,13 +42,11 @@ function lintOptionCaseMix(q) {
   return found('option_case_mix', `capitalised ${quote(upper)} vs lower-case ${quote(lower)}`);
 }
 
-// "that" is left out: before a blank it is nearly always a conjunction ("an arrangement that ____").
 const SINGULAR_BEFORE = new Set(['a', 'an', 'this', 'each', 'every']);
 const PLURAL_BEFORE = new Set(['these', 'those', 'many', 'several', 'both', 'few', 'two', 'three', 'four']);
 const SINGULAR_AFTER = new Set(['is', 'was', 'has', 'does']);
 const PLURAL_AFTER = new Set(['are', 'were', 'have', 'do']);
 
-/** 'singular' | 'plural' | null: what the words around the blank demand of whatever fills it. */
 function demandedNumber(q) {
   if (q.type !== 'cloze') return null;
   const body = T.stripMath(T.stemBody(q));
@@ -72,10 +59,6 @@ function demandedNumber(q) {
   return null;
 }
 
-/**
- * option_number_mix: the stem demands a singular or a plural ("a ________", "________ are") and the
- * options are a mix, so the ones of the wrong number can be struck without knowing the subject.
- */
 function lintOptionNumberMix(q) {
   const need = demandedNumber(q);
   if (!need) return null;
@@ -85,13 +68,11 @@ function lintOptionNumberMix(q) {
   return found('option_number_mix', `stem demands ${need}; does not fit: ${quote(wrong)}`);
 }
 
-/** The article right before the blank ("a"/"an"), or null. */
 function articleBeforeBlank(q) {
   const m = q.type === 'cloze' && T.stemBody(q).match(/\b(an?)\s+_{4,}/i);
   return m ? m[1].toLowerCase() : null;
 }
 
-/** option_article_mismatch: "a"/"an" before the blank agrees with only some of the options. */
 function lintOptionArticleMismatch(q) {
   const article = articleBeforeBlank(q);
   if (!article) return null;
@@ -102,7 +83,6 @@ function lintOptionArticleMismatch(q) {
 const LENGTH_RATIO = 1.5;
 const LENGTH_MARGIN = 10;
 
-/** The option that is much longer than every other one (1.5x and 10+ characters), or null. */
 function lengthOutlier(q) {
   const opts = T.choiceOptions(q);
   if (opts.length < 3) return null;
@@ -111,7 +91,6 @@ function lengthOutlier(q) {
   return longest.length >= second.length * LENGTH_RATIO && longest.length - second.length >= LENGTH_MARGIN ? longest : null;
 }
 
-/** answer_length_tell: one option is much longer than the rest; test-wise students pick (or strike) it. */
 function lintAnswerLengthTell(q) {
   const longest = lengthOutlier(q);
   if (!longest) return null;
@@ -119,10 +98,6 @@ function lintAnswerLengthTell(q) {
   return found('answer_length_tell', `${role} "${longest.slice(0, 60)}" is ${longest.length} characters, far longer than the rest`);
 }
 
-/**
- * malformed_math: an option starts with "-$" (a list dash glued to a formula), has an odd number of "$",
- * or the set mixes options that contain math with options that are plain prose.
- */
 function lintMalformedMath(q) {
   const opts = T.choiceOptions(q);
   const dashed = opts.filter((o) => /^\s*-\s*\$/.test(o));
@@ -136,7 +111,139 @@ function lintMalformedMath(q) {
   return null;
 }
 
+/** identifier_option: option looks like a camelCase program identifier. */
+function lintIdentifierOption(q) {
+  const id = T.choiceOptions(q).find((o) => /^\S*[a-z]{2,}[A-Z]\S*$/.test(String(o).trim()));
+  return id ? found('identifier_option', `"${id}"`) : null;
+}
+
+const listItems = (v) => String(v).split(/[,;/]|\band\b/i).map((s) => s.trim().toLowerCase()).filter((s) => s.length >= 3);
+
+/** class_beside_members: table option is a lone plural class beside a list of members. */
+function lintClassBesideMembers(q) {
+  if (!/^What is the .+ for "/.test(String(q.question || ''))) return null;
+  const opts = T.choiceOptions(q);
+  const lists = opts.filter((o) => listItems(o).length >= 2);
+  const members = new Set(lists.flatMap(listItems));
+  const lone = opts.find((o) => listItems(o).length === 1 && /[^s]s$/i.test(o.trim()) && !members.has(o.trim().toLowerCase()));
+  return lone && lists.length && (lone === q.answer || lists.includes(q.answer))
+    ? found('class_beside_members', `"${lone}" beside "${lists[0]}"`) : null;
+}
+
+/** option_kind_of_answer: wrong option is a kind of the answer (or vice versa) in the scope. */
+function lintOptionKindOfAnswer(q, ctx) {
+  const idx = ctx && ctx.kinds ? ctx : (typeof ctx === 'string' ? buildOptionIndex(ctx) : null);
+  if (!idx || !idx.kinds || q.type === 'true_false') return null;
+  const answer = String(q.answer || '');
+  if (!answer || answer.split(/\s+/).length > 5) return null;
+  const twin = T.choiceOptions(q).find((o) => o !== answer && o.split(/\s+/).length <= 5 && idx.kinds.related(answer, o));
+  return twin ? found('option_kind_of_answer', `"${twin}" and "${answer}" are kinds of one another in the scope`) : null;
+}
+
+const NAMING_RE = /\b(?:called|known\s+as|termed|named|refers?\s+to|(?:is|are)\s+defined|denoted)\b/i;
+const head = (t) => (String(t).toLowerCase().replace(/\$[^$]*\$/g, ' ').match(/[a-z]+/g) || ['']).pop().replace(/(?:es|s)$/, '');
+const firstWord = (t) => (String(t).toLowerCase().match(/[a-z]+/g) || [''])[0];
+const isChoice = (q) => q.type !== 'true_false' && q.type !== 'reveal' && Array.isArray(q.options) && q.options.length >= 2;
+
+/** head_sibling_option: cloze option shares the answer's head noun in a non-naming sentence. */
+function lintHeadSiblingOption(q) {
+  if (q.type !== 'cloze' || NAMING_RE.test(T.stemBody(q))) return null;
+  const twin = T.choiceOptions(q).find((o) => o !== q.answer && head(o) === head(q.answer));
+  return twin ? found('head_sibling_option', `"${twin}" beside "${q.answer}"`) : null;
+}
+
+/** option_count: choice question without exactly four options. */
+function lintOptionCount(q) {
+  if (!isChoice(q)) return null;
+  return q.options.length === 4 ? null : found('option_count', `${q.options.length} options`);
+}
+
+const CATEGORY_RE = /\b([a-z]{3,})\s+(?:called|known\s+as|termed|named)\s+(?:a\(n\)\s+|an?\s+|the\s+)?_{4,}/i;
+const MAX_TERM_WORDS = 5;
+
+/** option_kind_tell: option head nouns or category noun single out the answer. */
+function lintOptionKindTell(q) {
+  if (!isChoice(q) || q.options.some((o) => String(o).split(/\s+/).length > MAX_TERM_WORDS || T.isFormulaOption(o))) return null;
+  const answer = head(q.answer);
+  const wrong = q.options.filter((o) => o !== q.answer).map(head);
+  const shared = wrong.filter((h) => wrong.filter((x) => x === h).length >= 2);
+  if (wrong.length >= 3 && !wrong.includes(answer) && shared.length === wrong.length) {
+    return found('option_kind_tell', `every wrong option shares a head noun ("${shared[0]}"), the answer's is its own`);
+  }
+  const category = (T.stemBody(q).match(CATEGORY_RE) || [])[1];
+  const heads = q.options.map(head);
+  if (category && heads.filter((h) => h === head(category)).length === 1) return found('option_kind_tell', `only one option is a ${category}`);
+  const firsts = q.options.map(firstWord);
+  if (category && new Set(firsts).size === 1 && new Set(heads).size === heads.length) {
+    return found('option_kind_tell', `options share "${firsts[0]}" but name different kinds; the stem asks for a ${category}`);
+  }
+  return null;
+}
+
+const ADJECTIVE_SLOT_RE = /\b(?:is|are|was|were|be)\s+(?:not\s+)?_{4,}\s+(?:to|than|with|from|of)\b/i;
+
+/** adjective_slot: copula + blank + preposition offered multi-word phrases. */
+function lintAdjectiveSlot(q) {
+  if (!isChoice(q) || !ADJECTIVE_SLOT_RE.test(T.stemBody(q))) return null;
+  const phrases = q.options.filter((o) => String(o).trim().split(/\s+/).length >= 2);
+  return phrases.length ? found('adjective_slot', `"is ____ to" offered ${phrases.map((p) => `"${p}"`).join(', ')}`) : null;
+}
+
+const QTY_RE = /^(~|>|<|≥|≤)?\s?(\d+(?:\.\d+)?)(?:\s?[-–]\s?(\d+(?:\.\d+)?))?\s?([A-Za-z%/°]+)$/;
+const unitKey = (u) => {
+  const low = String(u || '').toLowerCase();
+  const map = [[/^(?:h|hrs?|hours?)$/, 'hour'], [/^days?$/, 'day'], [/^(?:wks?|weeks?)$/, 'week'], [/^months?$/, 'month'], [/^(?:yrs?|years?)$/, 'year']];
+  const hit = map.find(([re]) => re.test(low));
+  return hit ? hit[1] : low;
+};
+
+/** numeric_option_near: numeric options overlap, differ in unit, or are within rounding tolerance. */
+function lintNumericOptionNear(q) {
+  if (!isChoice(q)) return null;
+  const parse = (o) => {
+    const m = String(o).trim().match(QTY_RE);
+    return m ? { lo: Number(m[2]), hi: m[3] ? Number(m[3]) : Number(m[2]), unit: unitKey(m[4]) } : null;
+  };
+  const a = parse(q.answer);
+  if (!a) return null;
+  for (const o of q.options.filter((x) => x !== q.answer)) {
+    const b = parse(o);
+    if (!b) continue;
+    if (b.unit !== a.unit) return found('numeric_option_near', `"${o}" is in another unit`);
+    if (b.lo <= a.hi && a.lo <= b.hi) return found('numeric_option_near', `"${o}" overlaps "${q.answer}"`);
+    const gap = b.lo > a.hi ? b.lo - a.hi : a.lo - b.hi;
+    const near = a.unit === '%' ? gap < 10 : gap / Math.max(a.hi, b.hi) < 0.25;
+    if (near) return found('numeric_option_near', `"${o}" is within rounding of "${q.answer}"`);
+  }
+  return null;
+}
+
+function buildOptionIndex(scopeText) {
+  if (scopeText && scopeText.kinds) return scopeText;
+  const sentences = String(scopeText || '').split(/(?<=[.!?])\s+|\n+/).filter((s) => s.trim());
+  return { kinds: kinds.index(sentences) };
+}
+
+const CORE_OPTION_LINTS = [
+  lintOptionNotNounPhrase, lintOptionCaseMix, lintOptionNumberMix,
+  lintOptionArticleMismatch, lintAnswerLengthTell, lintMalformedMath,
+];
+const ALL_OPTION_LINTS = [
+  ...CORE_OPTION_LINTS,
+  lintIdentifierOption, lintClassBesideMembers, lintOptionKindOfAnswer,
+  lintHeadSiblingOption, lintOptionCount, lintOptionKindTell, lintAdjectiveSlot, lintNumericOptionNear,
+];
+const OPTION_LINT_NAMES = [
+  'option_not_noun_phrase', 'option_case_mix', 'option_number_mix',
+  'option_article_mismatch', 'answer_length_tell', 'malformed_math',
+  'identifier_option', 'class_beside_members', 'option_kind_of_answer',
+  'head_sibling_option', 'option_count', 'option_kind_tell', 'adjective_slot', 'numeric_option_near',
+];
+
 module.exports = {
+  CORE_OPTION_LINTS, ALL_OPTION_LINTS, OPTION_LINT_NAMES, buildOptionIndex,
   lintOptionNotNounPhrase, lintOptionCaseMix, lintOptionNumberMix, lintOptionArticleMismatch, lintAnswerLengthTell,
   lintMalformedMath, articleBeforeBlank, lengthOutlier,
+  lintIdentifierOption, lintClassBesideMembers, lintOptionKindOfAnswer,
+  lintHeadSiblingOption, lintOptionCount, lintOptionKindTell, lintAdjectiveSlot, lintNumericOptionNear,
 };

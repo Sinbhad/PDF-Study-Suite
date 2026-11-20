@@ -11,7 +11,7 @@
   'fact-questions', 'recall-questions', 'table-questions', 'cloze-questions', 'quiz-assembly', 'quiz-scope', 'quiz-engine', 'test-engine']
   .forEach((m) => require(`../src/nlp/${m}.js`));
 const S = globalThis.PDFStudy;
-const R = require('../tools/eval-quiz-review-lints.js');
+const R = require('../tools/eval-quiz-lints.js');
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -104,6 +104,10 @@ check('inherits: "per <name>" ties a subject to the one it follows', routes.inhe
 const vague = { ...S.quizFacts.makeFact('E toggle', 'Signs vary based on the inputs used.', { kind: 'point' }), id: 'e' };
 const tfVague = S.factQuestions.trueFalse(latch, { ...kctx, facts: [latch, vague] }, false);
 check('a generic point ("Signs vary based on ...") is never borrowed as a False', !tfVague, tfVague && tfVague.question);
+const predFact = { ...S.quizFacts.makeFact('Logic gates', 'Are switches that combine input signals.', { kind: 'point' }), id: 'lg' };
+const tfPred = S.factQuestions.trueFalse(predFact, { facts: [predFact], seed: 0, kinds, claimed: new Set(), shown: new Set() }, true);
+check('a bare-predicate true/false completes its subject in one sentence',
+  tfPred && tfPred.question === 'True or False:\n"Logic gates are switches that combine input signals."', tfPred && tfPred.question);
 
 // 5. Recall: a completion must pin one answer; "Define" must define.
 const card = (front, back, extra = {}) => ({ front, back, sourceKind: 'key-concept', category: 'Key Statement', kind: 'concept', page: 1, ...extra });
@@ -115,6 +119,7 @@ const recallScope = { facts: [], counts: new Map(), recurs: (t) => /register/i.t
   card('When comparing two registers, test …', 'every bit in turn'),
   { front: 'Odd table', back: 'Do not fall into a common trap.', sourceKind: 'definition', category: 'Definition', subject: 'Odd table', page: 1 },
   { front: 'Kidney disease', back: 'Protein loss', sourceKind: 'definition', category: 'Definition', subject: 'Kidney disease', page: 1 },
+  { front: 'When is a tank in safe mode?', back: 'If and only if its filter is clean and oxygen is high.', sourceKind: 'definition', category: 'Definition', subject: 'safe mode', page: 5 },
 ] };
 const recalls = S.recallQuestions.candidates(recallScope);
 check('completions that pin no single answer are not asked', !recalls.some((q) => /halves the range|Some editors|Error You/.test(q.question)), show(recalls));
@@ -123,6 +128,8 @@ check('completions that pin no single answer are not asked', !recalls.some((q) =
 check('a defining completion is asked as its question; any other completion is not', recalls.some((q) => q.question === 'What is a register?') &&
   !recalls.some((q) => /When comparing two registers/.test(q.question)), show(recalls));
 check('"Define" with a bare name or advice is not asked', !recalls.some((q) => /Define "(?:Odd table|Kidney disease)"/.test(q.question)), show(recalls));
+check('condition-definition card keeps its "When is ..." prompt instead of "Define"',
+  recalls.some((q) => q.question === 'When is a tank in safe mode?') && !recalls.some((q) => /Define "safe mode"/i.test(q.question)), show(recalls));
 
 // 6. Stems: extraction debris and worked-example talk are refused; a run-in heading is cut off.
 const N = S.stemNoise;

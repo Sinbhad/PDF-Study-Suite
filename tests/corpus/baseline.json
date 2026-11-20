@@ -6,6 +6,56 @@
    "kind": "pdf",
    "words": 584,
    "requested": 30,
+   "generated": 17,
+   "quiz": 10,
+   "test": 7,
+   "defective": 1,
+   "defectPct": 5.9,
+   "overlap": {
+    "count": 0,
+    "of": 7,
+    "review": 4
+   },
+   "recall": {
+    "quiz": 1,
+    "test": 6
+   },
+   "typed": {
+    "quiz": 3,
+    "test": 0
+   },
+   "lints": {
+    "whole_block_stem": 1,
+    "stem_debris": 1
+   },
+   "flashcards": 18,
+   "per1000": 29.1,
+   "gold": {
+    "hit": 15,
+    "total": 20,
+    "pct": 75,
+    "missing": [
+     "limit",
+     "continuity",
+     "antiderivative",
+     "Fundamental Theorem of Calculus",
+     "Dijkstra's algorithm"
+    ]
+   },
+   "guess": {
+    "n": 7,
+    "expected": 1.75,
+    "byChance": 1.75,
+    "accuracy": 25,
+    "chance": 25,
+    "tells": 0
+   }
+  },
+  {
+   "id": "sample-slides",
+   "kind": "pdf",
+   "words": 261,
+   "requested": 30,
    "generated": 19,
    "quiz": 10,
    "test": 9,
@@ -14,59 +64,21 @@
    "overlap": {
     "count": 0,
     "of": 9,
-    "review": 3
+    "review": 4
    },
    "recall": {
     "quiz": 0,
-    "test": 7
+    "test": 1
+   },
+   "typed": {
+    "quiz": 4,
+    "test": 4
    },
    "lints": {
-    "option_number_mix": 1
+    "garbled_token": 1
    },
-   "flashcards": 18,
-   "per1000": 32.5,
-   "gold": {
-    "hit": 16,
-    "total": 20,
-    "pct": 80,
-    "missing": [
-     "limit",
-     "continuity",
-     "Fundamental Theorem of Calculus",
-     "Dijkstra's algorithm"
-    ]
-   },
-   "guess": {
-    "n": 12,
-    "expected": 4,
-    "byChance": 4,
-    "accuracy": 33.3,
-    "chance": 33.3,
-    "tells": 4
-   }
-  },
-  {
-   "id": "sample-slides",
-   "kind": "pdf",
-   "words": 261,
-   "requested": 30,
-   "generated": 21,
-   "quiz": 10,
-   "test": 11,
-   "defective": 0,
-   "defectPct": 0,
-   "overlap": {
-    "count": 0,
-    "of": 11,
-    "review": 6
-   },
-   "recall": {
-    "quiz": 2,
-    "test": 6
-   },
-   "lints": {},
    "flashcards": 17,
-   "per1000": 80.5,
+   "per1000": 72.8,
    "gold": {
     "hit": 15,
     "total": 15,
@@ -74,11 +86,11 @@
     "missing": []
    },
    "guess": {
-    "n": 13,
-    "expected": 5.5,
-    "byChance": 5.5,
-    "accuracy": 42.3,
-    "chance": 42.3,
+    "n": 10,
+    "expected": 3.5,
+    "byChance": 4.5,
+    "accuracy": 35,
+    "chance": 45,
     "tells": 8
    }
   },
@@ -87,44 +99,50 @@
    "kind": "text",
    "words": 443,
    "requested": 30,
-   "generated": 16,
-   "quiz": 9,
-   "test": 7,
+   "generated": 9,
+   "quiz": 5,
+   "test": 4,
    "defective": 1,
-   "defectPct": 6.3,
+   "defectPct": 11.1,
    "overlap": {
-    "count": 1,
-    "of": 7,
-    "review": 5
+    "count": 0,
+    "of": 4,
+    "review": 4
    },
    "recall": {
-    "quiz": 3,
+    "quiz": 0,
+    "test": 2
+   },
+   "typed": {
+    "quiz": 2,
     "test": 2
    },
    "lints": {
-    "quiz_test_overlap": 1
+    "typed_ambiguous_blank": 1
    },
-   "flashcards": 10,
-   "per1000": 36.1,
+   "flashcards": 8,
+   "per1000": 20.3,
    "gold": {
-    "hit": 11,
+    "hit": 9,
     "total": 16,
-    "pct": 68.8,
+    "pct": 56.3,
     "missing": [
      "NADH",
      "acetyl-CoA",
      "oxidative phosphorylation",
+     "chemiosmosis",
+     "feedback inhibition",
      "mitochondria",
      "phosphofructokinase"
     ]
    },
    "guess": {
-    "n": 11,
-    "expected": 3.583,
-    "byChance": 4.083,
-    "accuracy": 32.6,
-    "chance": 37.1,
-    "tells": 5
+    "n": 3,
+    "expected": 0,
+    "byChance": 1.5,
+    "accuracy": 0,
+    "chance": 50,
+    "tells": 3
    }
   },
   {
@@ -132,48 +150,54 @@
    "kind": "text",
    "words": 502,
    "requested": 30,
-   "generated": 24,
-   "quiz": 10,
-   "test": 14,
+   "generated": 13,
+   "quiz": 9,
+   "test": 4,
    "defective": 1,
-   "defectPct": 4.2,
+   "defectPct": 7.7,
    "overlap": {
     "count": 0,
-    "of": 14,
-    "review": 9
+    "of": 4,
+    "review": 4
    },
    "recall": {
     "quiz": 0,
-    "test": 7
+    "test": 0
+   },
+   "typed": {
+    "quiz": 3,
+    "test": 0
    },
    "lints": {
-    "duplicate_fact": 1
+    "tf_not_a_claim": 1
    },
-   "flashcards": 15,
-   "per1000": 47.8,
+   "flashcards": 14,
+   "per1000": 25.9,
    "gold": {
-    "hit": 15,
+    "hit": 13,
     "total": 24,
-    "pct": 62.5,
+    "pct": 54.2,
     "missing": [
      "short-term memory",
      "central executive",
      "phonological loop",
      "visuospatial sketchpad",
      "episodic buffer",
+     "implicit memory",
      "episodic memory",
      "semantic memory",
      "procedural memory",
-     "hippocampus"
+     "hippocampus",
+     "misinformation effect"
     ]
    },
    "guess": {
-    "n": 17,
-    "expected": 5.583,
-    "byChance": 6.083,
-    "accuracy": 32.8,
-    "chance": 35.8,
-    "tells": 7
+    "n": 10,
+    "expected": 4.5,
+    "byChance": 3.5,
+    "accuracy": 45,
+    "chance": 35,
+    "tells": 4
    }
   },
   {
@@ -181,25 +205,27 @@
    "kind": "text",
    "words": 507,
    "requested": 30,
-   "generated": 19,
+   "generated": 14,
    "quiz": 10,
-   "test": 9,
-   "defective": 1,
-   "defectPct": 5.3,
+   "test": 4,
+   "defective": 0,
+   "defectPct": 0,
    "overlap": {
-    "count": 1,
-    "of": 9,
-    "review": 5
+    "count": 0,
+    "of": 4,
+    "review": 3
    },
    "recall": {
     "quiz": 4,
-    "test": 4
+    "test": 3
    },
-   "lints": {
-    "quiz_test_overlap": 1
+   "typed": {
+    "quiz": 4,
+    "test": 0
    },
+   "lints": {},
    "flashcards": 10,
-   "per1000": 37.5,
+   "per1000": 27.6,
    "gold": {
     "hit": 11,
     "total": 20,
@@ -217,12 +243,12 @@
     ]
    },
    "guess": {
-    "n": 11,
-    "expected": 3.5,
-    "byChance": 4,
-    "accuracy": 31.8,
-    "chance": 36.4,
-    "tells": 5
+    "n": 3,
+    "expected": 0.25,
+    "byChance": 1.25,
+    "accuracy": 8.3,
+    "chance": 41.7,
+    "tells": 2
    }
   },
   {
@@ -230,45 +256,53 @@
    "kind": "text",
    "words": 500,
    "requested": 30,
-   "generated": 10,
-   "quiz": 7,
-   "test": 3,
+   "generated": 5,
+   "quiz": 4,
+   "test": 1,
    "defective": 0,
    "defectPct": 0,
    "overlap": {
     "count": 0,
-    "of": 3,
-    "review": 2
+    "of": 1,
+    "review": 1
    },
    "recall": {
-    "quiz": 4,
-    "test": 2
+    "quiz": 0,
+    "test": 0
+   },
+   "typed": {
+    "quiz": 2,
+    "test": 1
    },
    "lints": {},
-   "flashcards": 7,
-   "per1000": 20,
+   "flashcards": 5,
+   "per1000": 10,
    "gold": {
-    "hit": 8,
+    "hit": 4,
     "total": 17,
-    "pct": 47.1,
+    "pct": 23.5,
     "missing": [
+     "eigenvector",
      "characteristic equation",
      "characteristic polynomial",
      "null space",
+     "algebraic multiplicity",
      "trace",
      "determinant",
+     "diagonalizable",
      "diagonal matrix",
      "linearly independent",
      "symmetric matrix",
-     "orthogonal matrix"
+     "orthogonal matrix",
+     "orthogonally diagonalizable"
     ]
    },
    "guess": {
-    "n": 4,
-    "expected": 1.583,
-    "byChance": 1.583,
-    "accuracy": 39.6,
-    "chance": 39.6,
+    "n": 2,
+    "expected": 1,
+    "byChance": 1,
+    "accuracy": 50,
+    "chance": 50,
     "tells": 2
    }
   },
@@ -277,36 +311,51 @@
    "kind": "text",
    "words": 526,
    "requested": 30,
-   "generated": 25,
+   "generated": 18,
    "quiz": 10,
-   "test": 15,
-   "defective": 0,
-   "defectPct": 0,
+   "test": 8,
+   "defective": 1,
+   "defectPct": 5.6,
    "overlap": {
     "count": 0,
-    "of": 15,
-    "review": 3
+    "of": 8,
+    "review": 4
    },
    "recall": {
-    "quiz": 0,
-    "test": 7
+    "quiz": 5,
+    "test": 4
    },
-   "lints": {},
-   "flashcards": 23,
-   "per1000": 47.5,
+   "typed": {
+    "quiz": 1,
+    "test": 0
+   },
+   "lints": {
+    "option_kind_tell": 1
+   },
+   "flashcards": 17,
+   "per1000": 34.2,
    "gold": {
-    "hit": 19,
+    "hit": 11,
     "total": 19,
-    "pct": 100,
-    "missing": []
+    "pct": 57.9,
+    "missing": [
+     "context switch",
+     "non-preemptive scheduling",
+     "preemptive scheduling",
+     "first-come, first-served",
+     "shortest job first",
+     "round robin",
+     "priority scheduling",
+     "multilevel feedback queue"
+    ]
    },
    "guess": {
-    "n": 18,
-    "expected": 6.25,
-    "byChance": 6.25,
-    "accuracy": 34.7,
-    "chance": 34.7,
-    "tells": 6
+    "n": 8,
+    "expected": 3,
+    "byChance": 3,
+    "accuracy": 37.5,
+    "chance": 37.5,
+    "tells": 4
    }
   },
   {
@@ -314,47 +363,52 @@
    "kind": "text",
    "words": 494,
    "requested": 30,
-   "generated": 18,
+   "generated": 14,
    "quiz": 10,
-   "test": 8,
+   "test": 4,
    "defective": 1,
-   "defectPct": 5.6,
+   "defectPct": 7.1,
    "overlap": {
     "count": 1,
-    "of": 8,
-    "review": 4
+    "of": 4,
+    "review": 2
    },
    "recall": {
-    "quiz": 4,
-    "test": 6
+    "quiz": 2,
+    "test": 2
+   },
+   "typed": {
+    "quiz": 6,
+    "test": 1
    },
    "lints": {
     "quiz_test_overlap": 1
    },
-   "flashcards": 12,
-   "per1000": 36.4,
+   "flashcards": 11,
+   "per1000": 28.3,
    "gold": {
-    "hit": 11,
+    "hit": 10,
     "total": 19,
-    "pct": 57.9,
+    "pct": 52.6,
     "missing": [
      "National Assembly",
      "Declaration of the Rights of Man and of the Citizen",
      "Civil Constitution of the Clergy",
      "First Republic",
      "Louis XVI",
+     "Jacobins",
      "Maximilien Robespierre",
      "Girondins",
      "Coup of 18 Brumaire"
     ]
    },
    "guess": {
-    "n": 8,
-    "expected": 1.5,
-    "byChance": 3.5,
-    "accuracy": 18.8,
-    "chance": 43.8,
-    "tells": 6
+    "n": 3,
+    "expected": 1,
+    "byChance": 1.5,
+    "accuracy": 33.3,
+    "chance": 50,
+    "tells": 3
    }
   },
   {
@@ -362,23 +416,27 @@
    "kind": "text",
    "words": 399,
    "requested": 30,
-   "generated": 22,
+   "generated": 21,
    "quiz": 10,
-   "test": 12,
+   "test": 11,
    "defective": 0,
    "defectPct": 0,
    "overlap": {
     "count": 0,
-    "of": 12,
+    "of": 11,
     "review": 4
    },
    "recall": {
-    "quiz": 3,
+    "quiz": 1,
     "test": 7
+   },
+   "typed": {
+    "quiz": 2,
+    "test": 0
    },
    "lints": {},
    "flashcards": 37,
-   "per1000": 55.1,
+   "per1000": 52.6,
    "gold": {
     "hit": 19,
     "total": 21,
@@ -389,11 +447,11 @@
     ]
    },
    "guess": {
-    "n": 12,
-    "expected": 3.083,
-    "byChance": 4.083,
-    "accuracy": 25.7,
-    "chance": 34,
+    "n": 11,
+    "expected": 3.75,
+    "byChance": 3.75,
+    "accuracy": 34.1,
+    "chance": 34.1,
     "tells": 4
    }
   },
@@ -402,23 +460,27 @@
    "kind": "text",
    "words": 423,
    "requested": 30,
-   "generated": 30,
+   "generated": 27,
    "quiz": 10,
-   "test": 20,
+   "test": 17,
    "defective": 0,
    "defectPct": 0,
    "overlap": {
     "count": 0,
-    "of": 20,
-    "review": 5
+    "of": 17,
+    "review": 4
    },
    "recall": {
     "quiz": 0,
-    "test": 7
+    "test": 4
+   },
+   "typed": {
+    "quiz": 0,
+    "test": 1
    },
    "lints": {},
    "flashcards": 43,
-   "per1000": 70.9,
+   "per1000": 63.8,
    "gold": {
     "hit": 31,
     "total": 31,
@@ -426,12 +488,12 @@
     "missing": []
    },
    "guess": {
-    "n": 23,
-    "expected": 7.5,
-    "byChance": 8,
-    "accuracy": 32.6,
-    "chance": 34.8,
-    "tells": 9
+    "n": 22,
+    "expected": 6.75,
+    "byChance": 7.25,
+    "accuracy": 30.7,
+    "chance": 33,
+    "tells": 7
    }
   }
  ],
@@ -440,39 +502,47 @@
   "documents": 10,
   "words": 4639,
   "requested": 300,
-  "generated": 204,
-  "quiz": 96,
-  "test": 108,
-  "defective": 5,
-  "defectPct": 2.5,
+  "generated": 157,
+  "quiz": 88,
+  "test": 69,
+  "defective": 6,
+  "defectPct": 3.8,
   "lints": {
-   "option_number_mix": 1,
-   "quiz_test_overlap": 3,
-   "duplicate_fact": 1
+   "whole_block_stem": 1,
+   "stem_debris": 1,
+   "garbled_token": 1,
+   "typed_ambiguous_blank": 1,
+   "tf_not_a_claim": 1,
+   "option_kind_tell": 1,
+   "quiz_test_overlap": 1
   },
   "overlap": {
-   "count": 3,
-   "of": 108,
-   "review": 46
+   "count": 1,
+   "of": 69,
+   "review": 34
   },
   "recall": {
-   "quiz": 20,
-   "test": 55
+   "quiz": 13,
+   "test": 29
   },
-  "flashcards": 192,
-  "per1000": 44,
+  "typed": {
+   "quiz": 27,
+   "test": 9
+  },
+  "flashcards": 180,
+  "per1000": 33.8,
   "gold": {
-   "hit": 156,
+   "hit": 138,
    "total": 202,
-   "pct": 77.2
+   "pct": 68.3
   },
   "guess": {
-   "n": 129,
-   "expected": 42.082,
-   "byChance": 47.082,
-   "accuracy": 32.6,
-   "chance": 36.5,
-   "tells": 56
+   "n": 79,
+   "expected": 25.5,
+   "byChance": 29,
+   "accuracy": 32.3,
+   "chance": 36.7,
+   "tells": 37
   }
  }
 }

@@ -20,48 +20,96 @@
     return lineBuilder().reconstructLines(items, styles, pageWidth, pageHeight, opts);
   }
 
-  async function parseSinglePage(pdfDoc, pageNum) {
+  async function parseSinglePage(pdfDoc, pageNum, fullPdfDoc) {
     const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.0 });
-    const textContent = await page.getTextContent();
-    // The operator list gives real font names + glyph codes (font objects) and fraction-bar strokes
-    let opList = null;
+    const isFastLane = Boolean(fullPdfDoc && fullPdfDoc !== pdfDoc);
     try {
-      opList = await page.getOperatorList();
-    } catch (_err) {
-      opList = null;
+      const viewport = page.getViewport({ scale: 1.0 });
+      const textContent = await page.getTextContent();
+      // The operator list gives real font names + glyph codes (font objects) and fraction-bar strokes
+      let opList = null;
+      try {
+        opList = await page.getOperatorList();
+      } catch (_err) {
+        opList = null;
+      }
+      const cache = (pdfDoc.__fontNameCache = pdfDoc.__fontNameCache || new Map());
+      const fontNames = await mod('spanFormat', './span-format.js').resolveFontNames(page, textContent.items, cache);
+      const lib = root.pdfjsLib || {};
+      const fd = mod('fontDecoder', './font-decoder.js');
+      const pr = mod('pageRules', './page-rules.js');
+      const decoders = fd ? fd.buildDecoders(page, textContent.items, fontNames, opList, lib.OPS) : null;
+      // Notes-app handwriting recognition is invisible text (render mode 3) over the pen strokes (invisible-text.js)
+      const inv = mod('invisibleText', './invisible-text.js');
+      const overlayHost = fullPdfDoc || pdfDoc;
+      const overlayFamilies = (overlayHost.__overlayFamilies = overlayHost.__overlayFamilies || new Set());
+      const marked = inv && opList ? inv.markItems(textContent.items, opList, lib.OPS, { fontNames, overlayFamilies }) : textContent.items;
+      const allItems = fd && opList && fd.refineItems ? fd.refineItems(page, marked, opList, lib.OPS) : marked;
+      const rules = pr && opList ? pr.extractRules(opList, lib.OPS, viewport.viewBox) : [];
+      const lineOpts = { fontNames, decoders, rules, viewBox: viewport.viewBox };
+      const lines = reconstructLines(allItems.filter((it) => !(it && it.isAnnotation)), textContent.styles, viewport.width, viewport.height, lineOpts);
+      const annotationItems = allItems.filter((it) => it && it.isAnnotation);
+      const annotations = annotationItems.length
+        ? annotationLines(reconstructLines(annotationItems, textContent.styles, viewport.width, viewport.height, lineOpts), pageNum)
+        : [];
+      const wordCount = lines.reduce((sum, l) => sum + l.wordCount, 0);
+      const pageObj = {
+        pageNumber: pageNum, width: viewport.width, height: viewport.height,
+        aspectRatio: viewport.width / Math.max(1, viewport.height), lines, wordCount, annotations,
+      };
+      // line.kind: caption / folio / url / objective / biography / code (line-kinds.js)
+      const lk = mod('lineKinds', './line-kinds.js');
+      if (lk) lk.tagPage(pageObj);
+      const pk = mod('pageKind', './page-kind.js');
+      if (pk) pageObj.kind = pk.classifyPage(pageObj);
+      const ink = mod('inkDetect', './ink-detect.js');
+      if (ink) {
+        const nonMarginWords = lines.reduce((sum, l) => sum + (l.isMargin ? 0 : l.wordCount), 0);
+        if (isFastLane && nonMarginWords <= ink.MIXED_MAX_WORDS) {
+          // maxImageSize: 1 strips image ops from opList; re-assess ink on fullPdfDoc when low typed text can be mixed/image or no-text
+          pageObj.ink = await reassessInkOnFullDoc(fullPdfDoc, pageNum, pageObj, viewport, null, opList, ink, lib.OPS);
+        } else {
+          const evidence = await inkEvidence(page, opList, viewport);
+          pageObj.ink = ink.assess(pageObj, ink.opStats(opList, lib.OPS), evidence);
+          if (isFastLane && pageObj.ink && pageObj.ink.needsRecognition) {
+            pageObj.ink = await reassessInkOnFullDoc(fullPdfDoc, pageNum, pageObj, viewport, evidence && evidence.annotationInk, opList, ink, lib.OPS);
+          }
+        }
+      }
+      return pageObj;
+    } finally {
+      if (isFastLane && page && page.cleanup) page.cleanup();
     }
-    const cache = (pdfDoc.__fontNameCache = pdfDoc.__fontNameCache || new Map());
-    const fontNames = await mod('spanFormat', './span-format.js').resolveFontNames(page, textContent.items, cache);
-    const lib = root.pdfjsLib || {};
-    const fd = mod('fontDecoder', './font-decoder.js');
-    const pr = mod('pageRules', './page-rules.js');
-    const decoders = fd ? fd.buildDecoders(page, textContent.items, fontNames, opList, lib.OPS) : null;
-    // Notes-app handwriting recognition is invisible text (render mode 3) over the pen strokes (invisible-text.js)
-    const inv = mod('invisibleText', './invisible-text.js');
-    const overlayFamilies = (pdfDoc.__overlayFamilies = pdfDoc.__overlayFamilies || new Set());
-    const marked = inv && opList ? inv.markItems(textContent.items, opList, lib.OPS, { fontNames, overlayFamilies }) : textContent.items;
-    const allItems = fd && opList && fd.refineItems ? fd.refineItems(page, marked, opList, lib.OPS) : marked;
-    const rules = pr && opList ? pr.extractRules(opList, lib.OPS, viewport.viewBox) : [];
-    const lineOpts = { fontNames, decoders, rules, viewBox: viewport.viewBox };
-    const lines = reconstructLines(allItems.filter((it) => !(it && it.isAnnotation)), textContent.styles, viewport.width, viewport.height, lineOpts);
-    const annotationItems = allItems.filter((it) => it && it.isAnnotation);
-    const annotations = annotationItems.length
-      ? annotationLines(reconstructLines(annotationItems, textContent.styles, viewport.width, viewport.height, lineOpts), pageNum)
-      : [];
-    const wordCount = lines.reduce((sum, l) => sum + l.wordCount, 0);
-    const pageObj = {
-      pageNumber: pageNum, width: viewport.width, height: viewport.height,
-      aspectRatio: viewport.width / Math.max(1, viewport.height), lines, wordCount, annotations,
-    };
-    // line.kind: caption / folio / url / objective / biography / code (line-kinds.js)
-    const lk = mod('lineKinds', './line-kinds.js');
-    if (lk) lk.tagPage(pageObj);
-    const pk = mod('pageKind', './page-kind.js');
-    if (pk) pageObj.kind = pk.classifyPage(pageObj);
-    const ink = mod('inkDetect', './ink-detect.js');
-    if (ink) pageObj.ink = ink.assess(pageObj, ink.opStats(opList, lib.OPS), await inkEvidence(page, opList, viewport));
-    return pageObj;
+  }
+
+  /** Re-assesses page ink using the full-image pdfDoc so imageOps and untexturedImages match non-fast parsing. */
+  async function reassessInkOnFullDoc(fullPdfDoc, pageNum, pageObj, viewport, annotationInk, fallbackOpList, ink, OPS) {
+    const fullPage = await fullPdfDoc.getPage(pageNum);
+    try {
+      let fullOpList = null;
+      try {
+        fullOpList = await fullPage.getOperatorList();
+      } catch (_err) {
+        fullOpList = fallbackOpList;
+      }
+      const geo = mod('inkGeometry', './ink-geometry.js');
+      let annInk = annotationInk;
+      if (!annInk && geo) {
+        let annotations = [];
+        try {
+          annotations = typeof fullPage.getAnnotations === 'function' ? await fullPage.getAnnotations() : [];
+        } catch (_err) {
+          annotations = [];
+        }
+        annInk = geo.inkAnnotations(annotations, viewport.transform);
+      }
+      const extra = geo
+        ? { annotationInk: annInk, geometry: geo.measure(fullOpList, OPS, viewport.transform) }
+        : null;
+      return ink.assess(pageObj, ink.opStats(fullOpList, OPS), extra);
+    } finally {
+      if (fullPage && fullPage.cleanup) fullPage.cleanup();
+    }
   }
 
   /**
@@ -131,7 +179,9 @@
    */
   function startParsing(pdfDoc, numbers) {
     const scheduler = mod('pageScheduler', './page-scheduler.js');
-    const pending = scheduler.schedule(pdfDoc, numbers, parseSinglePage);
+    const pending = scheduler.schedule(pdfDoc, numbers, (laneDoc, pageNum) =>
+      parseSinglePage(laneDoc, pageNum, pdfDoc)
+    );
     return new Map(numbers.map((n, i) => [n, pending[i]]));
   }
 
@@ -206,14 +256,34 @@
     return parsed;
   }
 
+  const activeRenderTasks = new WeakMap();
+  const renderSequences = new WeakMap();
+
+  /** Renders one PDF page into a canvas, cancelling any overlapping render on that canvas. */
   async function renderPageToCanvas(pdfDoc, pageNumber, canvas, scale = 1.35) {
     if (!pdfDoc || !canvas) return;
+    const seq = (renderSequences.get(canvas) || 0) + 1;
+    renderSequences.set(canvas, seq);
+    const prev = activeRenderTasks.get(canvas);
+    if (prev && typeof prev.cancel === 'function') {
+      activeRenderTasks.delete(canvas);
+      try { prev.cancel(); } catch (_err) {}
+    }
     const page = await pdfDoc.getPage(pageNumber);
+    if (renderSequences.get(canvas) !== seq) return;
     const viewport = page.getViewport({ scale });
     const ctx = canvas.getContext('2d');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    const task = page.render({ canvasContext: ctx, viewport });
+    activeRenderTasks.set(canvas, task);
+    try {
+      await task.promise;
+    } catch (err) {
+      if (!err || err.name !== 'RenderingCancelledException') throw err;
+    } finally {
+      if (activeRenderTasks.get(canvas) === task) activeRenderTasks.delete(canvas);
+    }
   }
 
   PDFStudy.pdfLoader = {

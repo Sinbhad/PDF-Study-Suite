@@ -122,6 +122,7 @@
     for (const q of options.avoid || []) {
       const quoted = (String(q.question || '').match(/\n"([\s\S]*)"\s*$/) || [])[1];
       if (quoted) shown.add(normKey(quoted));
+      if (q.source) shown.add(normKey(q.source));
       if (q.type !== 'true_false' && q.answer) shown.add(normKey(q.answer));
       if (q.type === 'multiple_choice') for (const o of q.options || []) shown.add(normKey(o));
     }

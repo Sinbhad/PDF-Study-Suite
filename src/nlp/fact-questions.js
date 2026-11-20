@@ -163,6 +163,9 @@
       shuffle([set.answer, ...set.distractors], question, ctx.seed), set.answer, `${where(fact)}: ${fact.statement}`);
   }
 
+  /** Joins a subject with a bare predicate ("Digital circuits" + "Are hardware ..." -> "Digital circuits are hardware ..."). */
+  const completePredicate = (subject, statement) => `${subject} ${String(statement || '').replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase())}`;
+
   /**
    * True: the fact's statement under its own subject. False: a sibling's statement under this subject,
    * only when the scope says nothing like it about this subject; the explanation names the sibling.
@@ -176,7 +179,9 @@
     if (taken(subjectOf(fact))) return null;
     const subjectWords = new Set(qf().contentStems(subjectOf(fact)));
     if (isTrue) {
-      const question = `True or False: ${wording.claim(claimSubject(fact, fact, ctx))}.\n"${fact.statement}"`;
+      const question = isPredicate(fact.statement)
+        ? `True or False:\n"${completePredicate(subjectOf(fact), fact.statement)}"`
+        : `True or False: ${wording.claim(claimSubject(fact, fact, ctx))}.\n"${fact.statement}"`;
       return {
         ...base(fact, 'true_false', 'True / False', question, ['True', 'False'], 'True', `True. ${where(fact)}: ${fact.statement}`),
         construction: 'sibling_swap',
@@ -201,11 +206,18 @@
     const isFalse = (o) => (fact.kind === 'point'
       ? borrowed().contradicts(fact, o, ctx) && !borrowed().inherited(fact, o, ctx) && !(ctx.claims && ctx.claims.says(fact.subjectKey, o.statement))
       : falseFor(fact, o, ctx));
+    const openerMatch = (s) => String(s || '').match(/^([A-Z][a-z]{5,})\s+(?:is|are|was|were|has|have|can|cannot|does|do)\b/);
+    const swapsOpener = (o) => {
+      const m = openerMatch(o.statement);
+      return Boolean(m) && !qf().contentStems(m[1]).some((w) => subjectWords.has(w));
+    };
     const donor = nearSiblings(fact, ctx).find((o) => !taken(subjectOf(o)) && !shown.has(shownKey(o.statement)) && specific(o) && isFalse(o) &&
-      !qf().contentStems(o.statement).some((w) => subjectWords.has(w)) && !namesItsOwner(fact, o, ctx) && fitsSubject(fact, o, ctx) &&
+      !qf().contentStems(o.statement).some((w) => subjectWords.has(w)) && !namesItsOwner(fact, o, ctx) && !swapsOpener(o) && fitsSubject(fact, o, ctx) &&
       sameAspect(o) && !partlySaid(fact, o, ctx));
     if (!donor) return null;
-    const question = `True or False: ${wording.claim(claimSubject(fact, donor, ctx))}.\n"${donor.statement}"`;
+    const question = isPredicate(donor.statement)
+      ? `True or False:\n"${completePredicate(subjectOf(fact), donor.statement)}"`
+      : `True or False: ${wording.claim(claimSubject(fact, donor, ctx))}.\n"${donor.statement}"`;
     const explanation = `False. ${wording.wrong(subjectOf(donor), subjectOf(fact))} ${where(donor)}: ${donor.statement}`;
     return {
       ...base(fact, 'true_false', 'True / False', question, ['True', 'False'], 'False', explanation),
@@ -236,7 +248,16 @@
     if (fact.kind === 'point' && !statements.isSpecificClaim(fact.statement)) return null;
     const alt = dep('alteredStatements', './altered-statements.js').alter(fact.statement, { text: ctx.text || '' });
     if (!alt) return null;
-    const question = `True or False: ${wording.claim(claimSubject(fact, fact, ctx))}.\n"${alt.statement}"`;
+    // A point whose statement opens with another capitalized noun ("Incision is...") would attach that statement
+    // to a different subject's claim line as if it named the same owner.
+    const opener = fact.kind === 'point' && String(alt.statement || '').match(/^([A-Z][a-z]{5,})\s+(?:is|are|was|were|has|have|can|cannot|does|do)\b/);
+    if (opener) {
+      const subjectWords = new Set(qf().contentStems(subjectOf(fact)));
+      if (!qf().contentStems(opener[1]).some((w) => subjectWords.has(w))) return null;
+    }
+    const question = isPredicate(alt.statement)
+      ? `True or False:\n"${completePredicate(subjectOf(fact), alt.statement)}"`
+      : `True or False: ${wording.claim(claimSubject(fact, fact, ctx))}.\n"${alt.statement}"`;
     const explanation = `False. The material says "${alt.from}", not "${alt.to}". ${where(fact)}: ${fact.statement}`;
     return {
       ...base(fact, 'true_false', 'True / False', question, ['True', 'False'], 'False', explanation),

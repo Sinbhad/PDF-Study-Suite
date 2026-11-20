@@ -248,6 +248,43 @@ check('table: no question when the row values have no header', noHeader.length =
 const shared = S.tableQuestions.candidates(S.tableCards.rowCards({ header: ['Main host', 'Other host', 'Strain'],
   rows: [['cattle', 'sheep', 'Alpha'], ['cattle, goats', 'pigs', 'Beta'], ['horses', 'pigs', 'Gamma'], ['dogs', 'cats', 'Delta'], ['rats', 'mice', 'Epsilon']] }), { seed: 0 });
 check('table: a stem value two rows list is not asked', !shared.some((q) => /Main host is "cattle"/.test(q.question)), shared.map((q) => q.question).join(' | '));
+const assayTbl = { header: ['Assay', 'Sample'], rows: [['PCR', 'Blood'], ['ELISA', 'Serum']] };
+const qualifiedAssay = S.tableCards.rowCards(assayTbl, { subject: 'Pond blight' });
+const genericAssay = S.tableCards.rowCards(assayTbl, { subject: 'Diagnosis' });
+check('table: method column rows qualify with a specific subject in question stems without changing card fronts',
+  qualifiedAssay[0].front === 'PCR — Sample' &&
+  qualifiedAssay[0].table.subject === 'Pond blight' &&
+  S.tableQuestions.stemFor(qualifiedAssay[0]) === 'In the row where Assay is "PCR (Pond blight)", what is the Sample?' &&
+  genericAssay[0].table.subject === undefined &&
+  S.tableQuestions.stemFor(genericAssay[0]) === 'In the row where Assay is "PCR", what is the Sample?',
+  qualifiedAssay[0] && S.tableQuestions.stemFor(qualifiedAssay[0]));
+
+// Regression guards: disparate containment (0.9), review notOwner dedupe, test recallGroup budget (4), opener guard.
+const qa = S.quizAssembly;
+const shortSet = new Set(['surface', 'protein', 'antigen', 'gene', 'host', 'membrane', 'cycle', 'outer']);
+const longDisparate = new Set(['describe', 'surface', 'protein', 'antigen', 'gene', 'host', 'membrane', 'cycle', 'bacterium', 'evasion', 'immune', 'response', 'tick', 'midgut', 'saliva', 'transmission']);
+check('assembly: disparate multi-point answer (7/8 < 0.90) is not treated as same fact', !qa.sameFact(shortSet, longDisparate));
+const longMatched = new Set([...shortSet, 'bacterium', 'evasion', 'immune', 'response', 'tick', 'midgut', 'saliva', 'transmission']);
+check('assembly: disparate multi-point answer enclosing >= 0.90 of short set is caught', qa.sameFact(shortSet, longMatched));
+
+const reviewSet = qa.createSet(20, {
+  reviewOf: [{ type: 'true_false', answer: 'False', factKey: 'pump|not|valve|controls reverse flow', source: 'Valve: controls reverse flow', question: 'True or False: this statement defines "Pump".\n"controls reverse flow"' }],
+});
+check('assembly: review refuses a second swapped-False true_false on the same subject',
+  reviewSet.refusal({ type: 'true_false', answer: 'False', factKey: 'pump|not|impeller|rotates inside casing', source: 'Impeller: rotates inside casing', question: 'True or False: this statement defines "Pump".\n"rotates inside casing"' }) === 'same form as before');
+
+const quizTableSet = qa.createSet(10);
+const testTableSet = qa.createSet(20);
+const tableCell = (i) => ({ type: 'reveal', answer: `Cell ${i} value`, question: `Cell ${i} prompt?`, options: [], recallGroup: 'table|fixture' });
+for (let i = 1; i <= 4; i++) { quizTableSet.accept(tableCell(i)); testTableSet.accept(tableCell(i)); }
+check('assembly: quiz caps one table at 2 recall cells while a 20-question test allows 4',
+  quizTableSet.list().length === 2 && testTableSet.list().length === 4 && testTableSet.refusal(tableCell(5)) === 'figure asked enough');
+
+const pumpFact = { kind: 'point', subject: 'Pump', term: 'Pump', identity: 'pump|raises head', source: 'Pump: raises head', statement: 'Raises head against backpressure' };
+const ventFact = { kind: 'point', subject: 'Vent', term: 'Vent', identity: 'vent|stays open', source: 'Vent stays open during priming', statement: 'Vent stays open during priming' };
+const tfScope = S.quizScope.gather('Pump: raises head\nVent: Vent stays open during priming', { mode: 'book' });
+check('factQuestions: alteredFalse skips capitalized non-pronoun opener absent from target subject',
+  S.factQuestions.trueFalse(pumpFact, { ...tfScope, facts: [pumpFact, ventFact] }, false) === null);
 
 console.log(failures ? `\n${failures} question fixture(s) FAILED` : '\nAll question fixtures passed');
 process.exitCode = failures ? 1 : 0;

@@ -303,7 +303,9 @@
         if (own && own.length < plain.length && sc && !sc.unresolvedBack(own)) add(term, own, 2);
       }
       else if (m[1] && !tail && wordCount(subject) >= 4 && wordCount(subject) <= 25 && !/\bwhat$/i.test(subject)) add(term, quality().tidyClause(subject), 3);
-      else if (!definesAnother(plain, term)) add(term, sentenceBack(plain), 2);
+      else if (!definesAnother(plain, term) && !/^The\s+[a-z]+s\s+(?:are|were|have)\b/.test(plain)) {
+        add(term, sentenceBack(plain), 2);
+      }
     }
     for (const re of NAMING_RES) {
       const m = plain.match(re);

@@ -26,6 +26,27 @@
   const quoted = (t) => (NAMED_RESULT_RE.test(t) ? t : `"${t}"`);
 
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const STOP_ACRONYMS = new Set('OR IN ON OF TO IF AS IS AT BY NO AN SO DO IT UP US'.split(' '));
+
+  function matchesAcronym(abbr, pos, ws, wi) {
+    if (wi === ws.length) return pos === abbr.length;
+    const word = ws[wi];
+    const maxLen = abbr.length - pos - (ws.length - 1 - wi);
+    for (let len = 1; len <= maxLen; len++) {
+      const piece = abbr.slice(pos, pos + len);
+      const ok = word.startsWith(piece) || (piece === 'x' && word.startsWith('ex'));
+      if (ok && matchesAcronym(abbr, pos + len, ws, wi + 1)) return true;
+    }
+    return false;
+  }
+
+  /** Does the blanked sentence keep an uppercase acronym or blended abbreviation of `term` (e.g. XOR for Exclusive or)? */
+  function leaksAbbreviation(blanked, term) {
+    const ws = words(term).map((w) => w.toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean);
+    if (ws.length < 2) return false;
+    const tokens = String(blanked || '').replace(/\\[a-zA-Z]+/g, ' ').match(/\b[A-Z]{2,}\b/g) || [];
+    return tokens.some((tok) => !STOP_ACRONYMS.has(tok) && matchesAcronym(tok.toLowerCase(), 0, ws, 0));
+  }
 
   /**
    * A definition that names its own term ("A variable is called a Boolean variable if ...") is asked the other
@@ -35,9 +56,9 @@
     const re = new RegExp(`(?<![A-Za-z-])${escapeRe(term)}(?:e?s)?(?![A-Za-z-])`, 'i');
     if (!re.test(statement)) return { named: false };
     const blanked = statement.replace(re, '________');
-    // Named twice, one blank would still show the answer; a sentence that leans on another ("Such a circuit
-    // is called ...") cannot be read alone. Either way the definition is not asked.
-    if (re.test(blanked) || dep('stemNoise', './stem-noise.js').hasUnresolvedReference(blanked)) return { named: true };
+    // Named twice, one blank would still show the answer; an inline acronym leaks it; a sentence that leans on another
+    // ("Such a circuit is called ...") cannot be read alone. In any of those cases the definition is not asked by blanking.
+    if (re.test(blanked) || leaksAbbreviation(blanked, term) || dep('stemNoise', './stem-noise.js').hasUnresolvedReference(blanked)) return { named: true };
     return { named: true, prompt: `Name the term: "${blanked}"`, answer: term };
   }
 
@@ -72,8 +93,11 @@
     if (!definesSomething(statement) || !standsAlone(statement)) return '';
     // "Define "Equal"": a one-word term the definition uses as a predicate ("Two sets are equal if ...") is asked with
     // what it is said of.
-    const said = words(term).length === 1 && String(statement).match(new RegExp(`^(.{3,40}?)\\s+(?:is|are)\\s+(?:said\\s+to\\s+be\\s+)?${escapeRe(term)}\\b`, 'i'));
-    if (said && !norm(said[1]).includes(norm(term))) return { prompt: `What does it mean for ${said[1].toLowerCase()} to be ${term.toLowerCase()}?`, answer: statement };
+    const said = words(term).length === 1 && String(statement).match(new RegExp(`^(.{3,40}?)\\s+(is|are)\\s+(?:said\\s+to\\s+be\\s+)?${escapeRe(term)}\\b`, 'i'));
+    if (said && !norm(said[1]).includes(norm(term))) {
+      const subj = said[1].replace(/^[A-Z][a-z]+/, (w) => w.toLowerCase());
+      return { prompt: `When ${said[2].toLowerCase()} ${subj} ${term.toLowerCase()}?`, answer: statement };
+    }
     return { prompt: `Define ${quoted(term)}.`, answer: statement };
   }
 
@@ -136,6 +160,8 @@
     if (rule) return `What does ${lowerArticle(rule[1])} state?`;
     const m = front.match(IS_FRONT_RE);
     if (!m) return '';
+    const sn = dep('stemNoise', './stem-noise.js');
+    if (sn && sn.hasUnresolvedReference(`${m[1]} ${m[2]} ${back}`)) return '';
     // ("Logic gates are …" => "electronic circuits that operate ...": a plural noun phrase with its qualifier.)
     const nounPhrase = NOUN_PHRASE_BACK_RE.test(back) || (m[2] === 'are' && PLURAL_PHRASE_BACK_RE.test(back));
     // "Surrogate keys are …", "A disjunction is …" => "used when ...", "true when ...": an open stem that any true
